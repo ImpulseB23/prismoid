@@ -1,0 +1,48 @@
+pre-commit:
+  parallel: true
+  jobs:
+    - name: rustfmt
+      glob: "*.rs"
+      root: src-tauri
+      run: cargo fmt -- --check
+
+    - name: clippy
+      glob: "*.rs"
+      root: src-tauri
+      run: cargo clippy -- -D warnings
+
+    - name: gofmt
+      glob: "*.go"
+      root: src-sidecar
+      run: gofmt -l -d {staged_files}
+
+    - name: govet
+      glob: "*.go"
+      root: src-sidecar
+      run: go vet ./...
+
+    - name: eslint
+      glob: "*.{ts,tsx}"
+      run: pnpm eslint {staged_files}
+
+    - name: prettier
+      glob: "*.{ts,tsx,json,css,html}"
+      run: pnpm prettier --check {staged_files}
+
+    - name: tsc
+      glob: "*.{ts,tsx}"
+      run: pnpm tsc --noEmit
+
+pre-push:
+  parallel: true
+  jobs:
+    - name: cargo-test
+      root: src-tauri
+      run: cargo test
+
+    - name: go-test
+      root: src-sidecar
+      run: go test ./...
+
+    - name: vitest
+      run: pnpm vitest run

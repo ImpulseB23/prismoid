@@ -1,0 +1,41 @@
+# Rust
+src-tauri/target/
+**/*.rs.bk
+
+# Go
+src-sidecar/bin/
+
+# Node
+node_modules/
+dist/
+
+# Tauri
+src-tauri/gen/
+
+# Environment
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test coverage
+coverage/
+*.lcov
+
+# Logs
+*.log
