@@ -51,6 +51,7 @@ jobs:
     runs-on: windows-latest
     defaults:
       run:
+        shell: bash
         working-directory: src-tauri
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -100,6 +101,7 @@ jobs:
     runs-on: windows-latest
     defaults:
       run:
+        shell: bash
         working-directory: src-sidecar
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -113,12 +115,12 @@ jobs:
         run: go vet ./...
 
       - name: Test with coverage
-        run: go test -coverprofile=coverage-go.txt -covermode=atomic ./...
+        run: go test -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Upload coverage
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
         with:
-          files: src-sidecar/coverage-go.txt
+          files: src-sidecar/coverage.txt
           flags: go
           token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -131,6 +133,8 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: latest
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -191,6 +195,8 @@ jobs:
           cache-dependency-path: src-sidecar/go.sum
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: latest
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
