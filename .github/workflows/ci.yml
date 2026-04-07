@@ -12,7 +12,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  GO_VERSION: "1.22"
+  GO_VERSION: "1.26"
   NODE_VERSION: "20"
 
 permissions:
@@ -29,7 +29,7 @@ jobs:
       typescript: ${{ steps.filter.outputs.typescript }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
           filters: |
@@ -40,7 +40,7 @@ jobs:
             typescript:
               - 'src/**'
               - 'package.json'
-              - 'bun.lockb'
+              - 'bun.lock'
               - 'tsconfig.json'
               - 'vite.config.*'
 
@@ -51,6 +51,7 @@ jobs:
     runs-on: windows-latest
     defaults:
       run:
+        shell: bash
         working-directory: src-tauri
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -62,6 +63,20 @@ jobs:
       - uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
         with:
           workspaces: "./src-tauri -> target"
+          cache-on-failure: true
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: src-sidecar/go.sum
+
+      - name: Build Go sidecar
+        working-directory: src-sidecar
+        run: |
+          target=$(rustc -vV | grep host | cut -d' ' -f2)
+          ext=""
+          [[ "$target" == *windows* ]] && ext=".exe"
+          go build -o "../src-tauri/binaries/sidecar-${target}${ext}" ./cmd/sidecar
 
       - name: Install Tauri system dependencies (Linux)
         if: runner.os == 'Linux'
@@ -86,7 +101,6 @@ jobs:
         with:
           files: src-tauri/coverage-rust.lcov
           flags: rust
-          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Audit
         run: |
@@ -100,6 +114,7 @@ jobs:
     runs-on: windows-latest
     defaults:
       run:
+        shell: bash
         working-directory: src-sidecar
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -113,14 +128,13 @@ jobs:
         run: go vet ./...
 
       - name: Test with coverage
-        run: go test -coverprofile=coverage-go.txt -covermode=atomic ./...
+        run: go test -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Upload coverage
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
         with:
-          files: src-sidecar/coverage-go.txt
+          files: src-sidecar/coverage.txt
           flags: go
-          token: ${{ secrets.CODECOV_TOKEN }}
 
   typescript:
     name: TypeScript
@@ -131,6 +145,8 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: latest
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -152,12 +168,12 @@ jobs:
         with:
           files: coverage/lcov.info
           flags: typescript
-          token: ${{ secrets.CODECOV_TOKEN }}
 
   build:
     name: Build
     needs: [changes, rust, go, typescript]
     if: |
+      github.event_name == 'push' &&
       always() &&
       (needs.rust.result == 'success' || needs.rust.result == 'skipped') &&
       (needs.go.result == 'success' || needs.go.result == 'skipped') &&
@@ -173,9 +189,12 @@ jobs:
             args: "--target aarch64-apple-darwin"
           - platform: macos-latest
             args: "--target x86_64-apple-darwin"
-          - platform: ubuntu-22.04
+          - platform: ubuntu-latest
             args: ""
     runs-on: ${{ matrix.platform }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -184,6 +203,7 @@ jobs:
       - uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
         with:
           workspaces: "./src-tauri -> target"
+          cache-on-failure: true
 
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
@@ -191,6 +211,8 @@ jobs:
           cache-dependency-path: src-sidecar/go.sum
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: latest
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -203,7 +225,11 @@ jobs:
 
       - name: Build Go sidecar
         working-directory: src-sidecar
-        run: go build -o ../src-tauri/binaries/ ./cmd/sidecar
+        run: |
+          target=$(rustc -vV | grep host | cut -d' ' -f2)
+          ext=""
+          [[ "$target" == *windows* ]] && ext=".exe"
+          go build -o "../src-tauri/binaries/sidecar-${target}${ext}" ./cmd/sidecar
 
       - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:

@@ -54,7 +54,7 @@ The viewport signal contains a start index and count. The virtual scroller compo
 3. Emotes and badges are fixed-width inline boxes (dimensions known from emote metadata)
 4. Total line width = sum of text segment widths + inline box widths
 5. Line wrapping computed from total widths vs container width
-6. Message height = number of lines * line height + padding
+6. Message height = number of lines \* line height + padding
 7. Heights stored in a parallel array indexed by buffer position
 
 ### DOM Management
@@ -67,6 +67,7 @@ The viewport signal contains a start index and count. The virtual scroller compo
 ### Frame Budget at Volume
 
 At 5,000+ msg/sec:
+
 1. All messages arriving within one 16ms frame land in the ring buffer
 2. Heights are pre-computed for all of them
 3. Only the most recent ~80-100 are candidates for live rendering

@@ -4,13 +4,13 @@
 
 All platform connections use automatic reconnect with exponential backoff and jitter.
 
-| Parameter | Value |
-|---|---|
-| Initial backoff | 1 second |
-| Max backoff | 30 seconds |
-| Backoff multiplier | 2x |
-| Jitter | +/- 25% |
-| Max retries | Unlimited (connections are always retried) |
+| Parameter          | Value                                      |
+| ------------------ | ------------------------------------------ |
+| Initial backoff    | 1 second                                   |
+| Max backoff        | 30 seconds                                 |
+| Backoff multiplier | 2x                                         |
+| Jitter             | +/- 25%                                    |
+| Max retries        | Unlimited (connections are always retried) |
 
 No visible "disconnected" state in the UI. A subtle indicator appears during reconnection, auto-dismissed on success.
 
@@ -57,6 +57,7 @@ No `unwrap()` on external data. All platform data goes through `Result`-returnin
 Writes are async and batched. The UI never blocks on disk I/O.
 
 If the app crashes before a flush:
+
 - Emote cache may be slightly stale (re-fetched on next launch)
 - User preferences from the last few seconds may be lost
 - No data corruption (WAL mode handles crash recovery)
@@ -64,12 +65,12 @@ If the app crashes before a flush:
 
 ## Graceful Degradation
 
-| Failure | Impact | Recovery |
-|---|---|---|
-| Twitch disconnects | YouTube chat still works | Auto-reconnect with backoff |
-| YouTube disconnects | Twitch chat still works | Auto-reconnect with backoff |
-| Go sidecar crashes | All connections lost briefly | Rust respawns within seconds |
-| 7TV API unreachable | 7TV emotes show as text | Retry on next refresh interval (5 min) |
-| OAuth token expired | Platform auth fails | Proactive refresh prevents this; if refresh fails, prompt re-auth |
-| SQLite write fails | Cache stale | Retry on next batch; app still works from memory |
-| Emote image 404 | Single emote shows as text | Logged, removed from cache |
+| Failure             | Impact                       | Recovery                                                          |
+| ------------------- | ---------------------------- | ----------------------------------------------------------------- |
+| Twitch disconnects  | YouTube chat still works     | Auto-reconnect with backoff                                       |
+| YouTube disconnects | Twitch chat still works      | Auto-reconnect with backoff                                       |
+| Go sidecar crashes  | All connections lost briefly | Rust respawns within seconds                                      |
+| 7TV API unreachable | 7TV emotes show as text      | Retry on next refresh interval (5 min)                            |
+| OAuth token expired | Platform auth fails          | Proactive refresh prevents this; if refresh fails, prompt re-auth |
+| SQLite write fails  | Cache stale                  | Retry on next batch; app still works from memory                  |
+| Emote image 404     | Single emote shows as text   | Logged, removed from cache                                        |

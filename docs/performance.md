@@ -4,23 +4,23 @@ These are requirements, not goals.
 
 ## Target Volumes
 
-| Scenario | Messages/sec |
-|---|---|
-| Normal large streamer (30-50k viewers) | 200-500 |
-| Top streamer regular stream (80-150k viewers) | 500-1,500 |
-| Peak event, single platform | 5,000-10,000 |
-| Peak event, all platforms combined | 10,000-20,000 |
+| Scenario                                      | Messages/sec  |
+| --------------------------------------------- | ------------- |
+| Normal large streamer (30-50k viewers)        | 200-500       |
+| Top streamer regular stream (80-150k viewers) | 500-1,500     |
+| Peak event, single platform                   | 5,000-10,000  |
+| Peak event, all platforms combined            | 10,000-20,000 |
 
 ## Memory Budget
 
 Total target: under 80MB.
 
-| Component | Budget |
-|---|---|
-| Tauri WebView | ~30MB |
-| Go sidecar | ~15MB |
-| Rust processing core | ~5-10MB |
-| Emote caches | Variable (bounded by memory eviction) |
+| Component            | Budget                                |
+| -------------------- | ------------------------------------- |
+| Tauri WebView        | ~30MB                                 |
+| Go sidecar           | ~15MB                                 |
+| Rust processing core | ~5-10MB                               |
+| Emote caches         | Variable (bounded by memory eviction) |
 
 ## Rendering Pipeline
 

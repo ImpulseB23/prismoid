@@ -2,13 +2,13 @@
 
 ## Layers
 
-| Layer | Tool | Scope | Runs |
-|---|---|---|---|
-| Rust unit tests | `cargo test` | Message parsing, emote scanning, ring buffer logic, automaton build | Pre-push hook, CI |
-| Go unit tests | `go test` | WebSocket handling, OAuth flow, rate limiter, platform adapters | Pre-push hook, CI |
-| TypeScript unit tests | Vitest | Store logic, ring buffer, utility functions | Pre-push hook, CI |
-| Component tests | Vitest + `@solidjs/testing-library` | Solid components in JSDOM (emote picker, user cards, mod UI) | CI |
-| E2E tests | WebdriverIO + tauri-driver | Full pipeline: Go sidecar -> Rust -> frontend in real app | CI (build required) |
+| Layer                 | Tool                                | Scope                                                               | Runs                |
+| --------------------- | ----------------------------------- | ------------------------------------------------------------------- | ------------------- |
+| Rust unit tests       | `cargo test`                        | Message parsing, emote scanning, ring buffer logic, automaton build | Pre-push hook, CI   |
+| Go unit tests         | `go test`                           | WebSocket handling, OAuth flow, rate limiter, platform adapters     | Pre-push hook, CI   |
+| TypeScript unit tests | Vitest                              | Store logic, ring buffer, utility functions                         | Pre-push hook, CI   |
+| Component tests       | Vitest + `@solidjs/testing-library` | Solid components in JSDOM (emote picker, user cards, mod UI)        | CI                  |
+| E2E tests             | WebdriverIO + tauri-driver          | Full pipeline: Go sidecar -> Rust -> frontend in real app           | CI (build required) |
 
 ## What to Test
 

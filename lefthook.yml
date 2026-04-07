@@ -26,7 +26,7 @@ pre-commit:
       run: bunx eslint {staged_files}
 
     - name: prettier
-      glob: "*.{ts,tsx,json,css,html}"
+      glob: "*.{ts,tsx,js,json,css,html,md,yml,yaml}"
       run: bunx prettier --check {staged_files}
 
     - name: tsc

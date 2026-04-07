@@ -7,6 +7,7 @@
 OAuth 2.0 Authorization Code flow.
 
 Required scopes:
+
 - `user:read:chat` - read chat messages via EventSub
 - `user:write:chat` - send chat messages
 - `moderator:manage:banned_users` - ban, timeout, unban
@@ -29,12 +30,12 @@ Helix `POST /chat/messages` with `broadcaster_id`, `sender_id`, and `message`.
 
 ### Moderation
 
-| Action | Endpoint |
-|---|---|
-| Delete message | `DELETE /moderation/chat` with `message_id` |
-| Timeout | `POST /moderation/bans` with `duration` (seconds) |
-| Ban (permanent) | `POST /moderation/bans` without `duration` |
-| Unban | `DELETE /moderation/bans` |
+| Action          | Endpoint                                          |
+| --------------- | ------------------------------------------------- |
+| Delete message  | `DELETE /moderation/chat` with `message_id`       |
+| Timeout         | `POST /moderation/bans` with `duration` (seconds) |
+| Ban (permanent) | `POST /moderation/bans` without `duration`        |
+| Unban           | `DELETE /moderation/bans`                         |
 
 ### Badges
 
@@ -64,14 +65,14 @@ REST `POST /youtube/v3/liveChat/messages` with `liveChatId` and message text.
 
 ### Moderation
 
-| Action | Endpoint |
-|---|---|
-| Delete message | `DELETE /youtube/v3/liveChat/messages` |
-| Ban (temporary) | `POST /youtube/v3/liveChat/bans` with `banDurationSeconds` |
-| Ban (permanent) | `POST /youtube/v3/liveChat/bans` without duration |
-| Unban | `DELETE /youtube/v3/liveChat/bans` |
-| Add moderator | `POST /youtube/v3/liveChat/moderators` |
-| Remove moderator | `DELETE /youtube/v3/liveChat/moderators` |
+| Action           | Endpoint                                                   |
+| ---------------- | ---------------------------------------------------------- |
+| Delete message   | `DELETE /youtube/v3/liveChat/messages`                     |
+| Ban (temporary)  | `POST /youtube/v3/liveChat/bans` with `banDurationSeconds` |
+| Ban (permanent)  | `POST /youtube/v3/liveChat/bans` without duration          |
+| Unban            | `DELETE /youtube/v3/liveChat/bans`                         |
+| Add moderator    | `POST /youtube/v3/liveChat/moderators`                     |
+| Remove moderator | `DELETE /youtube/v3/liveChat/moderators`                   |
 
 ### Quota
 

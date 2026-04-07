@@ -2,12 +2,12 @@
 
 ## Cache Layers
 
-| Layer | Location | Contents | Lifetime |
-|---|---|---|---|
-| Hot memory | Rust `HashMap`/`DashMap` | Emote code-to-URL mappings, badge metadata, aho-corasick automaton | While app is running or minimized to tray |
-| SQLite | `~/.local/share/prismoid/cache.db` (Linux), `%APPDATA%/prismoid/cache.db` (Windows), `~/Library/Application Support/prismoid/cache.db` (macOS) | Emote set metadata, user preferences, window layout, account info, schema version | Persistent across launches |
-| Filesystem | `~/.cache/prismoid/emotes/` (Linux), `%LOCALAPPDATA%/prismoid/cache/emotes/` (Windows) | Emote image files (WebP, AVIF, PNG, GIF) | Persistent, LRU eviction at 500MB |
-| OS Keychain | Native per platform | OAuth access + refresh tokens | Persistent, never stored as plaintext |
+| Layer       | Location                                                                                                                                       | Contents                                                                          | Lifetime                                  |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------- |
+| Hot memory  | Rust `HashMap`/`DashMap`                                                                                                                       | Emote code-to-URL mappings, badge metadata, aho-corasick automaton                | While app is running or minimized to tray |
+| SQLite      | `~/.local/share/prismoid/cache.db` (Linux), `%APPDATA%/prismoid/cache.db` (Windows), `~/Library/Application Support/prismoid/cache.db` (macOS) | Emote set metadata, user preferences, window layout, account info, schema version | Persistent across launches                |
+| Filesystem  | `~/.cache/prismoid/emotes/` (Linux), `%LOCALAPPDATA%/prismoid/cache/emotes/` (Windows)                                                         | Emote image files (WebP, AVIF, PNG, GIF)                                          | Persistent, LRU eviction at 500MB         |
+| OS Keychain | Native per platform                                                                                                                            | OAuth access + refresh tokens                                                     | Persistent, never stored as plaintext     |
 
 No Redis. No external cache. Everything local.
 
