@@ -1,0 +1,17 @@
+# Default owner for everything
+* @ImpulseB23
+
+# Rust / Tauri
+/src-tauri/ @ImpulseB23
+
+# Go sidecar
+/src-sidecar/ @ImpulseB23
+
+# Frontend
+/src/ @ImpulseB23
+
+# CI/CD
+/.github/ @ImpulseB23
+
+# Docs
+/docs/ @ImpulseB23

@@ -1,0 +1,28 @@
+rust:
+  - changed-files:
+      - any-glob-to-any-file: "src-tauri/**"
+
+go:
+  - changed-files:
+      - any-glob-to-any-file: "src-sidecar/**"
+
+typescript:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/**"
+          - "package.json"
+          - "pnpm-lock.yaml"
+          - "tsconfig.json"
+          - "vite.config.*"
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
+          - "*.md"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+          - "lefthook.yml"

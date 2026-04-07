@@ -1,0 +1,34 @@
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+    patch:
+      default:
+        target: 80%
+
+flags:
+  rust:
+    paths:
+      - src-tauri/
+    carryforward: true
+  go:
+    paths:
+      - src-sidecar/
+    carryforward: true
+  typescript:
+    paths:
+      - src/
+    carryforward: true
+
+ignore:
+  - "src-tauri/target/"
+  - "src-tauri/gen/"
+  - "node_modules/"
+  - "dist/"
+
+comment:
+  layout: "reach,diff,flags"
+  behavior: default
+  require_changes: false

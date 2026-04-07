@@ -45,8 +45,18 @@ jobs:
       - name: Clippy
         run: cargo clippy -- -D warnings
 
-      - name: Test
-        run: cargo test
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --quiet
+
+      - name: Test with coverage
+        run: cargo llvm-cov --all-features --workspace --lcov --output-path coverage-rust.lcov
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v5
+        with:
+          files: src-tauri/coverage-rust.lcov
+          flags: rust
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Audit
         run: |
@@ -70,8 +80,15 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      - name: Test
-        run: go test ./...
+      - name: Test with coverage
+        run: go test -coverprofile=coverage-go.txt -covermode=atomic ./...
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v5
+        with:
+          files: src-sidecar/coverage-go.txt
+          flags: go
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   typescript:
     name: TypeScript
@@ -98,8 +115,15 @@ jobs:
       - name: Format check
         run: pnpm prettier --check .
 
-      - name: Test
-        run: pnpm vitest run
+      - name: Test with coverage
+        run: pnpm vitest run --coverage
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage/lcov.info
+          flags: typescript
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   build:
     name: Build
