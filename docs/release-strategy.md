@@ -62,10 +62,10 @@ Same flow, just faster. Branch from main, fix, PR, merge, tag, build, test, ship
 
 Tauri's auto-updater checks GitHub Releases.
 
-| Channel | Includes | Default |
-|---|---|---|
-| Stable | Full releases only | Yes |
-| Beta | Full releases + pre-releases | Opt-in via settings |
+| Channel | Includes                     | Default             |
+| ------- | ---------------------------- | ------------------- |
+| Stable  | Full releases only           | Yes                 |
+| Beta    | Full releases + pre-releases | Opt-in via settings |
 
 The updater endpoint JSON is generated per release. The beta channel endpoint includes pre-releases in its version check.
 

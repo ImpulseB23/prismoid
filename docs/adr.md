@@ -4,56 +4,56 @@ Decisions that have been discussed, evaluated, and locked. Don't revisit unless 
 
 ## From the Brief (locked before development)
 
-| # | Decision | Rationale |
-|---|---|---|
-| 1 | Shared memory ring buffer for Go/Rust IPC | Zero-copy throughput at 10k+ msg/sec. Stdio and unix sockets benchmarked and rejected |
-| 2 | Pretext for text measurement | DOM-free measurement eliminates layout reflow. Required for virtual scrolling at volume |
-| 3 | Memory-only chat history | No persistence of other users' messages. Privacy and simplicity |
-| 4 | No whispers in v1 | Scope control |
-| 5 | Separate cross-platform identities | No linking between Twitch/YouTube accounts for the same person. Too unreliable to guess |
-| 6 | macOS signed, Windows unsigned in v1 | Apple signing is $99/yr and required. Windows signing is $300+/yr and SmartScreen is dismissible |
-| 7 | OBS overlay strips platform indicators | Clean unified chat for stream viewers. Disclaimer shown on enable |
-| 8 | Hybrid emote picker (search + favorites + tabs) | Best of both browse and search UX |
-| 9 | Anonymous opt-in telemetry | Crash reports and usage stats only. No message content, no user identifiers |
-| 10 | Three languages only (Rust, Go, TypeScript) | Lua, Zig, Nim, Erlang, C evaluated and rejected. No fourth language adds value |
+| #   | Decision                                        | Rationale                                                                                        |
+| --- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 1   | Shared memory ring buffer for Go/Rust IPC       | Zero-copy throughput at 10k+ msg/sec. Stdio and unix sockets benchmarked and rejected            |
+| 2   | Pretext for text measurement                    | DOM-free measurement eliminates layout reflow. Required for virtual scrolling at volume          |
+| 3   | Memory-only chat history                        | No persistence of other users' messages. Privacy and simplicity                                  |
+| 4   | No whispers in v1                               | Scope control                                                                                    |
+| 5   | Separate cross-platform identities              | No linking between Twitch/YouTube accounts for the same person. Too unreliable to guess          |
+| 6   | macOS signed, Windows unsigned in v1            | Apple signing is $99/yr and required. Windows signing is $300+/yr and SmartScreen is dismissible |
+| 7   | OBS overlay strips platform indicators          | Clean unified chat for stream viewers. Disclaimer shown on enable                                |
+| 8   | Hybrid emote picker (search + favorites + tabs) | Best of both browse and search UX                                                                |
+| 9   | Anonymous opt-in telemetry                      | Crash reports and usage stats only. No message content, no user identifiers                      |
+| 10  | Three languages only (Rust, Go, TypeScript)     | Lua, Zig, Nim, Erlang, C evaluated and rejected. No fourth language adds value                   |
 
 ## Architecture Decisions (locked during planning)
 
-| # | Decision | Options Considered | Rationale |
-|---|---|---|---|
-| 11 | Ring buffer size: 4MB | 1MB, 4MB, 8MB, 16MB | ~8,000 messages headroom. ~1 second burst capacity at peak. Resizable later via constant change |
-| 12 | YouTube gRPC stays in Go | Go (with rest of network layer), Rust (tonic) | Keep all network I/O in one process. Splitting adds two reconnection paths and two auth flows |
-| 13 | Pretext for text only, emotes/badges as fixed-width inline boxes | Full custom measurement layer, Pretext for everything | Emote dimensions are known from metadata. No measurement needed. Simple arithmetic on top of Pretext |
-| 14 | Tauri sidecar stdio as control plane, ring buffer as data plane | All stdio, all ring buffer, unix domain sockets | Stdio for lifecycle/commands (low volume), ring buffer for messages (high volume). Best of both |
-| 15 | OffscreenCanvas per animated emote, swappable to img fallback | OffscreenCanvas only, img only, CSS animation | Shared timer on worker controls frame budget. Fallback if profiling shows worker overhead exceeds savings |
-| 16 | OBS overlay via Rust HTTP server (axum/tiny_http) on localhost | Tauri HTTP plugin, separate binary, frontend-served | Rust thread is lightest option. No extra binary, no plugin dependency |
-| 17 | Double-buffered aho-corasick automaton | Inline rebuild, double-buffer with ArcSwap | Background build + atomic swap eliminates 1-5ms stall on hot path during channel switch |
-| 18 | `shared_memory` crate for cross-platform ring buffer | Custom abstraction, platform-specific code | Maintained crate, abstracts POSIX/Windows differences. Go side uses `golang.org/x/sys/windows` |
+| #   | Decision                                                         | Options Considered                                    | Rationale                                                                                                 |
+| --- | ---------------------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| 11  | Ring buffer size: 4MB                                            | 1MB, 4MB, 8MB, 16MB                                   | ~8,000 messages headroom. ~1 second burst capacity at peak. Resizable later via constant change           |
+| 12  | YouTube gRPC stays in Go                                         | Go (with rest of network layer), Rust (tonic)         | Keep all network I/O in one process. Splitting adds two reconnection paths and two auth flows             |
+| 13  | Pretext for text only, emotes/badges as fixed-width inline boxes | Full custom measurement layer, Pretext for everything | Emote dimensions are known from metadata. No measurement needed. Simple arithmetic on top of Pretext      |
+| 14  | Tauri sidecar stdio as control plane, ring buffer as data plane  | All stdio, all ring buffer, unix domain sockets       | Stdio for lifecycle/commands (low volume), ring buffer for messages (high volume). Best of both           |
+| 15  | OffscreenCanvas per animated emote, swappable to img fallback    | OffscreenCanvas only, img only, CSS animation         | Shared timer on worker controls frame budget. Fallback if profiling shows worker overhead exceeds savings |
+| 16  | OBS overlay via Rust HTTP server (axum/tiny_http) on localhost   | Tauri HTTP plugin, separate binary, frontend-served   | Rust thread is lightest option. No extra binary, no plugin dependency                                     |
+| 17  | Double-buffered aho-corasick automaton                           | Inline rebuild, double-buffer with ArcSwap            | Background build + atomic swap eliminates 1-5ms stall on hot path during channel switch                   |
+| 18  | `shared_memory` crate for cross-platform ring buffer             | Custom abstraction, platform-specific code            | Maintained crate, abstracts POSIX/Windows differences. Go side uses `golang.org/x/sys/windows`            |
 
 ## Frontend Decisions (locked during planning)
 
-| # | Decision | Options Considered | Rationale |
-|---|---|---|---|
-| 19 | SolidJS | SolidJS, React, Vue 3, Svelte 5, Vanilla TS | Fine-grained signals with no vDOM. Direct pipeline from Pretext measurements to DOM mutations. Smallest runtime (~7KB) |
-| 20 | Built-in Solid signals organized as domain modules | Solid signals only, Zustand via adapter, custom event bus | Signals are already optimal. Extra state management is overhead. Domain modules give clean boundaries |
-| 21 | Message buffer outside Solid reactivity | Solid store, Solid signals per message, external buffer | At 10k+ msg/sec, reactivity per message is wasteful. Plain TS ring buffer, one viewport signal per frame |
-| 22 | Vitest + solid-testing-library for unit/component tests | Jest, Vitest only, Storybook | Official Solid testing lib, pairs with Vitest natively |
-| 23 | WebdriverIO + tauri-driver for E2E | Playwright, Cypress, no E2E | Only option that drives the real Tauri WebView. Tests the actual Go/Rust/frontend pipeline |
+| #   | Decision                                                | Options Considered                                        | Rationale                                                                                                              |
+| --- | ------------------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 19  | SolidJS                                                 | SolidJS, React, Vue 3, Svelte 5, Vanilla TS               | Fine-grained signals with no vDOM. Direct pipeline from Pretext measurements to DOM mutations. Smallest runtime (~7KB) |
+| 20  | Built-in Solid signals organized as domain modules      | Solid signals only, Zustand via adapter, custom event bus | Signals are already optimal. Extra state management is overhead. Domain modules give clean boundaries                  |
+| 21  | Message buffer outside Solid reactivity                 | Solid store, Solid signals per message, external buffer   | At 10k+ msg/sec, reactivity per message is wasteful. Plain TS ring buffer, one viewport signal per frame               |
+| 22  | Vitest + solid-testing-library for unit/component tests | Jest, Vitest only, Storybook                              | Official Solid testing lib, pairs with Vitest natively                                                                 |
+| 23  | WebdriverIO + tauri-driver for E2E                      | Playwright, Cypress, no E2E                               | Only option that drives the real Tauri WebView. Tests the actual Go/Rust/frontend pipeline                             |
 
 ## Operational Decisions (locked during planning)
 
-| # | Decision | Options Considered | Rationale |
-|---|---|---|---|
-| 24 | Emote cache eviction: LRU at 500MB | Time-based, size-based (various limits), no eviction | Generous for thousands of emotes without bloating disk |
-| 25 | Emote set diff: on channel join + every 5 min | On join only, continuous polling, WebSocket subscription | Catches mid-stream emote additions without hammering APIs |
-| 26 | Cache warming: serve SQLite, diff in background | Fresh fetch on switch, SQLite only | Instant emotes on channel switch, background diff catches changes silently |
-| 27 | API rate limiting: token bucket per provider in Go | Global limiter, per-endpoint limiter, no limiter | Standard approach, isolates each platform's limits |
-| 28 | Global emote/badge TTL: 1 hour in-memory | 15 min, 1 hour, 6 hours | These change rarely. 1 hour balances freshness and API efficiency |
-| 29 | OAuth refresh: proactive, 5 min before expiry | Reactive (on 401), proactive | Avoids dropped messages during refresh window |
-| 30 | One account per platform in v1 | Multi-account, single account | Brief doesn't require multi-account. Keep simple for v1 |
-| 31 | Refresh token failure: re-auth UI, graceful degradation | Auto-retry, force logout, silent fail | Other platforms keep working. User re-authenticates the failed one |
-| 32 | SQLite WAL mode | Default journal, WAL | Standard for concurrent read/write. UI never blocks on disk |
-| 33 | Schema migrations from day one | No migrations, manual schema, migration framework | Prevents manual DB management for end users. Embedded in binary |
-| 34 | Logging: tracing (Rust), zerolog (Go), console (frontend) | log4rs, slog, winston | Industry standard structured logging for each language |
-| 35 | License: GPL v3 | MIT, Apache 2.0, GPL v3, BSL 1.1, AGPL | Open source, prevents closed-source forks. Can relicense later as sole copyright holder (with CLA for contributors) |
-| 36 | Windows-first development | All platforms equal, macOS first | Most streamers are on Windows. CI, tooling, and testing prioritize Windows |
+| #   | Decision                                                  | Options Considered                                       | Rationale                                                                                                           |
+| --- | --------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| 24  | Emote cache eviction: LRU at 500MB                        | Time-based, size-based (various limits), no eviction     | Generous for thousands of emotes without bloating disk                                                              |
+| 25  | Emote set diff: on channel join + every 5 min             | On join only, continuous polling, WebSocket subscription | Catches mid-stream emote additions without hammering APIs                                                           |
+| 26  | Cache warming: serve SQLite, diff in background           | Fresh fetch on switch, SQLite only                       | Instant emotes on channel switch, background diff catches changes silently                                          |
+| 27  | API rate limiting: token bucket per provider in Go        | Global limiter, per-endpoint limiter, no limiter         | Standard approach, isolates each platform's limits                                                                  |
+| 28  | Global emote/badge TTL: 1 hour in-memory                  | 15 min, 1 hour, 6 hours                                  | These change rarely. 1 hour balances freshness and API efficiency                                                   |
+| 29  | OAuth refresh: proactive, 5 min before expiry             | Reactive (on 401), proactive                             | Avoids dropped messages during refresh window                                                                       |
+| 30  | One account per platform in v1                            | Multi-account, single account                            | Brief doesn't require multi-account. Keep simple for v1                                                             |
+| 31  | Refresh token failure: re-auth UI, graceful degradation   | Auto-retry, force logout, silent fail                    | Other platforms keep working. User re-authenticates the failed one                                                  |
+| 32  | SQLite WAL mode                                           | Default journal, WAL                                     | Standard for concurrent read/write. UI never blocks on disk                                                         |
+| 33  | Schema migrations from day one                            | No migrations, manual schema, migration framework        | Prevents manual DB management for end users. Embedded in binary                                                     |
+| 34  | Logging: tracing (Rust), zerolog (Go), console (frontend) | log4rs, slog, winston                                    | Industry standard structured logging for each language                                                              |
+| 35  | License: GPL v3                                           | MIT, Apache 2.0, GPL v3, BSL 1.1, AGPL                   | Open source, prevents closed-source forks. Can relicense later as sole copyright holder (with CLA for contributors) |
+| 36  | Windows-first development                                 | All platforms equal, macOS first                         | Most streamers are on Windows. CI, tooling, and testing prioritize Windows                                          |

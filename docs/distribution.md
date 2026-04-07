@@ -2,11 +2,11 @@
 
 ## Platforms
 
-| Platform | Format | Signing | Source |
-|---|---|---|---|
-| Windows | `.msi` / `.exe` (NSIS) | Unsigned in v1 (SmartScreen warning, dismissible) | GitHub Releases + prismoid.org |
-| macOS | `.dmg` | Signed + notarized (Apple Developer, $99/yr) | GitHub Releases + prismoid.org |
-| Linux | AppImage, `.deb` | No signing needed | GitHub Releases + prismoid.org |
+| Platform | Format                 | Signing                                           | Source                         |
+| -------- | ---------------------- | ------------------------------------------------- | ------------------------------ |
+| Windows  | `.msi` / `.exe` (NSIS) | Unsigned in v1 (SmartScreen warning, dismissible) | GitHub Releases + prismoid.org |
+| macOS    | `.dmg`                 | Signed + notarized (Apple Developer, $99/yr)      | GitHub Releases + prismoid.org |
+| Linux    | AppImage, `.deb`       | No signing needed                                 | GitHub Releases + prismoid.org |
 
 Windows is the primary target. CI builds and tests Windows first.
 
@@ -34,12 +34,14 @@ Tauri builds are produced by GitHub Actions CI on tagged releases. The release w
 Anonymous, opt-in only. Disabled by default.
 
 Collected (when opted in):
+
 - Crash/panic reports with stack traces
 - Connection success/failure rates per platform
 - Platform error frequencies
 - Peak message throughput
 
 Never collected:
+
 - Message content
 - User identifiers
 - Chat data

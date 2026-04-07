@@ -2,12 +2,12 @@
 
 ## Actions
 
-| Action | Twitch | YouTube |
-|---|---|---|
-| Delete message | Helix `DELETE /moderation/chat` | `liveChatMessages.delete` |
-| Timeout | Helix `POST /moderation/bans` with `duration` | `liveChatBans.insert` with `banDurationSeconds` |
-| Ban (permanent) | Helix `POST /moderation/bans` without duration | `liveChatBans.insert` without duration |
-| Unban | Helix `DELETE /moderation/bans` | `liveChatBans.delete` |
+| Action          | Twitch                                         | YouTube                                         |
+| --------------- | ---------------------------------------------- | ----------------------------------------------- |
+| Delete message  | Helix `DELETE /moderation/chat`                | `liveChatMessages.delete`                       |
+| Timeout         | Helix `POST /moderation/bans` with `duration`  | `liveChatBans.insert` with `banDurationSeconds` |
+| Ban (permanent) | Helix `POST /moderation/bans` without duration | `liveChatBans.insert` without duration          |
+| Unban           | Helix `DELETE /moderation/bans`                | `liveChatBans.delete`                           |
 
 ## Flow
 
