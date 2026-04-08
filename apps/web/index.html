@@ -8,6 +8,26 @@
       name="description"
       content="Merge Twitch, YouTube, and Kick chat into one window. Cross-platform moderation, universal emotes, zero latency."
     />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16.png" />
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="/icons/apple-touch-icon.png"
+    />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content="#6B3FA0" />
+    <meta
+      property="og:title"
+      content="Prismoid - Unified Live Chat for Streamers"
+    />
+    <meta
+      property="og:description"
+      content="Merge Twitch, YouTube, and Kick chat into one window."
+    />
+    <meta property="og:image" content="/icons/icon-512.png" />
+    <meta property="og:url" content="https://prismoid.org" />
+    <meta name="twitter:card" content="summary" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -21,12 +41,12 @@
         --bg-surface: #1f1f23;
         --text: #efeff1;
         --text-muted: #adadb8;
-        --accent: #7c3aed;
-        --accent-glow: rgba(124, 58, 237, 0.15);
-        --accent-bright: #9f67ff;
-        --twitch: #9146ff;
-        --youtube: #ff0000;
-        --kick: #53fc18;
+        --accent: #6b3fa0;
+        --accent-glow: rgba(107, 63, 160, 0.15);
+        --accent-bright: #8b5fc8;
+        --twitch: #6b3fa0;
+        --youtube: #dc2626;
+        --kick: #2d9b3a;
         --mono: "JetBrains Mono", monospace;
         --sans: "Outfit", sans-serif;
       }
@@ -420,7 +440,15 @@
 
     <div class="container">
       <nav>
-        <a href="/" class="logo">prismoid<span>.</span></a>
+        <a href="/" class="logo"
+          ><img
+            src="/icons/icon-32.png"
+            alt=""
+            width="24"
+            height="24"
+            style="vertical-align: middle; margin-right: 8px"
+          />prismoid<span>.</span></a
+        >
         <a href="https://github.com/ImpulseB23/Prismoid" class="gh">GitHub</a>
       </nav>
 
