@@ -52,9 +52,9 @@ impl RingBufReader {
             let read_slot = &*((ptr as usize + CACHE_LINE) as *const ReadSlot);
             let meta_slot = &mut *((ptr as usize + CACHE_LINE * 2) as *mut MetaSlot);
 
+            meta_slot.capacity = capacity as u64;
             write_slot.index.store(0, Ordering::Release);
             read_slot.index.store(0, Ordering::Release);
-            meta_slot.capacity = capacity as u64;
         }
 
         Ok(Self {
@@ -98,6 +98,15 @@ impl RingBufReader {
                 // read message length (4 bytes, big-endian)
                 let len = self.read_u32_wrapped(data, read_pos, cap);
                 let msg_len = len as usize;
+
+                if msg_len > cap {
+                    tracing::error!(
+                        msg_len,
+                        cap,
+                        "corrupt ring buffer: msg_len exceeds capacity"
+                    );
+                    break;
+                }
 
                 if read_pos + 4 + msg_len > write_pos {
                     break; // incomplete message

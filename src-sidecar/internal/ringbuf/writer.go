@@ -57,6 +57,9 @@ func (w *Writer) data() []byte {
 // Write writes a length-prefixed message to the ring buffer.
 // Returns false if the buffer is full (message would overwrite unread data).
 func (w *Writer) Write(payload []byte) bool {
+	if len(payload) > 1<<30 { // 1GB sanity limit
+		return false
+	}
 	msgSize := uint64(4 + len(payload))
 	cap := w.capacity
 
