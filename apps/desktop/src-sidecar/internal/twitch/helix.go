@@ -48,7 +48,10 @@ func Subscribe(ctx context.Context, helixBase, sessionID, broadcasterID, userID,
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return fmt.Errorf("read helix response (status %d): %w", resp.StatusCode, readErr)
+	}
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return &AuthError{Status: resp.StatusCode, Body: string(respBody)}

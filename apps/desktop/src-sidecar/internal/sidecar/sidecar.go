@@ -8,10 +8,12 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -26,7 +28,11 @@ import (
 const (
 	outChanCapacity = 1024
 	cmdChanCapacity = 16
-	maxScannerLine  = 1024 * 1024 // 1 MB; EventSub envelopes can exceed the default 64KB
+	// Bootstrap and command-plane lines fit comfortably under 1 MB. The default
+	// 64KB scanner limit is too tight for large control messages so we lift it
+	// here with headroom for future growth. EventSub envelopes never traverse
+	// stdin; they arrive over the WebSocket and exit through `out`.
+	maxScannerLine  = 1024 * 1024
 	heartbeatPeriod = 1 * time.Second
 )
 
@@ -97,9 +103,14 @@ func ReadBootstrap(scanner *bufio.Scanner) (control.Bootstrap, error) {
 }
 
 // RunWriter is the sole producer to the ring buffer. Multiple platform clients
-// send raw envelope bytes via `in`; this goroutine drains them serially. If
-// the ring buffer is full it logs and drops, matching the drop-oldest
-// backpressure described in docs/architecture.md.
+// send raw envelope bytes via `in`; this goroutine drains them serially into
+// the ring buffer.
+//
+// Backpressure: when the ring buffer is full, writer.Write returns false and
+// the current message is dropped (drop-newest). docs/architecture.md describes
+// drop-oldest semantics at the ring buffer layer; the current SPSC primitive
+// cannot evict already-written messages without reader-side cooperation that
+// has not been built yet. Tracked separately.
 func RunWriter(ctx context.Context, in <-chan []byte, writer *ringbuf.Writer) {
 	for {
 		select {
@@ -115,7 +126,10 @@ func RunWriter(ctx context.Context, in <-chan []byte, writer *ringbuf.Writer) {
 
 // RunCommandLoop drives the heartbeat ticker and command dispatch until ctx is
 // cancelled. Reads commands from the scanner via a small fan-in goroutine and
-// writes heartbeats + notifications via the encoder.
+// writes heartbeats + notifications via the encoder. All writes to the encoder
+// are serialized through encoderMu because notify is invoked from Twitch
+// client goroutines while heartbeats fire from this loop; json.Encoder and
+// the underlying io.Writer are not safe for concurrent use.
 func RunCommandLoop(ctx context.Context, scanner *bufio.Scanner, encoder *json.Encoder, out chan<- []byte, logger zerolog.Logger) error {
 	cmdCh := make(chan control.Command, cmdChanCapacity)
 	go scanCommands(scanner, cmdCh, logger)
@@ -124,7 +138,8 @@ func RunCommandLoop(ctx context.Context, scanner *bufio.Scanner, encoder *json.E
 	defer heartbeat.Stop()
 
 	clients := make(map[string]context.CancelFunc)
-	notify := makeNotify(encoder, logger)
+	var encoderMu sync.Mutex
+	notify := makeNotify(encoder, &encoderMu, logger)
 
 	for {
 		select {
@@ -132,7 +147,10 @@ func RunCommandLoop(ctx context.Context, scanner *bufio.Scanner, encoder *json.E
 			logger.Info().Msg("sidecar shutting down")
 			return nil
 		case <-heartbeat.C:
-			if err := encoder.Encode(control.Message{Type: "heartbeat"}); err != nil {
+			encoderMu.Lock()
+			err := encoder.Encode(control.Message{Type: "heartbeat"})
+			encoderMu.Unlock()
+			if err != nil {
 				logger.Error().Err(err).Msg("failed to write heartbeat to host")
 				return err
 			}
@@ -153,9 +171,12 @@ func scanCommands(scanner *bufio.Scanner, cmdCh chan<- control.Command, logger z
 	}
 }
 
-func makeNotify(encoder *json.Encoder, logger zerolog.Logger) twitch.Notify {
+func makeNotify(encoder *json.Encoder, encoderMu *sync.Mutex, logger zerolog.Logger) twitch.Notify {
 	return func(msgType string, payload any) {
-		if err := encoder.Encode(control.Message{Type: msgType, Payload: payload}); err != nil {
+		encoderMu.Lock()
+		err := encoder.Encode(control.Message{Type: msgType, Payload: payload})
+		encoderMu.Unlock()
+		if err != nil {
 			logger.Error().Err(err).Str("type", msgType).Msg("failed to notify host")
 		}
 	}
@@ -197,7 +218,10 @@ func HandleTwitchConnect(ctx context.Context, cmd control.Command, clients map[s
 	clients[cmd.BroadcasterID] = clientCancel
 
 	go func() {
-		if err := client.Run(clientCtx); err != nil && ctx.Err() == nil {
+		// errors.Is handles both parent shutdown and per-client disconnect:
+		// in either case the inner Read returns context.Canceled, which we
+		// want to treat as a normal exit, not an error.
+		if err := client.Run(clientCtx); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error().Err(err).Str("broadcaster", cmd.BroadcasterID).Msg("twitch client exited")
 		}
 	}()

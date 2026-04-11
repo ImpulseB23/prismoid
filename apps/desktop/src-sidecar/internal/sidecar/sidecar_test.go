@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -300,7 +301,8 @@ func TestRunCommandLoop_PropagatesHeartbeatWriteError(t *testing.T) {
 
 func TestMakeNotify_EncodesMessage(t *testing.T) {
 	var buf bytes.Buffer
-	notify := makeNotify(json.NewEncoder(&buf), zerolog.Nop())
+	var mu sync.Mutex
+	notify := makeNotify(json.NewEncoder(&buf), &mu, zerolog.Nop())
 	notify("auth_error", "expired token")
 
 	var msg control.Message
@@ -312,6 +314,43 @@ func TestMakeNotify_EncodesMessage(t *testing.T) {
 	}
 	if msg.Payload != "expired token" {
 		t.Errorf("expected payload, got %v", msg.Payload)
+	}
+}
+
+func TestMakeNotify_SerializesConcurrentWrites(t *testing.T) {
+	// Hammers notify from many goroutines and verifies the resulting stream
+	// is a sequence of well-formed JSON messages, not interleaved garbage.
+	// Without the mutex, json.Encoder.Encode calls would race on the shared
+	// io.Writer and produce torn output.
+	var buf bytes.Buffer
+	var mu sync.Mutex
+	notify := makeNotify(json.NewEncoder(&buf), &mu, zerolog.Nop())
+
+	const goroutines = 16
+	const perGoroutine = 50
+	var wg sync.WaitGroup
+	for g := 0; g < goroutines; g++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for i := 0; i < perGoroutine; i++ {
+				notify("auth_error", id)
+			}
+		}(g)
+	}
+	wg.Wait()
+
+	dec := json.NewDecoder(&buf)
+	count := 0
+	for {
+		var msg control.Message
+		if err := dec.Decode(&msg); err != nil {
+			break
+		}
+		count++
+	}
+	if count != goroutines*perGoroutine {
+		t.Errorf("expected %d well-formed messages, got %d", goroutines*perGoroutine, count)
 	}
 }
 
@@ -385,7 +424,8 @@ func TestScanCommands_SkipsInvalidJSON(t *testing.T) {
 
 func TestMakeNotify_LogsOnEncoderError(t *testing.T) {
 	encoder := json.NewEncoder(&errWriter{err: errors.New("pipe broken")})
-	notify := makeNotify(encoder, zerolog.Nop())
+	var mu sync.Mutex
+	notify := makeNotify(encoder, &mu, zerolog.Nop())
 	// must not panic; error path is exercised internally
 	notify("auth_error", "anything")
 }

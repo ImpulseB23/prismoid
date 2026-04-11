@@ -136,9 +136,9 @@ func (c *Client) readWelcome(ctx context.Context, conn *websocket.Conn) (string,
 }
 
 func (c *Client) listenLoop(ctx context.Context, conn *websocket.Conn, keepaliveSec int) error {
+	// Each Read uses a fresh context.WithTimeout, so the keepalive timeout is
+	// enforced per read. No standalone timer needed.
 	timeout := time.Duration(keepaliveSec)*time.Second + time.Second
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
 
 	for {
 		readCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -152,8 +152,6 @@ func (c *Client) listenLoop(ctx context.Context, conn *websocket.Conn, keepalive
 			return fmt.Errorf("read: %w", err)
 		}
 
-		timer.Reset(timeout)
-
 		var env Envelope
 		if err := json.Unmarshal(data, &env); err != nil {
 			c.Log.Error().Err(err).Msg("unmarshal envelope failed")
@@ -162,10 +160,15 @@ func (c *Client) listenLoop(ctx context.Context, conn *websocket.Conn, keepalive
 
 		switch env.Metadata.MessageType {
 		case "notification":
-			// Non-blocking send: if the channel is full the writer goroutine
-			// is falling behind (or the ring buffer is full upstream). Drop
-			// the message rather than stall the websocket reader, matching the
-			// drop-oldest semantics in docs/architecture.md.
+			// Non-blocking send. The receiver (the writer goroutine in the
+			// sidecar) is the sole producer to the ring buffer; if its input
+			// channel is full it means the ring buffer is also full or close
+			// to it. We drop the *new* message (drop-newest) rather than
+			// stall the websocket reader. Note: docs/architecture.md
+			// describes drop-oldest at the ring buffer layer; the current
+			// SPSC primitive cannot evict already-written messages without a
+			// reader-side cooperation we haven't built yet. Tracked
+			// separately.
 			select {
 			case c.Out <- data:
 			default:
@@ -173,7 +176,7 @@ func (c *Client) listenLoop(ctx context.Context, conn *websocket.Conn, keepalive
 			}
 
 		case "session_keepalive":
-			// timer already reset above
+			// no-op; per-read timeout above resets on every successful Read
 
 		case "session_reconnect":
 			var payload ReconnectPayload
