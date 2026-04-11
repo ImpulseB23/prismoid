@@ -89,6 +89,16 @@ func RunWithIO(
 	}
 	defer cleanup()
 
+	// The host also inherited the event HANDLE separately; close our copy on
+	// shutdown so the handle count doesn't grow over the sidecar's lifetime.
+	// The host keeps its own reference and continues to own the underlying
+	// kernel object.
+	defer func() {
+		if err := ringbuf.CloseEventHandle(boot.ShmEventHandle); err != nil {
+			logger.Warn().Err(err).Msg("failed to close inherited event handle on shutdown")
+		}
+	}()
+
 	writer, err := ringbuf.Open(mem)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to open ring buffer writer")

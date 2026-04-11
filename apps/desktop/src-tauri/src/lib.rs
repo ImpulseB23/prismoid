@@ -7,7 +7,7 @@ use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 use tracing_subscriber::EnvFilter;
 
-use host::{parse_batch, DRAIN_INTERVAL};
+use host::{parse_batch, SIGNAL_WAIT_TIMEOUT};
 use ringbuf::{RingBufReader, WaitOutcome, DEFAULT_CAPACITY};
 
 #[tauri::command]
@@ -116,6 +116,14 @@ fn setup_sidecar<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std:
     let sidecar = app.shell().sidecar(SIDECAR_BINARY)?;
     let (mut rx, mut child) = sidecar.spawn()?;
 
+    // Spawn succeeded: the child has inherited both handles. Close the
+    // inheritance window now rather than waiting for the function to return,
+    // so that writing the bootstrap line, the twitch_connect command, and
+    // spawning downstream async tasks all happen without the HANDLEs still
+    // inheritable on this process. The guard's Drop still runs for error
+    // paths that unwind before reaching this line.
+    drop(_inherit_guard);
+
     let bootstrap_line = build_bootstrap_line(handle, event_handle, size)?;
     child.write(&bootstrap_line)?;
     tracing::info!("sidecar bootstrap written");
@@ -163,7 +171,7 @@ fn setup_sidecar<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std:
 
 /// Drain loop: parks on the auto-reset event signaled by the sidecar's writer
 /// goroutine after each ring write. Wakes the instant new data lands, or at
-/// the [`DRAIN_INTERVAL`] timeout as a belt-and-suspenders fallback for any
+/// the [`SIGNAL_WAIT_TIMEOUT`] as a belt-and-suspenders fallback for any
 /// lost signal. Parses, batches, and emits once per wake.
 ///
 /// The scratch `Vec<UnifiedMessage>` lives outside the loop and is cleared at
@@ -171,10 +179,10 @@ fn setup_sidecar<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std:
 /// the hot path (modulo the short-lived `Vec<Vec<u8>>` from `drain()` itself,
 /// tracked for follow-up in PRI-8).
 fn run_drain_loop<R: Runtime>(mut reader: RingBufReader, app: AppHandle<R>) {
-    let timeout_ms: u32 = DRAIN_INTERVAL
+    let timeout_ms: u32 = SIGNAL_WAIT_TIMEOUT
         .as_millis()
         .try_into()
-        .expect("drain interval fits in u32 ms");
+        .expect("signal wait timeout fits in u32 ms");
     let mut batch: Vec<message::UnifiedMessage> = Vec::with_capacity(64);
 
     loop {
