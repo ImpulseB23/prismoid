@@ -16,9 +16,14 @@ use crate::ringbuf::RawHandle;
 
 /// Timeout for [`ringbuf::RingBufReader::wait_for_signal`] in the host drain
 /// loop. In the happy path the sidecar signals the auto-reset event after
-/// each ring write and the drain wakes immediately; this timeout only bounds
-/// the worst-case latency of a missed signal. 8 ms is one 120 fps frame.
-pub const DRAIN_INTERVAL: Duration = Duration::from_millis(8);
+/// each ring write and the drain wakes immediately; this value only bounds
+/// the worst-case latency of a missed signal.
+///
+/// 100 ms is a compromise between lost-signal recovery latency (still well
+/// under the human-perceptible threshold) and idle CPU usage. An 8 ms timeout
+/// would fire 125 times per second when the sidecar is quiet, burning wakes
+/// for no reason; 100 ms fires 10 times per second, effectively free.
+pub const SIGNAL_WAIT_TIMEOUT: Duration = Duration::from_millis(100);
 pub const SIDECAR_BINARY: &str = "sidecar";
 
 /// Twitch OAuth credentials sourced from environment variables for Phase 0 dev.
