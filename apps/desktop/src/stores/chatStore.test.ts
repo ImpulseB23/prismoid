@@ -56,8 +56,6 @@ describe("chatStore", () => {
 
   it("coalesces multiple batches in the same frame into one viewport update", () => {
     const store = createChatStore(10);
-    const calls: number[] = [];
-    // Spy on the signal by polling its value after each flush.
     store.addMessages([makeMsg("1")]);
     store.addMessages([makeMsg("2")]);
     store.addMessages([makeMsg("3")]);
@@ -67,7 +65,6 @@ describe("chatStore", () => {
     expect(store.viewport().count).toBe(3);
 
     // A second tick with nothing new should not change the viewport.
-    calls.push(store.viewport().count);
     vi.runAllTimers();
     expect(store.viewport().count).toBe(3);
   });
