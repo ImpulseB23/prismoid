@@ -1,9 +1,19 @@
 //! SPSC shared memory ring buffer for the Go sidecar → Rust host hot path.
 //!
-//! The Rust host creates an unnamed shared memory section and hands the raw
-//! HANDLE to the Go sidecar at spawn time via handle inheritance + stdio
-//! bootstrap. See ADR 18 (revised 2026-04-11). Windows is the primary target;
-//! Linux and macOS return `ErrorKind::Unsupported` until their own tickets land.
+//! The Rust host creates an unnamed shared memory section via [`RingBufReader::create_owner`]
+//! and obtains the raw HANDLE via [`RingBufReader::raw_handle`]. See ADR 18
+//! (revised 2026-04-11).
+//!
+//! This primitive deliberately creates the handle as **non-inheritable**. The
+//! caller (the host lifecycle) is responsible for marking the handle inheritable
+//! via `SetHandleInformation(HANDLE_FLAG_INHERIT)` immediately before spawning
+//! the sidecar and un-marking it immediately after, to minimize the race window
+//! where any other child spawned in that interval would inherit the section.
+//! See the Rust stdlib comment in `library/std/src/sys/process/windows.rs`
+//! (around the `CREATE_PROCESS_LOCK` definition) for why this window matters.
+//!
+//! Windows is the primary target; Linux and macOS return `ErrorKind::Unsupported`
+//! until their own tickets land.
 
 use std::io;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -96,10 +106,11 @@ impl RingBufReader {
             )
         };
         if view.Value.is_null() {
+            let err = io::Error::last_os_error();
             unsafe {
                 let _ = CloseHandle(handle);
             }
-            return Err(io::Error::other("MapViewOfFile returned null"));
+            return Err(err);
         }
 
         let base = view.Value as *mut u8;
@@ -122,7 +133,8 @@ impl RingBufReader {
     pub fn attach(handle: RawHandle, map_size: usize) -> io::Result<Self> {
         use windows::Win32::Foundation::HANDLE;
         use windows::Win32::System::Memory::{
-            MapViewOfFile, FILE_MAP, FILE_MAP_READ, FILE_MAP_WRITE,
+            MapViewOfFile, UnmapViewOfFile, FILE_MAP, FILE_MAP_READ, FILE_MAP_WRITE,
+            MEMORY_MAPPED_VIEW_ADDRESS,
         };
 
         if map_size < HEADER_SIZE + 4 {
@@ -146,8 +158,28 @@ impl RingBufReader {
             return Err(io::Error::last_os_error());
         }
 
+        // Validate the creator-written header before drain() can trust it. An
+        // invalid capacity would cause a modulo-by-zero or an out-of-bounds
+        // read once messages start flowing.
+        let base = view.Value as *mut u8;
+        let capacity = unsafe {
+            let meta = &*(base.add(CACHE_LINE * 2) as *const MetaSlot);
+            meta.capacity as usize
+        };
+        if capacity < 4 || HEADER_SIZE.saturating_add(capacity) > map_size {
+            unsafe {
+                let _ = UnmapViewOfFile(MEMORY_MAPPED_VIEW_ADDRESS {
+                    Value: base as *mut _,
+                });
+            }
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "ring buffer header capacity is invalid or exceeds mapped size",
+            ));
+        }
+
         Ok(Self {
-            base: view.Value as *mut u8,
+            base,
             map_size,
             data_offset: HEADER_SIZE,
             mapping_handle,
@@ -291,7 +323,10 @@ impl Drop for RingBufReader {
 
 #[cfg(windows)]
 fn windows_err(err: windows::core::Error) -> io::Error {
-    io::Error::from_raw_os_error(err.code().0)
+    // Preserves the HRESULT message via the windows::core::Error's Display impl
+    // rather than reducing it to a bare errno, which `from_raw_os_error(err.code().0)`
+    // would do.
+    io::Error::other(err)
 }
 
 #[cfg(all(test, windows))]
@@ -467,5 +502,41 @@ mod tests {
         let messages = attached.drain();
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0], b"cross-view message");
+    }
+
+    #[test]
+    fn attach_rejects_zero_capacity_header() {
+        // Corrupt the owner's MetaSlot.capacity to 0, then try to attach via
+        // the raw handle. Attach must reject it instead of trusting the header,
+        // otherwise drain() would hit a modulo-by-zero.
+        let owner = RingBufReader::create_owner(4096).unwrap();
+        unsafe {
+            let meta = owner.base.add(CACHE_LINE * 2) as *mut MetaSlot;
+            (*meta).capacity = 0;
+        }
+        let err = RingBufReader::attach(owner.raw_handle(), owner.map_size()).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn attach_rejects_capacity_exceeding_map_size() {
+        let owner = RingBufReader::create_owner(4096).unwrap();
+        unsafe {
+            let meta = owner.base.add(CACHE_LINE * 2) as *mut MetaSlot;
+            (*meta).capacity = owner.map_size() as u64 + 1;
+        }
+        let err = RingBufReader::attach(owner.raw_handle(), owner.map_size()).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn attach_rejects_capacity_below_minimum() {
+        let owner = RingBufReader::create_owner(4096).unwrap();
+        unsafe {
+            let meta = owner.base.add(CACHE_LINE * 2) as *mut MetaSlot;
+            (*meta).capacity = 2;
+        }
+        let err = RingBufReader::attach(owner.raw_handle(), owner.map_size()).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
     }
 }
