@@ -8,7 +8,7 @@ use tauri_plugin_shell::ShellExt;
 use tracing_subscriber::EnvFilter;
 
 use host::{parse_batch, DRAIN_INTERVAL};
-use ringbuf::{RingBufReader, DEFAULT_CAPACITY};
+use ringbuf::{RingBufReader, WaitOutcome, DEFAULT_CAPACITY};
 
 #[tauri::command]
 fn get_platform() -> &'static str {
@@ -42,10 +42,11 @@ pub fn run() {
         .expect("failed to run prismoid");
 }
 
-/// Tauri setup hook. On Windows, creates the shm section, spawns the sidecar
-/// with the HANDLE marked inheritable, bootstraps it, and starts the drain
-/// task. On other platforms (not yet supported per ADR 18), logs a warning
-/// and lets the Tauri app launch so frontend work can proceed.
+/// Tauri setup hook. On Windows, creates the shm section + auto-reset event,
+/// spawns the sidecar with both handles marked inheritable, bootstraps it,
+/// and starts the drain task. On other platforms (not yet supported per
+/// ADR 18), logs a warning and lets the Tauri app launch so frontend work
+/// can proceed.
 #[allow(clippy::unnecessary_wraps)]
 fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(windows)]
@@ -71,30 +72,51 @@ fn setup_sidecar<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std:
 
     let reader = RingBufReader::create_owner(DEFAULT_CAPACITY)?;
     let handle = reader.raw_handle();
+    let event_handle = reader
+        .raw_event_handle()
+        .expect("owner-created reader has event handle");
     let size = reader.map_size();
 
     mark_handle_inheritable(handle)?;
+    if let Err(e) = mark_handle_inheritable(event_handle) {
+        // Undo the mapping-handle mark before propagating, otherwise we leak
+        // the inheritable flag on a partial failure.
+        if let Err(undo) = unmark_handle_inheritable(handle) {
+            tracing::error!(error = %undo, "failed to undo mapping handle mark after event mark failure");
+        }
+        return Err(e.into());
+    }
 
     // RAII guard: the inheritable flag is cleared on any exit from this
-    // function, including error paths. This keeps the window where the HANDLE
-    // is inheritable as narrow as possible (effectively: the sidecar spawn).
-    // The Rust stdlib's CREATE_PROCESS_LOCK serializes our own child spawns,
-    // but un-setting the flag immediately defends against any future change
-    // where something else creates a process between mark and function exit.
-    struct InheritGuard(ringbuf::RawHandle);
+    // function, including error paths. This keeps the window where the
+    // HANDLEs are inheritable as narrow as possible (effectively: the sidecar
+    // spawn). The Rust stdlib's CREATE_PROCESS_LOCK serializes our own child
+    // spawns, but un-setting the flags immediately defends against any future
+    // change where something else creates a process between mark and
+    // function exit.
+    struct InheritGuard {
+        mapping: ringbuf::RawHandle,
+        event: ringbuf::RawHandle,
+    }
     impl Drop for InheritGuard {
         fn drop(&mut self) {
-            if let Err(e) = unmark_handle_inheritable(self.0) {
-                tracing::error!(error = %e, "failed to un-mark handle inheritance in drop");
+            if let Err(e) = unmark_handle_inheritable(self.mapping) {
+                tracing::error!(error = %e, "failed to un-mark mapping handle inheritance in drop");
+            }
+            if let Err(e) = unmark_handle_inheritable(self.event) {
+                tracing::error!(error = %e, "failed to un-mark event handle inheritance in drop");
             }
         }
     }
-    let _inherit_guard = InheritGuard(handle);
+    let _inherit_guard = InheritGuard {
+        mapping: handle,
+        event: event_handle,
+    };
 
     let sidecar = app.shell().sidecar(SIDECAR_BINARY)?;
     let (mut rx, mut child) = sidecar.spawn()?;
 
-    let bootstrap_line = build_bootstrap_line(handle, size)?;
+    let bootstrap_line = build_bootstrap_line(handle, event_handle, size)?;
     child.write(&bootstrap_line)?;
     tracing::info!("sidecar bootstrap written");
 
@@ -130,25 +152,47 @@ fn setup_sidecar<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std:
     });
 
     let app_handle = app.app_handle().clone();
-    tauri::async_runtime::spawn(run_drain_loop(reader, app_handle));
+    // The drain loop blocks the calling thread on WaitForSingleObject, so it
+    // lives on a dedicated blocking-pool thread rather than the tokio worker
+    // pool. `spawn_blocking` tasks tolerate arbitrary blocking waits without
+    // starving async tasks.
+    tauri::async_runtime::spawn_blocking(move || run_drain_loop(reader, app_handle));
 
     Ok(())
 }
 
-/// Drain loop: every [`DRAIN_INTERVAL`], drain the ring buffer, parse each
-/// payload, emit the batch to the frontend.
-async fn run_drain_loop<R: Runtime>(mut reader: RingBufReader, app: AppHandle<R>) {
-    let mut ticker = tokio::time::interval(DRAIN_INTERVAL);
-    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+/// Drain loop: parks on the auto-reset event signaled by the sidecar's writer
+/// goroutine after each ring write. Wakes the instant new data lands, or at
+/// the [`DRAIN_INTERVAL`] timeout as a belt-and-suspenders fallback for any
+/// lost signal. Parses, batches, and emits once per wake.
+///
+/// The scratch `Vec<UnifiedMessage>` lives outside the loop and is cleared at
+/// the top of each iteration, so steady-state operation allocates nothing on
+/// the hot path (modulo the short-lived `Vec<Vec<u8>>` from `drain()` itself,
+/// tracked for follow-up in PRI-8).
+fn run_drain_loop<R: Runtime>(mut reader: RingBufReader, app: AppHandle<R>) {
+    let timeout_ms: u32 = DRAIN_INTERVAL
+        .as_millis()
+        .try_into()
+        .expect("drain interval fits in u32 ms");
+    let mut batch: Vec<message::UnifiedMessage> = Vec::with_capacity(64);
 
     loop {
-        ticker.tick().await;
+        match reader.wait_for_signal(timeout_ms) {
+            Ok(WaitOutcome::Signaled) | Ok(WaitOutcome::TimedOut) => {}
+            Err(e) => {
+                tracing::error!(error = %e, "wait_for_signal failed, drain loop exiting");
+                return;
+            }
+        }
+
         let raw = reader.drain();
         if raw.is_empty() {
             continue;
         }
 
-        let batch = parse_batch(&raw);
+        batch.clear();
+        parse_batch(&raw, &mut batch);
         if batch.is_empty() {
             continue;
         }

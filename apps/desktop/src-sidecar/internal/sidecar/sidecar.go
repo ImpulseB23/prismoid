@@ -45,7 +45,7 @@ func Run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	return RunWithIO(ctx, os.Stdin, os.Stdout, log.Logger, ringbuf.Attach)
+	return RunWithIO(ctx, os.Stdin, os.Stdout, log.Logger, ringbuf.Attach, ringbuf.Notify)
 }
 
 // AttachFunc opens a shared memory section by handle. The production
@@ -55,7 +55,18 @@ type AttachFunc func(handle uintptr, size int) ([]byte, func(), error)
 // RunWithIO is the testable lifecycle entry: read the bootstrap, attach to
 // the shared memory section via the supplied AttachFunc, spawn the writer
 // goroutine, and run the command loop until ctx is cancelled or stdin closes.
-func RunWithIO(ctx context.Context, stdin io.Reader, stdout io.Writer, logger zerolog.Logger, attach AttachFunc) error {
+//
+// The `notify` callback is invoked by the writer goroutine after each
+// successful ring write. In production it wraps `ringbuf.Notify` (SetEvent on
+// Windows). Tests pass a no-op or a recorder.
+func RunWithIO(
+	ctx context.Context,
+	stdin io.Reader,
+	stdout io.Writer,
+	logger zerolog.Logger,
+	attach AttachFunc,
+	notify NotifyFunc,
+) error {
 	logger.Info().Msg("sidecar starting")
 
 	scanner := readerScanner(stdin)
@@ -65,7 +76,11 @@ func RunWithIO(ctx context.Context, stdin io.Reader, stdout io.Writer, logger ze
 		logger.Error().Err(err).Msg("failed to read bootstrap")
 		return err
 	}
-	logger.Info().Uint64("handle", uint64(boot.ShmHandle)).Int("size", boot.ShmSize).Msg("bootstrap received")
+	logger.Info().
+		Uint64("handle", uint64(boot.ShmHandle)).
+		Uint64("event_handle", uint64(boot.ShmEventHandle)).
+		Int("size", boot.ShmSize).
+		Msg("bootstrap received")
 
 	mem, cleanup, err := attach(boot.ShmHandle, boot.ShmSize)
 	if err != nil {
@@ -81,10 +96,22 @@ func RunWithIO(ctx context.Context, stdin io.Reader, stdout io.Writer, logger ze
 	}
 
 	out := make(chan []byte, outChanCapacity)
-	go RunWriter(ctx, out, writer)
+	eventHandle := boot.ShmEventHandle
+	go RunWriter(ctx, out, writer, func() {
+		if eventHandle == 0 {
+			return
+		}
+		if err := notify(eventHandle); err != nil {
+			logger.Warn().Err(err).Msg("failed to signal ring buffer event")
+		}
+	})
 
 	return RunCommandLoop(ctx, scanner, json.NewEncoder(stdout), out, logger)
 }
+
+// NotifyFunc signals the host that new data has been written to the ring
+// buffer. The production impl is ringbuf.Notify; tests inject a fake.
+type NotifyFunc func(eventHandle uintptr) error
 
 // ReadBootstrap consumes a single line from the scanner and decodes it as a
 // control.Bootstrap message. Returns an error on EOF or invalid JSON.
@@ -104,14 +131,21 @@ func ReadBootstrap(scanner *bufio.Scanner) (control.Bootstrap, error) {
 
 // RunWriter is the sole producer to the ring buffer. Multiple platform clients
 // send raw envelope bytes via `in`; this goroutine drains them serially into
-// the ring buffer.
+// the ring buffer, calling `signal` after each successful write so the host
+// can wake from WaitForSingleObject immediately.
 //
 // Backpressure: when the ring buffer is full, writer.Write returns false and
 // the current message is dropped (drop-newest). docs/architecture.md describes
 // drop-oldest semantics at the ring buffer layer; the current SPSC primitive
 // cannot evict already-written messages without reader-side cooperation that
 // has not been built yet. Tracked separately.
-func RunWriter(ctx context.Context, in <-chan []byte, writer *ringbuf.Writer) {
+//
+// Memory ordering: `writer.Write` ends with an atomic.StoreUint64 on the
+// write index (release store in Go's memory model). `signal` ultimately makes
+// a SetEvent syscall which acts as a full memory barrier, so by the time the
+// host's WaitForSingleObject returns and it loads the write index with
+// Acquire ordering, the payload bytes are guaranteed visible.
+func RunWriter(ctx context.Context, in <-chan []byte, writer *ringbuf.Writer, signal func()) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -119,7 +153,9 @@ func RunWriter(ctx context.Context, in <-chan []byte, writer *ringbuf.Writer) {
 		case data := <-in:
 			if !writer.Write(data) {
 				log.Warn().Msg("ring buffer full, dropping message")
+				continue
 			}
+			signal()
 		}
 	}
 }
