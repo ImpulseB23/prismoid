@@ -14,7 +14,11 @@ use serde::Serialize;
 use crate::message::{parse_twitch_envelope, UnifiedMessage};
 use crate::ringbuf::RawHandle;
 
-pub const DRAIN_INTERVAL: Duration = Duration::from_millis(16);
+/// Timeout for [`ringbuf::RingBufReader::wait_for_signal`] in the host drain
+/// loop. In the happy path the sidecar signals the auto-reset event after
+/// each ring write and the drain wakes immediately; this timeout only bounds
+/// the worst-case latency of a missed signal. 8 ms is one 120 fps frame.
+pub const DRAIN_INTERVAL: Duration = Duration::from_millis(8);
 pub const SIDECAR_BINARY: &str = "sidecar";
 
 /// Twitch OAuth credentials sourced from environment variables for Phase 0 dev.
@@ -26,12 +30,15 @@ pub struct TwitchCreds {
     pub user_id: String,
 }
 
-/// Parses a slice of raw ring-buffer payloads into [`UnifiedMessage`]s. Messages
-/// that fail to parse or that aren't chat notifications are dropped with a log.
-/// Each parse is wrapped in `catch_unwind` so a panicking parser cannot kill
-/// the drain loop (`docs/stability.md` §Rust Panic Handling).
-pub fn parse_batch(raw: &[Vec<u8>]) -> Vec<UnifiedMessage> {
-    let mut batch = Vec::with_capacity(raw.len());
+/// Parses a slice of raw ring-buffer payloads into [`UnifiedMessage`]s,
+/// appending successful parses to the caller-owned `batch` scratch buffer.
+/// The caller is responsible for clearing the scratch between drain ticks;
+/// this function only appends.
+///
+/// Messages that fail to parse or that aren't chat notifications are dropped
+/// with a log. Each parse is wrapped in `catch_unwind` so a panicking parser
+/// cannot kill the drain loop (`docs/stability.md` §Rust Panic Handling).
+pub fn parse_batch(raw: &[Vec<u8>], batch: &mut Vec<UnifiedMessage>) {
     for payload in raw {
         let slice = payload.as_slice();
         let outcome = std::panic::catch_unwind(|| parse_twitch_envelope(slice));
@@ -46,19 +53,25 @@ pub fn parse_batch(raw: &[Vec<u8>]) -> Vec<UnifiedMessage> {
             }
         }
     }
-    batch
 }
 
 /// Serializes the bootstrap JSON line the Rust host writes to the sidecar's
-/// stdin immediately after spawn.
-pub fn build_bootstrap_line(handle: RawHandle, size: usize) -> serde_json::Result<Vec<u8>> {
+/// stdin immediately after spawn. Includes the inheritable mapping HANDLE and
+/// the auto-reset event HANDLE that the sidecar signals on each ring write.
+pub fn build_bootstrap_line(
+    handle: RawHandle,
+    event_handle: RawHandle,
+    size: usize,
+) -> serde_json::Result<Vec<u8>> {
     #[derive(Serialize)]
     struct Bootstrap {
         shm_handle: u64,
+        shm_event_handle: u64,
         shm_size: u64,
     }
     let payload = Bootstrap {
         shm_handle: handle as u64,
+        shm_event_handle: event_handle as u64,
         shm_size: size as u64,
     };
     let mut bytes = serde_json::to_vec(&payload)?;
@@ -152,11 +165,12 @@ mod tests {
 
     #[test]
     fn bootstrap_line_has_expected_fields_and_newline() {
-        let line = build_bootstrap_line(0xDEADBEEF, 4096).unwrap();
+        let line = build_bootstrap_line(0xDEADBEEF, 0xCAFEBABE, 4096).unwrap();
         assert_eq!(line.last(), Some(&b'\n'));
         let body = &line[..line.len() - 1];
         let parsed: serde_json::Value = serde_json::from_slice(body).unwrap();
         assert_eq!(parsed["shm_handle"], 0xDEADBEEF_u64);
+        assert_eq!(parsed["shm_event_handle"], 0xCAFEBABE_u64);
         assert_eq!(parsed["shm_size"], 4096_u64);
     }
 
@@ -195,15 +209,45 @@ mod tests {
         let junk = b"not json".to_vec();
 
         let raw = vec![viewer, keepalive, junk];
-        let batch = parse_batch(&raw);
+        let mut batch = Vec::new();
+        parse_batch(&raw, &mut batch);
         assert_eq!(batch.len(), 1);
         assert_eq!(batch[0].message_text, "hi");
     }
 
     #[test]
     fn parse_batch_empty_input() {
-        let batch = parse_batch(&[]);
+        let mut batch = Vec::new();
+        parse_batch(&[], &mut batch);
         assert!(batch.is_empty());
+    }
+
+    #[test]
+    fn parse_batch_appends_to_existing_scratch() {
+        // Verifies that parse_batch appends rather than clearing. The drain
+        // loop owns clearing between ticks; this lets the loop avoid any
+        // allocation churn on the hot path.
+        let viewer = br##"{
+            "metadata": {"message_id":"m","message_type":"notification","message_timestamp":"2023-11-06T18:11:47.492Z"},
+            "payload": {
+                "subscription": {"type":"channel.chat.message"},
+                "event": {
+                    "chatter_user_id":"1","chatter_user_login":"u","chatter_user_name":"U",
+                    "message_id":"mid","message":{"text":"second"}
+                }
+            }
+        }"##.to_vec();
+
+        let mut batch = Vec::new();
+        // Pretend a previous tick left one item in the scratch.
+        parse_batch(&[viewer.clone()], &mut batch);
+        assert_eq!(batch.len(), 1);
+        assert_eq!(batch[0].message_text, "second");
+
+        // Second call appends, scratch is NOT cleared.
+        parse_batch(&[viewer], &mut batch);
+        assert_eq!(batch.len(), 2);
+        assert_eq!(batch[1].message_text, "second");
     }
 
     #[test]

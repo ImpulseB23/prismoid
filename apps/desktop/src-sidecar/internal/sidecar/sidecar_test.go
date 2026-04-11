@@ -86,10 +86,13 @@ func TestRunWriter_DrainsChannelToRing(t *testing.T) {
 	in <- []byte("hello")
 	in <- []byte("world")
 
+	var signalCount atomic.Int32
+	signal := func() { signalCount.Add(1) }
+
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		RunWriter(ctx, in, writer)
+		RunWriter(ctx, in, writer, signal)
 		close(done)
 	}()
 
@@ -104,6 +107,11 @@ func TestRunWriter_DrainsChannelToRing(t *testing.T) {
 	if writePos != 18 {
 		t.Errorf("expected write index 18, got %d", writePos)
 	}
+
+	// each successful write should have signaled exactly once
+	if got := signalCount.Load(); got != 2 {
+		t.Errorf("expected 2 signals, got %d", got)
+	}
 }
 
 func TestRunWriter_StopsOnContextCancel(t *testing.T) {
@@ -114,7 +122,7 @@ func TestRunWriter_StopsOnContextCancel(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		RunWriter(ctx, in, writer)
+		RunWriter(ctx, in, writer, func() {})
 		close(done)
 	}()
 
@@ -123,6 +131,35 @@ func TestRunWriter_StopsOnContextCancel(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("RunWriter did not exit on context cancel")
+	}
+}
+
+func TestRunWriter_SkipsSignalOnFullRing(t *testing.T) {
+	// Tiny 32-byte data region; each message is 4 bytes framing + 20 bytes
+	// payload = 24 bytes. Second write should fail (capacity 32 < 48).
+	writer, _ := makeTestRingBuffer(t, 32)
+
+	in := make(chan []byte, 4)
+	in <- make([]byte, 20)
+	in <- make([]byte, 20)
+
+	var signalCount atomic.Int32
+	signal := func() { signalCount.Add(1) }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		RunWriter(ctx, in, writer, signal)
+		close(done)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	<-done
+
+	// Only the first write succeeded, so signal should have fired exactly once.
+	if got := signalCount.Load(); got != 1 {
+		t.Errorf("expected 1 signal (dropped writes must not signal), got %d", got)
 	}
 }
 
@@ -354,16 +391,20 @@ func TestMakeNotify_SerializesConcurrentWrites(t *testing.T) {
 	}
 }
 
+// nopNotify is a stub NotifyFunc used by RunWithIO tests that don't care
+// about signaling. Returns nil without side effects.
+func nopNotify(_ uintptr) error { return nil }
+
 func TestRunWithIO_AttachError(t *testing.T) {
 	// Bootstrap is valid; the AttachFunc fails. RunWithIO must propagate.
-	stdin := strings.NewReader(`{"shm_handle": 1, "shm_size": 4096}` + "\n")
+	stdin := strings.NewReader(`{"shm_handle": 1, "shm_event_handle": 2, "shm_size": 4096}` + "\n")
 	var stdout bytes.Buffer
 
 	fakeAttach := func(uintptr, int) ([]byte, func(), error) {
 		return nil, nil, errors.New("attach failed")
 	}
 
-	err := RunWithIO(context.Background(), stdin, &stdout, zerolog.Nop(), fakeAttach)
+	err := RunWithIO(context.Background(), stdin, &stdout, zerolog.Nop(), fakeAttach, nopNotify)
 	if err == nil || err.Error() != "attach failed" {
 		t.Fatalf("expected attach failed error, got: %v", err)
 	}
@@ -373,7 +414,7 @@ func TestRunWithIO_BootstrapError(t *testing.T) {
 	stdin := strings.NewReader("not json\n")
 	var stdout bytes.Buffer
 
-	err := RunWithIO(context.Background(), stdin, &stdout, zerolog.Nop(), nil)
+	err := RunWithIO(context.Background(), stdin, &stdout, zerolog.Nop(), nil, nopNotify)
 	if err == nil {
 		t.Fatal("expected bootstrap error")
 	}
@@ -385,14 +426,14 @@ func TestRunWithIO_BootstrapError(t *testing.T) {
 func TestRunWithIO_RingbufOpenError(t *testing.T) {
 	// Bootstrap valid, attach returns an undersized buffer that ringbuf.Open
 	// rejects. RunWithIO must propagate that error.
-	stdin := strings.NewReader(`{"shm_handle": 1, "shm_size": 8}` + "\n")
+	stdin := strings.NewReader(`{"shm_handle": 1, "shm_event_handle": 2, "shm_size": 8}` + "\n")
 	var stdout bytes.Buffer
 
 	fakeAttach := func(uintptr, int) ([]byte, func(), error) {
 		return make([]byte, 8), func() {}, nil
 	}
 
-	err := RunWithIO(context.Background(), stdin, &stdout, zerolog.Nop(), fakeAttach)
+	err := RunWithIO(context.Background(), stdin, &stdout, zerolog.Nop(), fakeAttach, nopNotify)
 	if err == nil {
 		t.Fatal("expected ringbuf.Open error for undersized buffer")
 	}
@@ -434,7 +475,7 @@ func TestRunWithIO_HappyPath(t *testing.T) {
 	// Bootstrap valid, attach returns a real buffer, command loop runs until
 	// the context is cancelled. The writer goroutine is spawned and must drain
 	// gracefully on shutdown.
-	stdin := strings.NewReader(`{"shm_handle": 1, "shm_size": 4096}` + "\n")
+	stdin := strings.NewReader(`{"shm_handle": 1, "shm_event_handle": 2, "shm_size": 4096}` + "\n")
 	var stdout bytes.Buffer
 
 	mem := make([]byte, testHeaderSize+4096)
@@ -447,7 +488,7 @@ func TestRunWithIO_HappyPath(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), heartbeatPeriod+200*time.Millisecond)
 	defer cancel()
 
-	if err := RunWithIO(ctx, stdin, &stdout, zerolog.Nop(), fakeAttach); err != nil {
+	if err := RunWithIO(ctx, stdin, &stdout, zerolog.Nop(), fakeAttach, nopNotify); err != nil {
 		t.Fatalf("RunWithIO returned error: %v", err)
 	}
 

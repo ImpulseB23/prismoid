@@ -4,11 +4,19 @@
 //! and obtains the raw HANDLE via [`RingBufReader::raw_handle`]. See ADR 18
 //! (revised 2026-04-11).
 //!
-//! This primitive deliberately creates the handle as **non-inheritable**. The
-//! caller (the host lifecycle) is responsible for marking the handle inheritable
+//! Alongside the section, `create_owner` also creates an unnamed auto-reset
+//! Windows Event that the Go sidecar signals after each successful ring write
+//! (via `SetEvent`). The host parks on [`RingBufReader::wait_for_signal`] to
+//! wake the instant new data is available, eliminating per-frame polling
+//! latency. This matches the industry-standard pattern used by Chromium Mojo
+//! and LMAX Disruptor for low-latency shm IPC. A caller-provided timeout acts
+//! as a belt-and-suspenders fallback in case a signal is ever lost.
+//!
+//! This primitive deliberately creates both handles as **non-inheritable**.
+//! The caller (the host lifecycle) is responsible for marking them inheritable
 //! via `SetHandleInformation(HANDLE_FLAG_INHERIT)` immediately before spawning
-//! the sidecar and un-marking it immediately after, to minimize the race window
-//! where any other child spawned in that interval would inherit the section.
+//! the sidecar and un-marking them immediately after, to minimize the race
+//! window where any other child spawned in that interval would inherit them.
 //! See the Rust stdlib comment in `library/std/src/sys/process/windows.rs`
 //! (around the `CREATE_PROCESS_LOCK` definition) for why this window matters.
 //!
@@ -53,7 +61,20 @@ pub struct RingBufReader {
     data_offset: usize,
     #[cfg(windows)]
     mapping_handle: windows::Win32::Foundation::HANDLE,
+    /// Auto-reset event signaled by the writer after each ring write. Only set
+    /// for owner-created readers; attach-created readers have no event.
+    #[cfg(windows)]
+    event_handle: Option<windows::Win32::Foundation::HANDLE>,
     owner: bool,
+}
+
+/// Result of [`RingBufReader::wait_for_signal`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WaitOutcome {
+    /// The writer signaled the event; new data is available.
+    Signaled,
+    /// The timeout elapsed with no signal. Fallback path; drain anyway.
+    TimedOut,
 }
 
 // The reader owns a view into shared memory and is the sole consumer. Atomics
@@ -67,9 +88,10 @@ impl RingBufReader {
         use windows::core::PCWSTR;
         use windows::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
         use windows::Win32::System::Memory::{
-            CreateFileMappingW, MapViewOfFile, FILE_MAP, FILE_MAP_READ, FILE_MAP_WRITE,
-            PAGE_READWRITE,
+            CreateFileMappingW, MapViewOfFile, UnmapViewOfFile, FILE_MAP, FILE_MAP_READ,
+            FILE_MAP_WRITE, MEMORY_MAPPED_VIEW_ADDRESS, PAGE_READWRITE,
         };
+        use windows::Win32::System::Threading::CreateEventW;
 
         if capacity < 4 {
             return Err(io::Error::new(
@@ -121,11 +143,29 @@ impl RingBufReader {
             meta.capacity = capacity as u64;
         }
 
+        // Auto-reset unnamed event; starts unsignaled. The writer (Go sidecar)
+        // calls SetEvent after each ring write. The reader waits on it via
+        // WaitForSingleObject to wake immediately when data is available.
+        let event = match unsafe { CreateEventW(None, false, false, PCWSTR::null()) } {
+            Ok(h) => h,
+            Err(e) => {
+                let err = windows_err(e);
+                unsafe {
+                    let _ = UnmapViewOfFile(MEMORY_MAPPED_VIEW_ADDRESS {
+                        Value: base as *mut _,
+                    });
+                    let _ = CloseHandle(handle);
+                }
+                return Err(err);
+            }
+        };
+
         Ok(Self {
             base,
             map_size: total,
             data_offset: HEADER_SIZE,
             mapping_handle: handle,
+            event_handle: Some(event),
             owner: true,
         })
     }
@@ -183,14 +223,54 @@ impl RingBufReader {
             map_size,
             data_offset: HEADER_SIZE,
             mapping_handle,
+            event_handle: None,
             owner: false,
         })
     }
 
-    /// Raw handle suitable for passing to a child process via stdio bootstrap.
-    /// Only meaningful for readers created via `create_owner`.
+    /// Raw mapping handle suitable for passing to a child process via stdio
+    /// bootstrap. Only meaningful for readers created via `create_owner`.
     pub fn raw_handle(&self) -> RawHandle {
         self.mapping_handle.0 as RawHandle
+    }
+
+    /// Raw event handle suitable for passing to a child process via stdio
+    /// bootstrap. Returns `None` for attach-created readers, which have no
+    /// event of their own. Only `create_owner` readers return `Some`.
+    pub fn raw_event_handle(&self) -> Option<RawHandle> {
+        self.event_handle.map(|h| h.0 as RawHandle)
+    }
+
+    /// Blocks the current thread until the writer signals new data is
+    /// available or the timeout elapses. Returns [`WaitOutcome::Signaled`] if
+    /// the auto-reset event fired (and was automatically reset), or
+    /// [`WaitOutcome::TimedOut`] if the timeout ran out first. In the timeout
+    /// case the caller should still drain the ring as a belt-and-suspenders
+    /// guard against lost signals.
+    ///
+    /// Only valid on readers created via `create_owner`. Attach-created
+    /// readers return `ErrorKind::Unsupported`.
+    pub fn wait_for_signal(&self, timeout_ms: u32) -> io::Result<WaitOutcome> {
+        use windows::Win32::Foundation::{WAIT_FAILED, WAIT_OBJECT_0, WAIT_TIMEOUT};
+        use windows::Win32::System::Threading::WaitForSingleObject;
+
+        let Some(event) = self.event_handle else {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "wait_for_signal requires an owner-created reader",
+            ));
+        };
+
+        let result = unsafe { WaitForSingleObject(event, timeout_ms) };
+        match result {
+            WAIT_OBJECT_0 => Ok(WaitOutcome::Signaled),
+            WAIT_TIMEOUT => Ok(WaitOutcome::TimedOut),
+            WAIT_FAILED => Err(io::Error::last_os_error()),
+            other => Err(io::Error::other(format!(
+                "WaitForSingleObject returned unexpected status {:#x}",
+                other.0
+            ))),
+        }
     }
 }
 
@@ -212,6 +292,17 @@ impl RingBufReader {
 
     pub fn raw_handle(&self) -> RawHandle {
         0
+    }
+
+    pub fn raw_event_handle(&self) -> Option<RawHandle> {
+        None
+    }
+
+    pub fn wait_for_signal(&self, _timeout_ms: u32) -> io::Result<WaitOutcome> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "wait_for_signal not yet supported on this platform",
+        ))
     }
 }
 
@@ -316,6 +407,9 @@ impl Drop for RingBufReader {
             }
             if self.owner {
                 let _ = CloseHandle(self.mapping_handle);
+                if let Some(event) = self.event_handle {
+                    let _ = CloseHandle(event);
+                }
             }
         }
     }
@@ -538,5 +632,83 @@ mod tests {
         }
         let err = RingBufReader::attach(owner.raw_handle(), owner.map_size()).unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn owner_exposes_event_handle_attach_does_not() {
+        let owner = RingBufReader::create_owner(4096).unwrap();
+        assert!(owner.raw_event_handle().is_some());
+        assert_ne!(owner.raw_event_handle(), Some(0));
+
+        let attached = RingBufReader::attach(owner.raw_handle(), owner.map_size()).unwrap();
+        assert!(attached.raw_event_handle().is_none());
+    }
+
+    #[test]
+    fn wait_for_signal_times_out_when_no_signal() {
+        let owner = RingBufReader::create_owner(4096).unwrap();
+        let start = std::time::Instant::now();
+        let outcome = owner.wait_for_signal(20).unwrap();
+        let elapsed = start.elapsed();
+        assert_eq!(outcome, WaitOutcome::TimedOut);
+        // Timeout should be roughly the requested 20ms, allow slack.
+        assert!(elapsed >= std::time::Duration::from_millis(15));
+        assert!(elapsed < std::time::Duration::from_millis(500));
+    }
+
+    #[test]
+    fn wait_for_signal_wakes_on_set_event_from_another_thread() {
+        use std::thread;
+        use std::time::Duration;
+
+        let owner = RingBufReader::create_owner(4096).unwrap();
+        let event_raw = owner.raw_event_handle().expect("owner has event");
+
+        // Spawn a helper that signals the event after a short delay. It uses
+        // the raw handle integer, simulating what the Go sidecar does with the
+        // inherited handle.
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(30));
+            unsafe {
+                use windows::Win32::Foundation::HANDLE;
+                use windows::Win32::System::Threading::SetEvent;
+                let _ = SetEvent(HANDLE(event_raw as *mut _));
+            }
+        });
+
+        let start = std::time::Instant::now();
+        let outcome = owner.wait_for_signal(1000).unwrap();
+        let elapsed = start.elapsed();
+        assert_eq!(outcome, WaitOutcome::Signaled);
+        assert!(elapsed >= Duration::from_millis(25));
+        assert!(elapsed < Duration::from_millis(500));
+    }
+
+    #[test]
+    fn wait_for_signal_auto_resets_after_wake() {
+        use std::time::Duration;
+
+        let owner = RingBufReader::create_owner(4096).unwrap();
+        let event_raw = owner.raw_event_handle().unwrap();
+
+        unsafe {
+            use windows::Win32::Foundation::HANDLE;
+            use windows::Win32::System::Threading::SetEvent;
+            let _ = SetEvent(HANDLE(event_raw as *mut _));
+        }
+
+        assert_eq!(owner.wait_for_signal(500).unwrap(), WaitOutcome::Signaled);
+        let start = std::time::Instant::now();
+        // Second wait on the already-consumed auto-reset event should time out.
+        assert_eq!(owner.wait_for_signal(20).unwrap(), WaitOutcome::TimedOut);
+        assert!(start.elapsed() >= Duration::from_millis(15));
+    }
+
+    #[test]
+    fn wait_for_signal_rejects_attached_reader() {
+        let owner = RingBufReader::create_owner(4096).unwrap();
+        let attached = RingBufReader::attach(owner.raw_handle(), owner.map_size()).unwrap();
+        let err = attached.wait_for_signal(10).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::Unsupported);
     }
 }

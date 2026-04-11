@@ -44,3 +44,33 @@ func Attach(handle uintptr, size int) ([]byte, func(), error) {
 
 	return mem, cleanup, nil
 }
+
+// Notify signals the auto-reset Windows Event owned by the Rust host. Called
+// by the writer goroutine after each successful ring buffer write so the host
+// can wake from WaitForSingleObject immediately instead of polling on a timer.
+// The host's WaitForSingleObject acts as a full memory barrier on its side,
+// and the atomic.StoreUint64 of the write index inside `Writer.Write` already
+// acts as a release store on this side, so no extra fence is required here.
+func Notify(eventHandle uintptr) error {
+	if eventHandle == 0 {
+		return fmt.Errorf("invalid event handle 0")
+	}
+	if err := windows.SetEvent(windows.Handle(eventHandle)); err != nil {
+		return fmt.Errorf("SetEvent: %w", err)
+	}
+	return nil
+}
+
+// CloseEventHandle releases the inherited event HANDLE on shutdown. Called
+// from sidecar cleanup alongside the ring buffer cleanup. Separate from
+// Attach's cleanup because the event handle lifetime is independent of the
+// ring mapping.
+func CloseEventHandle(eventHandle uintptr) error {
+	if eventHandle == 0 {
+		return nil
+	}
+	if err := windows.CloseHandle(windows.Handle(eventHandle)); err != nil {
+		return fmt.Errorf("CloseHandle event: %w", err)
+	}
+	return nil
+}

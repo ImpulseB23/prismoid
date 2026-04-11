@@ -3,9 +3,15 @@ package control
 // Bootstrap is the first message the Rust host writes to the sidecar's stdin
 // at startup. It hands over the inherited shared memory section so the sidecar
 // can attach without having to know a name or open a kernel object by lookup.
+//
+// ShmEventHandle is an auto-reset Windows Event created by the host alongside
+// the mapping. The writer goroutine calls SetEvent on it after each successful
+// ring write so the host can wake from WaitForSingleObject immediately instead
+// of polling on a timer.
 type Bootstrap struct {
-	ShmHandle uintptr `json:"shm_handle"`
-	ShmSize   int     `json:"shm_size"`
+	ShmHandle      uintptr `json:"shm_handle"`
+	ShmEventHandle uintptr `json:"shm_event_handle"`
+	ShmSize        int     `json:"shm_size"`
 }
 
 // Command is a control-plane message from the Rust host received over stdin
