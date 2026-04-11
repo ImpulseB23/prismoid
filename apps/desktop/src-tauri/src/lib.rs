@@ -16,6 +16,12 @@ fn get_platform() -> &'static str {
 }
 
 pub fn run() {
+    // Phase 0 dev convenience: load `.env.local` from cwd or any parent before
+    // anything reads PRISMOID_TWITCH_*. Production builds with no .env.local
+    // present silently no-op (the Err is dropped). Real secret storage uses
+    // OS keychain via OAuth, see docs/platform-apis.md §Twitch.
+    let _ = dotenvy::from_filename(".env.local");
+
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::from_default_env().add_directive("prismoid=debug".parse().unwrap()),
