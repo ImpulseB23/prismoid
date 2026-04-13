@@ -16,13 +16,32 @@ type Bootstrap struct {
 
 // Command is a control-plane message from the Rust host received over stdin
 // after the Bootstrap message. Each command targets a single platform client.
+//
+// The Command is an intentionally flat struct with all possible fields as
+// omitempty — not an envelope with a typed payload. When the handler count
+// grows past ~8 distinct commands, split into envelope+args. Until then the
+// flat shape is the simpler thing to serialize on the Rust side.
 type Command struct {
-	Cmd           string `json:"cmd"`
-	Channel       string `json:"channel,omitempty"`
-	Token         string `json:"token,omitempty"`
-	ClientID      string `json:"client_id,omitempty"`
+	Cmd      string `json:"cmd"`
+	Channel  string `json:"channel,omitempty"`
+	Token    string `json:"token,omitempty"`
+	ClientID string `json:"client_id,omitempty"`
+
+	// BroadcasterID is the channel the command operates against. Used by
+	// twitch_connect (subscribe to this channel's chat) and by mod actions
+	// (the channel the mod action happens in).
 	BroadcasterID string `json:"broadcaster_id,omitempty"`
-	UserID        string `json:"user_id,omitempty"`
+	// UserID is the acting user's ID — the self ID for twitch_connect, the
+	// moderator's ID for mod actions. Twitch Helix's moderation endpoints
+	// require the moderator_id to match the token's authenticated user.
+	UserID string `json:"user_id,omitempty"`
+
+	// Mod action fields. Only set by ban_user / unban_user / timeout_user /
+	// delete_message commands.
+	TargetUserID    string `json:"target_user_id,omitempty"`
+	DurationSeconds int    `json:"duration_seconds,omitempty"`
+	Reason          string `json:"reason,omitempty"`
+	MessageID       string `json:"message_id,omitempty"`
 }
 
 // Message is a notification the sidecar writes to stdout for the Rust host.

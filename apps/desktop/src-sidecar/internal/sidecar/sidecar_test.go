@@ -267,6 +267,117 @@ func TestDispatchCommand_IgnoresUnknown(t *testing.T) {
 	}
 }
 
+// bufLogger returns a zerolog logger that writes JSON lines to the returned
+// buffer, for assertions on log content in mod-action scaffolding tests.
+func bufLogger() (zerolog.Logger, *bytes.Buffer) {
+	var buf bytes.Buffer
+	return zerolog.New(&buf), &buf
+}
+
+func TestDispatchCommand_RoutesModActions(t *testing.T) {
+	clients := make(map[string]context.CancelFunc)
+	out := make(chan []byte, 1)
+
+	cases := []struct {
+		name string
+		cmd  control.Command
+		want string
+	}{
+		{
+			name: "ban_user",
+			cmd:  control.Command{Cmd: "ban_user", BroadcasterID: "b1", TargetUserID: "t1", Reason: "rule violation"},
+			want: "ban_user (scaffold",
+		},
+		{
+			name: "unban_user",
+			cmd:  control.Command{Cmd: "unban_user", BroadcasterID: "b1", TargetUserID: "t1"},
+			want: "unban_user (scaffold",
+		},
+		{
+			name: "timeout_user",
+			cmd:  control.Command{Cmd: "timeout_user", BroadcasterID: "b1", TargetUserID: "t1", DurationSeconds: 60},
+			want: "timeout_user (scaffold",
+		},
+		{
+			name: "delete_message",
+			cmd:  control.Command{Cmd: "delete_message", BroadcasterID: "b1", MessageID: "m1"},
+			want: "delete_message (scaffold",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			logger, buf := bufLogger()
+			DispatchCommand(context.Background(), tc.cmd, clients, out, func(string, any) {}, logger)
+			if !strings.Contains(buf.String(), tc.want) {
+				t.Errorf("expected log to contain %q, got %s", tc.want, buf.String())
+			}
+		})
+	}
+}
+
+func TestHandleBanUser_MissingTargetIgnored(t *testing.T) {
+	logger, buf := bufLogger()
+	HandleBanUser(control.Command{Cmd: "ban_user", BroadcasterID: "b1"}, logger)
+	if !strings.Contains(buf.String(), "missing required field") {
+		t.Errorf("expected warn about missing field, got %s", buf.String())
+	}
+	if strings.Contains(buf.String(), "scaffold") {
+		t.Errorf("scaffold-info line should NOT fire on validation failure, got %s", buf.String())
+	}
+}
+
+func TestHandleUnbanUser_MissingTargetIgnored(t *testing.T) {
+	logger, buf := bufLogger()
+	HandleUnbanUser(control.Command{Cmd: "unban_user", BroadcasterID: "b1"}, logger)
+	if !strings.Contains(buf.String(), "missing required field") {
+		t.Errorf("expected warn about missing field, got %s", buf.String())
+	}
+}
+
+func TestHandleTimeoutUser_RejectsOutOfRangeDuration(t *testing.T) {
+	// Helix enforces 1..1209600 seconds. Values outside this range must be
+	// rejected by the scaffold to stay consistent with the real endpoint.
+	cases := []struct {
+		name     string
+		duration int
+	}{
+		{"zero", 0},
+		{"negative", -1},
+		{"over_14_days", 1209601},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			logger, buf := bufLogger()
+			HandleTimeoutUser(control.Command{
+				Cmd:             "timeout_user",
+				BroadcasterID:   "b1",
+				TargetUserID:    "t1",
+				DurationSeconds: tc.duration,
+			}, logger)
+			if !strings.Contains(buf.String(), "out of range") {
+				t.Errorf("expected out-of-range warn for duration=%d, got %s", tc.duration, buf.String())
+			}
+		})
+	}
+}
+
+func TestHandleTimeoutUser_MissingTargetIgnored(t *testing.T) {
+	logger, buf := bufLogger()
+	HandleTimeoutUser(control.Command{Cmd: "timeout_user", BroadcasterID: "b1", DurationSeconds: 60}, logger)
+	if !strings.Contains(buf.String(), "missing required field") {
+		t.Errorf("expected warn about missing field, got %s", buf.String())
+	}
+}
+
+func TestHandleDeleteMessage_MissingMessageIDIgnored(t *testing.T) {
+	logger, buf := bufLogger()
+	HandleDeleteMessage(control.Command{Cmd: "delete_message", BroadcasterID: "b1"}, logger)
+	if !strings.Contains(buf.String(), "missing required field") {
+		t.Errorf("expected warn about missing field, got %s", buf.String())
+	}
+}
+
 func TestRunCommandLoop_DispatchesCommands(t *testing.T) {
 	// Pre-load the scanner with one twitch_connect, then close stdin so
 	// scanCommands exits cleanly. The loop itself stops when ctx is cancelled.
