@@ -280,7 +280,9 @@ func TestRunCommandLoop_DispatchesCommands(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	done := make(chan error, 1)
-	go func() { done <- RunCommandLoop(ctx, scanner, encoder, out, zerolog.Nop()) }()
+	// Long period so the heartbeat ticker doesn't pollute stdout during this
+	// command-dispatch-focused test.
+	go func() { done <- RunCommandLoop(ctx, scanner, encoder, out, zerolog.Nop(), time.Hour) }()
 
 	// give the loop a moment to dispatch the queued command
 	time.Sleep(150 * time.Millisecond)
@@ -297,22 +299,81 @@ func TestRunCommandLoop_DispatchesCommands(t *testing.T) {
 }
 
 func TestRunCommandLoop_EmitsHeartbeat(t *testing.T) {
-	// No commands; let the heartbeat fire at least once.
+	// No commands; let the heartbeat fire at least once. Short period keeps
+	// the test fast; the timeout gives the ticker room to fire exactly once.
 	scanner := readerScanner(strings.NewReader(""))
 
 	var stdout bytes.Buffer
 	encoder := json.NewEncoder(&stdout)
 
 	out := make(chan []byte, 1)
-	ctx, cancel := context.WithTimeout(context.Background(), heartbeatPeriod+200*time.Millisecond)
+	period := 50 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), period+100*time.Millisecond)
 	defer cancel()
 
-	if err := RunCommandLoop(ctx, scanner, encoder, out, zerolog.Nop()); err != nil {
+	tsBefore := time.Now().UnixMilli()
+	if err := RunCommandLoop(ctx, scanner, encoder, out, zerolog.Nop(), period); err != nil {
+		t.Fatalf("RunCommandLoop returned error: %v", err)
+	}
+	tsAfter := time.Now().UnixMilli()
+
+	// First emitted line is a heartbeat with the enriched payload.
+	firstLine := strings.SplitN(stdout.String(), "\n", 2)[0]
+	var msg control.Message
+	if err := json.Unmarshal([]byte(firstLine), &msg); err != nil {
+		t.Fatalf("heartbeat not valid JSON: %v (got: %s)", err, firstLine)
+	}
+	if msg.Type != "heartbeat" {
+		t.Fatalf("expected type=heartbeat, got %q", msg.Type)
+	}
+	payloadBytes, _ := json.Marshal(msg.Payload)
+	var hb control.HeartbeatPayload
+	if err := json.Unmarshal(payloadBytes, &hb); err != nil {
+		t.Fatalf("heartbeat payload not decodable: %v", err)
+	}
+	if hb.Counter != 1 {
+		t.Errorf("expected counter=1 on first heartbeat, got %d", hb.Counter)
+	}
+	if hb.TSMs < tsBefore || hb.TSMs > tsAfter {
+		t.Errorf("heartbeat ts_ms %d outside expected window [%d, %d]", hb.TSMs, tsBefore, tsAfter)
+	}
+}
+
+func TestRunCommandLoop_HeartbeatCounterIncreases(t *testing.T) {
+	// Run long enough for 3 heartbeats to fire; verify counter is monotonic
+	// 1, 2, 3 in the order they appear in stdout.
+	scanner := readerScanner(strings.NewReader(""))
+
+	var stdout bytes.Buffer
+	encoder := json.NewEncoder(&stdout)
+
+	out := make(chan []byte, 1)
+	period := 20 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), 3*period+30*time.Millisecond)
+	defer cancel()
+
+	if err := RunCommandLoop(ctx, scanner, encoder, out, zerolog.Nop(), period); err != nil {
 		t.Fatalf("RunCommandLoop returned error: %v", err)
 	}
 
-	if !strings.Contains(stdout.String(), `"type":"heartbeat"`) {
-		t.Errorf("expected at least one heartbeat in stdout, got: %s", stdout.String())
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) < 3 {
+		t.Fatalf("expected at least 3 heartbeat lines, got %d: %s", len(lines), stdout.String())
+	}
+	for i, line := range lines[:3] {
+		var msg control.Message
+		if err := json.Unmarshal([]byte(line), &msg); err != nil {
+			t.Fatalf("line %d not valid JSON: %v", i, err)
+		}
+		payloadBytes, _ := json.Marshal(msg.Payload)
+		var hb control.HeartbeatPayload
+		if err := json.Unmarshal(payloadBytes, &hb); err != nil {
+			t.Fatalf("line %d payload not decodable: %v", i, err)
+		}
+		wantCounter := uint64(i + 1)
+		if hb.Counter != wantCounter {
+			t.Errorf("line %d: expected counter=%d, got %d", i, wantCounter, hb.Counter)
+		}
 	}
 }
 
@@ -327,10 +388,11 @@ func TestRunCommandLoop_PropagatesHeartbeatWriteError(t *testing.T) {
 	encoder := json.NewEncoder(&errWriter{err: errors.New("pipe broken")})
 
 	out := make(chan []byte, 1)
-	ctx, cancel := context.WithTimeout(context.Background(), heartbeatPeriod+200*time.Millisecond)
+	period := 50 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), period+100*time.Millisecond)
 	defer cancel()
 
-	err := RunCommandLoop(ctx, scanner, encoder, out, zerolog.Nop())
+	err := RunCommandLoop(ctx, scanner, encoder, out, zerolog.Nop(), period)
 	if err == nil {
 		t.Fatal("expected error when encoder.Encode fails")
 	}

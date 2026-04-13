@@ -109,7 +109,7 @@ func RunWithIO(
 	signal := MakeSignalFunc(boot.ShmEventHandle, notify, logger)
 	go RunWriter(ctx, out, writer, signal)
 
-	return RunCommandLoop(ctx, scanner, json.NewEncoder(stdout), out, logger)
+	return RunCommandLoop(ctx, scanner, json.NewEncoder(stdout), out, logger, heartbeatPeriod)
 }
 
 // NotifyFunc signals the host that new data has been written to the ring
@@ -193,16 +193,24 @@ func RunWriter(ctx context.Context, in <-chan []byte, writer *ringbuf.Writer, si
 // are serialized through encoderMu because notify is invoked from Twitch
 // client goroutines while heartbeats fire from this loop; json.Encoder and
 // the underlying io.Writer are not safe for concurrent use.
-func RunCommandLoop(ctx context.Context, scanner *bufio.Scanner, encoder *json.Encoder, out chan<- []byte, logger zerolog.Logger) error {
+//
+// `period` is the heartbeat tick interval; production passes [`heartbeatPeriod`],
+// tests pass a short duration to keep the suite fast.
+func RunCommandLoop(ctx context.Context, scanner *bufio.Scanner, encoder *json.Encoder, out chan<- []byte, logger zerolog.Logger, period time.Duration) error {
 	cmdCh := make(chan control.Command, cmdChanCapacity)
 	go scanCommands(scanner, cmdCh, logger)
 
-	heartbeat := time.NewTicker(heartbeatPeriod)
+	heartbeat := time.NewTicker(period)
 	defer heartbeat.Stop()
 
 	clients := make(map[string]context.CancelFunc)
 	var encoderMu sync.Mutex
 	notify := makeNotify(encoder, &encoderMu, logger)
+
+	// Heartbeat counter is scoped to this loop's lifetime. Monotonic gaps let
+	// the host watchdog detect missed ticks even if the underlying clock is
+	// skewed. Resets to 0 on respawn, which is the correct signal.
+	var heartbeatCounter uint64
 
 	for {
 		select {
@@ -210,8 +218,13 @@ func RunCommandLoop(ctx context.Context, scanner *bufio.Scanner, encoder *json.E
 			logger.Info().Msg("sidecar shutting down")
 			return nil
 		case <-heartbeat.C:
+			heartbeatCounter++
+			payload := control.HeartbeatPayload{
+				TSMs:    time.Now().UnixMilli(),
+				Counter: heartbeatCounter,
+			}
 			encoderMu.Lock()
-			err := encoder.Encode(control.Message{Type: "heartbeat"})
+			err := encoder.Encode(control.Message{Type: "heartbeat", Payload: payload})
 			encoderMu.Unlock()
 			if err != nil {
 				logger.Error().Err(err).Msg("failed to write heartbeat to host")
