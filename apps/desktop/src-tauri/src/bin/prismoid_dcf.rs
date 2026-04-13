@@ -21,7 +21,7 @@
 use std::env;
 use std::process::Command;
 
-use prismoid_lib::twitch_auth::{AuthManager, KeychainStore};
+use prismoid_lib::twitch_auth::{AuthManager, KeychainStore, TWITCH_CLIENT_ID};
 use twitch_oauth2::Scope;
 
 #[tokio::main]
@@ -32,8 +32,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(debug_assertions)]
     let _ = dotenvy::from_filename(".env.local");
 
-    let client_id =
-        env::var("PRISMOID_TWITCH_CLIENT_ID").map_err(|_| "PRISMOID_TWITCH_CLIENT_ID not set")?;
+    // `client_id` is a compile-time const (RFC 8252 public client; see
+    // `twitch_auth::TWITCH_CLIENT_ID`). `broadcaster_id` still comes
+    // from env until PRI-22b derives it from the DCF response.
     let broadcaster_id = env::var("PRISMOID_TWITCH_BROADCASTER_ID")
         .map_err(|_| "PRISMOID_TWITCH_BROADCASTER_ID not set")?;
 
@@ -44,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .redirect(reqwest::redirect::Policy::none())
         .build()?;
 
-    let mgr = AuthManager::builder(client_id)
+    let mgr = AuthManager::builder(TWITCH_CLIENT_ID)
         .scope(Scope::UserReadChat)
         .scope(Scope::UserWriteChat)
         .build(KeychainStore, http_client);
