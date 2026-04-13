@@ -89,6 +89,12 @@ impl AuthManager {
     /// Loads stored tokens, refreshing if within [`REFRESH_THRESHOLD_MS`]
     /// of expiry. The refreshed tokens are persisted (Twitch rotates the
     /// refresh token on every use).
+    ///
+    /// On [`AuthError::RefreshTokenInvalid`] the stored entry is deleted
+    /// before returning. Without this the supervisor's 30-second
+    /// retry loop would call the Twitch refresh endpoint every tick
+    /// against a known-dead token until the user re-seeds — a cheap
+    /// request storm that we owe Twitch not to make.
     pub async fn load_or_refresh(&self) -> Result<TwitchTokens, AuthError> {
         let Some(stored) = self.store.load()? else {
             return Err(AuthError::NoTokens);
@@ -98,9 +104,19 @@ impl AuthManager {
             return Ok(stored);
         }
 
-        let refreshed = self.refresh_tokens(&stored).await?;
-        self.store.save(&refreshed)?;
-        Ok(refreshed)
+        match self.refresh_tokens(&stored).await {
+            Ok(refreshed) => {
+                self.store.save(&refreshed)?;
+                Ok(refreshed)
+            }
+            Err(AuthError::RefreshTokenInvalid) => {
+                // Swallow the delete error: the caller cares about the
+                // auth failure, not a keychain cleanup hiccup.
+                let _ = self.store.delete();
+                Err(AuthError::RefreshTokenInvalid)
+            }
+            Err(e) => Err(e),
+        }
     }
 
     /// Requests a device code from Twitch. The returned response has
@@ -132,7 +148,7 @@ impl AuthManager {
             .wait_for_code(&self.http_client, tokio::time::sleep)
             .await
             .map_err(classify_device_flow_error)?;
-        let tokens = tokens_from_user_token(&user_token);
+        let tokens = tokens_from_user_token(&user_token)?;
         self.store.save(&tokens)?;
         Ok(tokens)
     }
@@ -155,7 +171,7 @@ impl AuthManager {
             .await
             .map_err(classify_refresh_error)?;
 
-        Ok(tokens_from_user_token(&token))
+        tokens_from_user_token(&token)
     }
 }
 
@@ -175,10 +191,14 @@ impl PendingDeviceFlow {
     }
 }
 
-fn tokens_from_user_token(token: &UserToken) -> TwitchTokens {
+fn tokens_from_user_token(token: &UserToken) -> Result<TwitchTokens, AuthError> {
+    let user_id = token.user_id.to_string();
+    let login = token.login.to_string();
+    validate_identity(&user_id, &login)?;
+
     let expires_in_ms = i64::try_from(token.expires_in().as_millis()).unwrap_or(i64::MAX);
     let now_ms = Utc::now().timestamp_millis();
-    TwitchTokens {
+    Ok(TwitchTokens {
         access_token: token.access_token.secret().to_owned(),
         refresh_token: token
             .refresh_token
@@ -187,9 +207,24 @@ fn tokens_from_user_token(token: &UserToken) -> TwitchTokens {
             .unwrap_or_default(),
         expires_at_ms: now_ms.saturating_add(expires_in_ms),
         scopes: token.scopes().iter().map(|s| s.to_string()).collect(),
-        user_id: token.user_id.to_string(),
-        login: token.login.to_string(),
+        user_id,
+        login,
+    })
+}
+
+/// Rejects a half-initialized identity. `UserToken.user_id` / `login`
+/// are populated by `validate_token` during `from_existing` and must
+/// remain non-empty across `refresh_token`. An empty value here means
+/// the `twitch_oauth2` crate returned a half-initialized token —
+/// persisting it would silently break the supervisor's EventSub
+/// subscribe (blank `broadcaster_user_id` → opaque 400).
+fn validate_identity(user_id: &str, login: &str) -> Result<(), AuthError> {
+    if user_id.is_empty() || login.is_empty() {
+        return Err(AuthError::OAuth(
+            "twitch_oauth2 returned token with empty user_id or login".into(),
+        ));
     }
+    Ok(())
 }
 
 fn classify_device_flow_error<E: std::fmt::Display>(err: E) -> AuthError {
@@ -269,6 +304,35 @@ mod tests {
     fn classify_refresh_error_falls_through_to_oauth() {
         match classify_refresh_error("connection reset by peer") {
             AuthError::OAuth(s) => assert!(s.contains("connection reset")),
+            other => panic!("expected OAuth, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_identity_accepts_both_populated() {
+        validate_identity("570722168", "impulseb23").expect("populated identity must pass");
+    }
+
+    #[test]
+    fn validate_identity_rejects_empty_user_id() {
+        match validate_identity("", "impulseb23") {
+            Err(AuthError::OAuth(s)) => assert!(s.contains("empty user_id or login")),
+            other => panic!("expected OAuth, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_identity_rejects_empty_login() {
+        match validate_identity("570722168", "") {
+            Err(AuthError::OAuth(s)) => assert!(s.contains("empty user_id or login")),
+            other => panic!("expected OAuth, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_identity_rejects_both_empty() {
+        match validate_identity("", "") {
+            Err(AuthError::OAuth(_)) => {}
             other => panic!("expected OAuth, got {other:?}"),
         }
     }

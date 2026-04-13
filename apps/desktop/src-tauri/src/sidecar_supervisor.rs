@@ -153,11 +153,12 @@ async fn supervise<R: Runtime>(app: AppHandle<R>, cfg: SupervisorConfig) {
         // Single-account per ADR 30: the authenticated Twitch user IS
         // the broadcaster. `user_id` doubles as broadcaster_id in
         // EventSub's `channel.chat.message` subscription condition.
+        let uid = tokens.user_id;
         let creds = TwitchCreds {
             client_id: TWITCH_CLIENT_ID.to_owned(),
             access_token: tokens.access_token,
-            broadcaster_id: tokens.user_id.clone(),
-            user_id: tokens.user_id,
+            broadcaster_id: uid.clone(),
+            user_id: uid,
         };
 
         let started = Instant::now();

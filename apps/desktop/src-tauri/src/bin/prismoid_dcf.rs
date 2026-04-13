@@ -59,20 +59,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let tokens = mgr.complete_device_flow(pending).await?;
 
+    // Intentionally print only the public login handle, not user_id
+    // or token lengths. Even non-sensitive fields from a struct that
+    // carries OAuth secrets flow through the same set_password sink,
+    // and piping them to stdout trips CodeQL's cleartext-logging
+    // taint analysis + risks leaking them to terminal-capture tools
+    // (tee, script) without adding UX value — `@<login>` alone tells
+    // the dev they authorized the right account.
     println!();
-    println!(
-        "✓ Authorized and persisted to keychain — logged in as @{} (user_id {})",
-        tokens.login, tokens.user_id
-    );
-    println!(
-        "  access_token: [redacted, {} chars]",
-        tokens.access_token.len()
-    );
-    println!(
-        "  refresh_token: [redacted, {} chars]",
-        tokens.refresh_token.len()
-    );
-    println!("  expires_at_ms: {}", tokens.expires_at_ms);
+    println!("✓ Authorized — logged in as @{}", tokens.login);
     println!("  scopes: {:?}", tokens.scopes);
     println!();
     println!("The supervisor will now auto-refresh this token within 5 min of expiry (ADR 29).");
