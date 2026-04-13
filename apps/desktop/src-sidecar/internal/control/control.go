@@ -30,3 +30,15 @@ type Message struct {
 	Type    string `json:"type"`
 	Payload any    `json:"payload,omitempty"`
 }
+
+// HeartbeatPayload is the body of a `{"type":"heartbeat", ...}` Message.
+//
+// The host uses this to detect a stalled sidecar even when the process is
+// technically alive (hung WebSocket read, deadlocked goroutine): a gap in
+// `Counter` signals a missed tick, and comparing `TSMs` to the host's own
+// clock catches gross clock skew. Both fields are monotonic within a single
+// sidecar run; they reset on respawn.
+type HeartbeatPayload struct {
+	TSMs    int64  `json:"ts_ms"`
+	Counter uint64 `json:"counter"`
+}
