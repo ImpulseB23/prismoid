@@ -10,7 +10,12 @@ use serde::{Deserialize, Serialize};
 /// A persisted Twitch OAuth credential set. One of these per broadcaster
 /// lives as a JSON blob in the keychain under service `prismoid.twitch`
 /// with account `<broadcaster_id>` (see ADR 37).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+///
+/// `Debug` is hand-rolled to redact token secrets. Any accidental
+/// `tracing::debug!("{tokens:?}")` or similar at a call site must not
+/// leak the access/refresh tokens to log files. Same pattern oauth2's
+/// `AccessToken` type uses.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TwitchTokens {
     pub access_token: String,
     pub refresh_token: String,
@@ -21,6 +26,17 @@ pub struct TwitchTokens {
     /// Scopes granted. Carried so a scope-expansion feature can prompt
     /// re-auth when needed without speculative re-auth on every launch.
     pub scopes: Vec<String>,
+}
+
+impl std::fmt::Debug for TwitchTokens {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TwitchTokens")
+            .field("access_token", &"[redacted]")
+            .field("refresh_token", &"[redacted]")
+            .field("expires_at_ms", &self.expires_at_ms)
+            .field("scopes", &self.scopes)
+            .finish()
+    }
 }
 
 impl TwitchTokens {
@@ -78,5 +94,28 @@ mod tests {
         let blob = serde_json::to_string(&t).unwrap();
         let back: TwitchTokens = serde_json::from_str(&blob).unwrap();
         assert_eq!(t, back);
+    }
+
+    #[test]
+    fn debug_impl_redacts_secrets() {
+        let t = TwitchTokens {
+            access_token: "super-secret-access-xyz".into(),
+            refresh_token: "super-secret-refresh-xyz".into(),
+            expires_at_ms: 1_234_567,
+            scopes: vec!["user:read:chat".into()],
+        };
+        let debug_str = format!("{t:?}");
+        assert!(
+            !debug_str.contains("super-secret-access-xyz"),
+            "access_token leaked through Debug: {debug_str}"
+        );
+        assert!(
+            !debug_str.contains("super-secret-refresh-xyz"),
+            "refresh_token leaked through Debug: {debug_str}"
+        );
+        assert!(debug_str.contains("[redacted]"));
+        // Non-secret fields still observable for debugging.
+        assert!(debug_str.contains("1234567"));
+        assert!(debug_str.contains("user:read:chat"));
     }
 }

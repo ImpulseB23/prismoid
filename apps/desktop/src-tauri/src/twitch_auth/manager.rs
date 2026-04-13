@@ -227,6 +227,54 @@ mod tests {
             .expect("reqwest client")
     }
 
+    #[test]
+    fn classify_device_flow_error_maps_access_denied() {
+        match classify_device_flow_error("access_denied") {
+            AuthError::UserDenied => {}
+            other => panic!("expected UserDenied, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn classify_device_flow_error_maps_expired_token() {
+        match classify_device_flow_error("expired_token while polling") {
+            AuthError::DeviceCodeExpired => {}
+            other => panic!("expected DeviceCodeExpired, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn classify_device_flow_error_falls_through_to_oauth() {
+        match classify_device_flow_error("some other failure") {
+            AuthError::OAuth(s) => assert!(s.contains("some other failure")),
+            other => panic!("expected OAuth, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn classify_refresh_error_maps_invalid_grant() {
+        match classify_refresh_error("invalid_grant") {
+            AuthError::RefreshTokenInvalid => {}
+            other => panic!("expected RefreshTokenInvalid, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn classify_refresh_error_maps_invalid_refresh_token_phrase() {
+        match classify_refresh_error("HTTP 400: Invalid refresh token") {
+            AuthError::RefreshTokenInvalid => {}
+            other => panic!("expected RefreshTokenInvalid, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn classify_refresh_error_falls_through_to_oauth() {
+        match classify_refresh_error("connection reset by peer") {
+            AuthError::OAuth(s) => assert!(s.contains("connection reset")),
+            other => panic!("expected OAuth, got {other:?}"),
+        }
+    }
+
     #[tokio::test]
     async fn load_or_refresh_returns_no_tokens_when_store_empty() {
         let mgr = AuthManager::builder("test-client-id")
