@@ -41,7 +41,7 @@ use crate::message::UnifiedMessage;
 #[cfg(windows)]
 use crate::ringbuf::{RawHandle, RingBufReader, WaitOutcome, DEFAULT_CAPACITY};
 #[cfg(windows)]
-use crate::twitch_auth::{AuthError, AuthManager, KeychainStore};
+use crate::twitch_auth::{AuthError, AuthManager, KeychainStore, TWITCH_CLIENT_ID};
 
 /// Supervisor timings. Defaults are production values; tests can override.
 #[derive(Debug, Clone)]
@@ -99,18 +99,11 @@ pub fn spawn<R: Runtime>(app: AppHandle<R>) {
 
 #[cfg(windows)]
 async fn supervise<R: Runtime>(app: AppHandle<R>, cfg: SupervisorConfig) {
-    // Non-secret identity config (client_id + broadcaster/user) comes from
-    // env vars. The access + refresh tokens live in the OS keychain,
-    // seeded via `cargo run --bin prismoid_dcf`, rotated automatically
-    // below (ADR 29: refresh 5 min before expiry; ADR 37: Twitch DCF
-    // public client). See PRI-21.
-    let Ok(client_id) = std::env::var("PRISMOID_TWITCH_CLIENT_ID") else {
-        tracing::error!(
-            "PRISMOID_TWITCH_CLIENT_ID not set; supervisor idling. \
-             Set it in .env.local and restart."
-        );
-        return;
-    };
+    // `client_id` is a compile-time const (RFC 8252 public client; not a
+    // secret). `broadcaster_id` still comes from env until PRI-22b
+    // auto-derives it from the DCF response's user_id. Tokens themselves
+    // live in the OS keychain, seeded via `cargo run --bin prismoid_dcf`
+    // and rotated automatically below (ADR 29).
     let Ok(broadcaster_id) = std::env::var("PRISMOID_TWITCH_BROADCASTER_ID") else {
         tracing::error!("PRISMOID_TWITCH_BROADCASTER_ID not set; supervisor idling.");
         return;
@@ -131,7 +124,7 @@ async fn supervise<R: Runtime>(app: AppHandle<R>, cfg: SupervisorConfig) {
             return;
         }
     };
-    let auth = AuthManager::builder(&client_id).build(KeychainStore, http_client);
+    let auth = AuthManager::builder(TWITCH_CLIENT_ID).build(KeychainStore, http_client);
 
     let mut attempt: u32 = 0;
     let mut backoff = cfg.initial_backoff;
@@ -167,7 +160,7 @@ async fn supervise<R: Runtime>(app: AppHandle<R>, cfg: SupervisorConfig) {
         };
 
         let creds = TwitchCreds {
-            client_id: client_id.clone(),
+            client_id: TWITCH_CLIENT_ID.to_owned(),
             access_token: tokens.access_token,
             broadcaster_id: broadcaster_id.clone(),
             user_id: user_id.clone(),

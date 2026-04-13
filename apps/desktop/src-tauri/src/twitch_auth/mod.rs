@@ -25,3 +25,18 @@ pub use errors::AuthError;
 pub use manager::{AuthManager, AuthManagerBuilder, PendingDeviceFlow, REFRESH_THRESHOLD_MS};
 pub use storage::{KeychainStore, MemoryStore, TokenStore, KEYCHAIN_SERVICE};
 pub use tokens::TwitchTokens;
+
+/// OAuth `client_id` for the registered Prismoid Twitch application.
+///
+/// **This is intentionally a plain string literal, not a secret.** Per
+/// RFC 8252 §8.4 and RFC 6749 §2.2, OAuth public-client `client_id`s
+/// are public identifiers — they appear in browser URLs and network
+/// traces during the authorization flow. Treating them as secret is a
+/// category error.
+///
+/// Bundling the production `client_id` in source is the standard pattern
+/// for distributed desktop apps doing OAuth public-client flows
+/// (`github/cli`, Discord/Slack/Spotify desktop, etc.). Forks running
+/// against their own registered Twitch application override this const
+/// at build time.
+pub const TWITCH_CLIENT_ID: &str = "bpjpbhc5p8xicpiuvxskjuq4m9gcio";
