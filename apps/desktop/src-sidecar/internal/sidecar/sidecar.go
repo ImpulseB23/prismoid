@@ -265,9 +265,110 @@ func DispatchCommand(ctx context.Context, cmd control.Command, clients map[strin
 		HandleTwitchConnect(ctx, cmd, clients, out, notify, logger)
 	case "twitch_disconnect":
 		HandleTwitchDisconnect(cmd, clients, logger)
+	case "ban_user":
+		HandleBanUser(cmd, logger)
+	case "unban_user":
+		HandleUnbanUser(cmd, logger)
+	case "timeout_user":
+		HandleTimeoutUser(cmd, logger)
+	case "delete_message":
+		HandleDeleteMessage(cmd, logger)
 	default:
 		logger.Info().Str("cmd", cmd.Cmd).Str("channel", cmd.Channel).Msg("received command")
 	}
+}
+
+// Twitch Helix enforces a 1209600-second (14-day) maximum on timeouts;
+// anything longer must be a permanent ban. Mirrored here so the log-only
+// scaffold rejects values that the real Helix call would reject anyway,
+// keeping the protocol contract consistent between the scaffold and the
+// real implementation that lands in a follow-up.
+const maxTimeoutSeconds = 1209600
+
+// HandleBanUser logs the intended ban. Helix integration (POST
+// /moderation/bans with body `{data: {user_id, reason}}`) lands in a
+// follow-up PR; this scaffold exists to lock the host→sidecar protocol
+// shape before the API client is built.
+func HandleBanUser(cmd control.Command, logger zerolog.Logger) {
+	if cmd.BroadcasterID == "" || cmd.TargetUserID == "" {
+		logger.Warn().
+			Str("cmd", cmd.Cmd).
+			Str("broadcaster", cmd.BroadcasterID).
+			Str("target", cmd.TargetUserID).
+			Msg("ban_user missing required field; ignoring")
+		return
+	}
+	logger.Info().
+		Str("broadcaster", cmd.BroadcasterID).
+		Str("target", cmd.TargetUserID).
+		Str("reason", cmd.Reason).
+		Msg("ban_user (scaffold: no Helix call yet)")
+}
+
+// HandleUnbanUser logs the intended unban. Helix: DELETE
+// /moderation/bans?user_id=<id>&broadcaster_id=<id>&moderator_id=<id>.
+func HandleUnbanUser(cmd control.Command, logger zerolog.Logger) {
+	if cmd.BroadcasterID == "" || cmd.TargetUserID == "" {
+		logger.Warn().
+			Str("cmd", cmd.Cmd).
+			Str("broadcaster", cmd.BroadcasterID).
+			Str("target", cmd.TargetUserID).
+			Msg("unban_user missing required field; ignoring")
+		return
+	}
+	logger.Info().
+		Str("broadcaster", cmd.BroadcasterID).
+		Str("target", cmd.TargetUserID).
+		Msg("unban_user (scaffold: no Helix call yet)")
+}
+
+// HandleTimeoutUser logs the intended timeout. Helix: POST /moderation/bans
+// with body `{data: {user_id, duration, reason}}`, where duration is
+// 1..1209600 seconds. Values outside that range are rejected locally to
+// match Helix semantics and surface misuse in logs.
+func HandleTimeoutUser(cmd control.Command, logger zerolog.Logger) {
+	if cmd.BroadcasterID == "" || cmd.TargetUserID == "" {
+		logger.Warn().
+			Str("cmd", cmd.Cmd).
+			Str("broadcaster", cmd.BroadcasterID).
+			Str("target", cmd.TargetUserID).
+			Msg("timeout_user missing required field; ignoring")
+		return
+	}
+	if cmd.DurationSeconds < 1 || cmd.DurationSeconds > maxTimeoutSeconds {
+		logger.Warn().
+			Str("cmd", cmd.Cmd).
+			Int("duration_seconds", cmd.DurationSeconds).
+			Int("max_duration_seconds", maxTimeoutSeconds).
+			Msg("timeout_user duration out of range [1, 1209600]; ignoring")
+		return
+	}
+	logger.Info().
+		Str("broadcaster", cmd.BroadcasterID).
+		Str("target", cmd.TargetUserID).
+		Int("duration_seconds", cmd.DurationSeconds).
+		Str("reason", cmd.Reason).
+		Msg("timeout_user (scaffold: no Helix call yet)")
+}
+
+// HandleDeleteMessage logs the intended deletion. Helix: DELETE
+// /moderation/chat?broadcaster_id=<id>&moderator_id=<id>&message_id=<id>.
+// Message-less deletion (clear all chat) is deliberately not supported by
+// this command — a separate `clear_chat` command would handle that when
+// needed.
+func HandleDeleteMessage(cmd control.Command, logger zerolog.Logger) {
+	if cmd.BroadcasterID == "" || cmd.MessageID == "" {
+		logger.Warn().
+			Str("cmd", cmd.Cmd).
+			Str("broadcaster", cmd.BroadcasterID).
+			Str("message_id", cmd.MessageID).
+			Msg("delete_message missing required field; ignoring")
+		return
+	}
+	logger.Info().
+		Str("broadcaster", cmd.BroadcasterID).
+		Str("message_id", cmd.MessageID).
+		Msg("delete_message (scaffold: no Helix call yet)")
 }
 
 // HandleTwitchConnect spawns a Twitch EventSub client for the broadcaster in
