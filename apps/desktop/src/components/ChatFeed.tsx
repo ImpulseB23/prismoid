@@ -22,7 +22,10 @@ import {
   type ChatMessage,
 } from "../stores/chatStore";
 import {
+  MESSAGE_FONT_FAMILY,
+  MESSAGE_FONT_SIZE_PX,
   MESSAGE_LINE_HEIGHT,
+  MESSAGE_PADDING_X,
   MESSAGE_PADDING_Y,
   measureMessageHeight,
   prepareMessage,
@@ -163,10 +166,13 @@ const ChatFeed: Component = () => {
 
     // Pretext uses canvas measureText; heights are only trustworthy once
     // webfonts are decoded. Fall back to immediate readiness in headless
-    // environments that lack document.fonts.
+    // environments that lack document.fonts, and on rejection/throw so the
+    // UI never gets stuck waiting on a font promise that never settles.
     const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;
     if (fonts && typeof fonts.ready?.then === "function") {
-      fonts.ready.then(() => setFontsLoaded(true));
+      fonts.ready
+        .then(() => setFontsLoaded(true))
+        .catch(() => setFontsLoaded(true));
     } else {
       setFontsLoaded(true);
     }
@@ -216,12 +222,11 @@ const ChatFeed: Component = () => {
                 right: 0,
                 transform: `translateY(${item.top}px)`,
                 height: `${item.height}px`,
-                padding: `${MESSAGE_PADDING_Y / 2}px 8px`,
+                padding: `${MESSAGE_PADDING_Y / 2}px ${MESSAGE_PADDING_X}px`,
                 "line-height": `${MESSAGE_LINE_HEIGHT}px`,
                 "box-sizing": "border-box",
-                "font-family":
-                  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                "font-size": "13px",
+                "font-family": MESSAGE_FONT_FAMILY,
+                "font-size": `${MESSAGE_FONT_SIZE_PX}px`,
                 "white-space": "normal",
                 "overflow-wrap": "break-word",
               }}
@@ -230,6 +235,10 @@ const ChatFeed: Component = () => {
                 style={{
                   color: item.msg.color || "#9147ff",
                   "font-weight": 700,
+                  // Keep DOM in lockstep with Pretext's `break: "never"`
+                  // on the username segment so heights stay accurate even
+                  // for very long display names.
+                  "white-space": "nowrap",
                 }}
               >
                 {item.msg.display_name}

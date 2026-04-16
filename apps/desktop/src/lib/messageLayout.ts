@@ -10,15 +10,22 @@ import {
 import type { ChatMessage } from "../stores/chatStore";
 
 // Named families only. `system-ui` is unsafe for pretext accuracy on macOS.
-const FONT_FAMILY =
+// Exported so `ChatFeed.tsx` applies the exact same stack that Pretext
+// measures against — any drift here produces wrong heights.
+export const MESSAGE_FONT_FAMILY =
   '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+export const MESSAGE_FONT_SIZE_PX = 13;
 
-const USERNAME_FONT = `700 13px ${FONT_FAMILY}`;
-const SEPARATOR_FONT = `400 13px ${FONT_FAMILY}`;
-const TEXT_FONT = `400 13px ${FONT_FAMILY}`;
+const USERNAME_FONT = `700 ${MESSAGE_FONT_SIZE_PX}px ${MESSAGE_FONT_FAMILY}`;
+const SEPARATOR_FONT = `400 ${MESSAGE_FONT_SIZE_PX}px ${MESSAGE_FONT_FAMILY}`;
+const TEXT_FONT = `400 ${MESSAGE_FONT_SIZE_PX}px ${MESSAGE_FONT_FAMILY}`;
 
 export const MESSAGE_LINE_HEIGHT = 20;
 export const MESSAGE_PADDING_Y = 4;
+// Horizontal padding applied to every message row; Pretext must measure
+// against the container width minus both sides or the last-word-per-line
+// overflow will never wrap and measured heights will be too small.
+export const MESSAGE_PADDING_X = 8;
 
 export function prepareMessage(msg: ChatMessage): PreparedRichInline {
   return prepareRichInline([
@@ -34,9 +41,10 @@ export function prepareMessage(msg: ChatMessage): PreparedRichInline {
 
 export function measureMessageHeight(
   prepared: PreparedRichInline,
-  width: number,
+  containerWidth: number,
 ): number {
-  if (width <= 0) return MESSAGE_LINE_HEIGHT + MESSAGE_PADDING_Y;
-  const { lineCount } = measureRichInlineStats(prepared, width);
+  const contentWidth = Math.max(0, containerWidth - MESSAGE_PADDING_X * 2);
+  if (contentWidth <= 0) return MESSAGE_LINE_HEIGHT + MESSAGE_PADDING_Y;
+  const { lineCount } = measureRichInlineStats(prepared, contentWidth);
   return Math.max(1, lineCount) * MESSAGE_LINE_HEIGHT + MESSAGE_PADDING_Y;
 }
