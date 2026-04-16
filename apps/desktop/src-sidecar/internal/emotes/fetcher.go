@@ -35,10 +35,22 @@ type ProviderError struct {
 }
 
 func (e *ProviderError) Error() string {
-	return string(e.Provider) + " " + string(e.Scope) + ": " + e.Err.Error()
+	if e == nil {
+		return "<nil>"
+	}
+	msg := string(e.Provider) + " " + string(e.Scope) + ": "
+	if e.Err == nil {
+		return msg + "<nil>"
+	}
+	return msg + e.Err.Error()
 }
 
-func (e *ProviderError) Unwrap() error { return e.Err }
+func (e *ProviderError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
 
 // Fetcher is the aggregate client for a single channel join. Each sub-client
 // is optional: a nil client skips that provider entirely. The [TwitchClient]
@@ -60,7 +72,13 @@ func (f *Fetcher) Fetch(ctx context.Context, broadcasterID string) Bundle {
 	var wg sync.WaitGroup
 
 	record := func(p Provider, s Scope, err error) {
-		if err == nil || errors.Is(err, ErrNotFound) {
+		if err == nil {
+			return
+		}
+		// Channel-scoped 404s mean the broadcaster simply hasn't linked the
+		// provider (no 7TV account, no FFZ room). A global 404 indicates an
+		// outage or API change and must surface.
+		if s == ScopeChannel && errors.Is(err, ErrNotFound) {
 			return
 		}
 		mu.Lock()

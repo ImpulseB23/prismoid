@@ -39,13 +39,18 @@ func (c *FFZClient) FetchGlobal(ctx context.Context) (EmoteSet, error) {
 
 // FetchChannel returns the FFZ set configured for the Twitch broadcaster.
 // Returns [ErrNotFound] when the channel has no FFZ room registered.
+//
+// FFZ's room response can include multiple sets in `sets` (historical data,
+// unpublished drafts). Only the set identified by `room.set` is considered
+// active by FFZ's own client and Chatterino, so that is all we convert.
 func (c *FFZClient) FetchChannel(ctx context.Context, twitchUserID string) (EmoteSet, error) {
 	var raw ffzRoomResponse
 	if err := getJSON(ctx, c.client(), c.base()+"/room/id/"+twitchUserID, &raw); err != nil {
 		return EmoteSet{}, err
 	}
 	emotes := make([]Emote, 0, 64)
-	for _, set := range raw.Sets {
+	activeKey := strconv.Itoa(raw.Room.Set)
+	if set, ok := raw.Sets[activeKey]; ok {
 		emotes = append(emotes, ffzConvertSet(set)...)
 	}
 	return EmoteSet{
@@ -76,7 +81,14 @@ type ffzGlobalResponse struct {
 }
 
 type ffzRoomResponse struct {
+	Room ffzRoom           `json:"room"`
 	Sets map[string]ffzSet `json:"sets"`
+}
+
+// ffzRoom.Set is the ID of the active channel set. FFZ sometimes returns
+// additional draft sets inside `sets` that the client should ignore.
+type ffzRoom struct {
+	Set int `json:"set"`
 }
 
 type ffzSet struct {

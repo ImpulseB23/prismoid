@@ -68,7 +68,13 @@ func TestFFZ_FetchChannel(t *testing.T) {
 		if r.URL.Path != "/room/id/77" {
 			t.Fatalf("path: %s", r.URL.Path)
 		}
-		_, _ = w.Write([]byte(`{"sets":{"500":{"emoticons":[{"id":1,"name":"ChanEmote","urls":{"1":"//cdn/x"}}]}}}`))
+		_, _ = w.Write([]byte(`{
+			"room":{"set":500},
+			"sets":{
+				"500":{"emoticons":[{"id":1,"name":"ChanEmote","urls":{"1":"//cdn/x"}}]},
+				"999":{"emoticons":[{"id":2,"name":"DraftEmote","urls":{"1":"//cdn/y"}}]}
+			}
+		}`))
 	}))
 	defer srv.Close()
 
@@ -78,7 +84,7 @@ func TestFFZ_FetchChannel(t *testing.T) {
 		t.Fatalf("FetchChannel: %v", err)
 	}
 	if set.ChannelID != "77" || len(set.Emotes) != 1 || set.Emotes[0].Code != "ChanEmote" {
-		t.Errorf("unexpected: %+v", set)
+		t.Errorf("unexpected (should only return the active set, not drafts): %+v", set)
 	}
 }
 

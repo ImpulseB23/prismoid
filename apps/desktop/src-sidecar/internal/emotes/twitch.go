@@ -115,7 +115,10 @@ func (c *TwitchClient) get(ctx context.Context, path string, dst any) error {
 		_, _ = io.Copy(io.Discard, resp.Body)
 		return nil
 	}
-	return json.NewDecoder(resp.Body).Decode(dst)
+	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
+		return fmt.Errorf("decode %s: %w", path, err)
+	}
+	return nil
 }
 
 type twitchEmoteResponse struct {

@@ -16,30 +16,36 @@ func newBundleServer(t *testing.T, callCount *int32) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(callCount, 1)
-		switch {
-		case r.URL.Path == "/helix/chat/emotes/global":
-			fmt.Fprint(w, twitchGlobalEmotesBody)
-		case r.URL.Path == "/helix/chat/emotes":
-			fmt.Fprint(w, `{"data":[],"template":""}`)
-		case r.URL.Path == "/helix/chat/badges/global":
-			fmt.Fprint(w, `{"data":[{"set_id":"moderator","versions":[{"id":"1","image_url_1x":"https://u/1"}]}]}`)
-		case r.URL.Path == "/helix/chat/badges":
-			fmt.Fprint(w, `{"data":[]}`)
-		case r.URL.Path == "/7tv/emote-sets/global":
-			fmt.Fprint(w, sevenTVSampleSet)
-		case r.URL.Path == "/7tv/users/twitch/42":
+		var body string
+		switch r.URL.Path {
+		case "/helix/chat/emotes/global":
+			body = twitchGlobalEmotesBody
+		case "/helix/chat/emotes":
+			body = `{"data":[],"template":""}`
+		case "/helix/chat/badges/global":
+			body = `{"data":[{"set_id":"moderator","versions":[{"id":"1","image_url_1x":"https://u/1"}]}]}`
+		case "/helix/chat/badges":
+			body = `{"data":[]}`
+		case "/7tv/emote-sets/global":
+			body = sevenTVSampleSet
+		case "/7tv/users/twitch/42":
 			w.WriteHeader(http.StatusNotFound)
-		case r.URL.Path == "/bttv/cached/emotes/global":
-			fmt.Fprint(w, `[{"id":"a","code":"G","imageType":"png"}]`)
-		case r.URL.Path == "/bttv/cached/users/twitch/42":
-			fmt.Fprint(w, `{"channelEmotes":[{"id":"c","code":"C","imageType":"png"}],"sharedEmotes":[]}`)
-		case r.URL.Path == "/ffz/set/global":
-			fmt.Fprint(w, `{"default_sets":[1],"sets":{"1":{"emoticons":[{"id":1,"name":"G","urls":{"1":"//cdn/x"}}]}}}`)
-		case r.URL.Path == "/ffz/room/id/42":
-			fmt.Fprint(w, `{"sets":{"2":{"emoticons":[{"id":2,"name":"C","urls":{"1":"//cdn/y"}}]}}}`)
+			return
+		case "/bttv/cached/emotes/global":
+			body = `[{"id":"a","code":"G","imageType":"png"}]`
+		case "/bttv/cached/users/twitch/42":
+			body = `{"channelEmotes":[{"id":"c","code":"C","imageType":"png"}],"sharedEmotes":[]}`
+		case "/ffz/set/global":
+			body = `{"default_sets":[1],"sets":{"1":{"emoticons":[{"id":1,"name":"G","urls":{"1":"//cdn/x"}}]}}}`
+		case "/ffz/room/id/42":
+			body = `{"room":{"set":2},"sets":{"2":{"emoticons":[{"id":2,"name":"C","urls":{"1":"//cdn/y"}}]}}}`
 		default:
 			t.Errorf("unexpected path: %s", r.URL.Path)
 			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if _, err := fmt.Fprint(w, body); err != nil {
+			t.Errorf("write response: %v", err)
 		}
 	}))
 }
