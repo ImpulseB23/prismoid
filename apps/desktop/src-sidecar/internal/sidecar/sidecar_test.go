@@ -5,6 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -15,7 +18,9 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/ImpulseB23/Prismoid/sidecar/internal/control"
+	"github.com/ImpulseB23/Prismoid/sidecar/internal/emotes"
 	"github.com/ImpulseB23/Prismoid/sidecar/internal/ringbuf"
+	"github.com/ImpulseB23/Prismoid/sidecar/internal/twitch"
 )
 
 const (
@@ -164,6 +169,9 @@ func TestRunWriter_SkipsSignalOnFullRing(t *testing.T) {
 }
 
 func TestHandleTwitchConnect_AddsClient(t *testing.T) {
+	restore := stubEmoteFetcher(t)
+	defer restore()
+
 	clients := make(map[string]context.CancelFunc)
 	out := make(chan []byte, 1)
 	cmd := control.Command{
@@ -185,6 +193,9 @@ func TestHandleTwitchConnect_AddsClient(t *testing.T) {
 }
 
 func TestHandleTwitchConnect_RejectsDuplicate(t *testing.T) {
+	restore := stubEmoteFetcher(t)
+	defer restore()
+
 	clients := make(map[string]context.CancelFunc)
 	out := make(chan []byte, 1)
 
@@ -227,6 +238,9 @@ func TestHandleTwitchDisconnect_NoOpForUnknown(t *testing.T) {
 }
 
 func TestDispatchCommand_RoutesConnect(t *testing.T) {
+	restore := stubEmoteFetcher(t)
+	defer restore()
+
 	clients := make(map[string]context.CancelFunc)
 	out := make(chan []byte, 1)
 	cmd := control.Command{Cmd: "twitch_connect", BroadcasterID: "b1"}
@@ -379,6 +393,9 @@ func TestHandleDeleteMessage_MissingMessageIDIgnored(t *testing.T) {
 }
 
 func TestRunCommandLoop_DispatchesCommands(t *testing.T) {
+	restore := stubEmoteFetcher(t)
+	defer restore()
+
 	// Pre-load the scanner with one twitch_connect, then close stdin so
 	// scanCommands exits cleanly. The loop itself stops when ctx is cancelled.
 	stdin := strings.NewReader(`{"cmd":"twitch_connect","broadcaster_id":"b1"}` + "\n")
@@ -704,5 +721,192 @@ func TestRunWithIO_HappyPath(t *testing.T) {
 
 	if !strings.Contains(stdout.String(), `"type":"heartbeat"`) {
 		t.Errorf("expected at least one heartbeat in stdout, got: %s", stdout.String())
+	}
+}
+
+// stubEmoteFetcher replaces emoteFetchFn with a no-op for the duration of a
+// test so HandleTwitchConnect doesn't kick off real HTTP fetches against
+// 7tv.io / betterttv.net / frankerfacez.com during unit tests.
+func stubEmoteFetcher(t *testing.T) func() {
+	t.Helper()
+	orig := emoteFetchFn
+	emoteFetchFn = func(context.Context, control.Command, twitch.Notify, zerolog.Logger) {}
+	return func() { emoteFetchFn = orig }
+}
+
+func TestBuildFetcher_WithTwitchCredsPopulatesHelixClient(t *testing.T) {
+	f := buildFetcher(control.Command{
+		Cmd:           "twitch_connect",
+		BroadcasterID: "b1",
+		ClientID:      "cid",
+		Token:         "tok",
+	})
+	if f.Twitch == nil {
+		t.Fatal("expected Twitch client to be set when cid+token are present")
+	}
+	if f.Twitch.ClientID != "cid" || f.Twitch.AccessToken != "tok" {
+		t.Errorf("twitch client credentials not wired: %+v", f.Twitch)
+	}
+	if f.SevenTV == nil || f.BTTV == nil || f.FFZ == nil {
+		t.Error("third-party clients must always be set")
+	}
+}
+
+func TestBuildFetcher_WithoutTwitchCredsSkipsHelix(t *testing.T) {
+	// Missing either ClientID or Token must leave the Twitch client nil so
+	// Fetcher.Fetch skips Helix entirely instead of 401-ing every request.
+	cases := []control.Command{
+		{BroadcasterID: "b1"},
+		{BroadcasterID: "b1", ClientID: "cid"},
+		{BroadcasterID: "b1", Token: "tok"},
+	}
+	for i, cmd := range cases {
+		f := buildFetcher(cmd)
+		if f.Twitch != nil {
+			t.Errorf("case %d: expected nil Twitch client, got %+v", i, f.Twitch)
+		}
+	}
+}
+
+func TestFetchAndNotifyEmotes_EmptyBroadcasterDoesNotEmit(t *testing.T) {
+	var called atomic.Bool
+	notify := func(string, any) { called.Store(true) }
+
+	FetchAndNotifyEmotes(context.Background(), control.Command{}, notify, zerolog.Nop())
+
+	if called.Load() {
+		t.Fatal("expected no emit when BroadcasterID is empty")
+	}
+}
+
+func TestFetchAndNotifyEmotes_EmitsBundleOverControlPlane(t *testing.T) {
+	// Spin up an httptest server that plays all four provider endpoints: the
+	// integration checks that a real fetcher reaches our channel handler and
+	// the resulting Bundle is emitted as a single `emote_bundle` message.
+	sevenTVGlobal := `{"id":"g","emotes":[{"id":"7tv1","name":"PepegaAim","data":{"id":"7tv1","name":"PepegaAim","host":{"url":"//cdn.7tv.app/emote/7tv1","files":[{"name":"1x.webp","width":32,"height":32,"format":"WEBP"}]}}}]}`
+	sevenTVUser := `{"emote_set":{"id":"u","emotes":[]}}`
+	bttvGlobal := `[{"id":"bttv1","code":"monkaS","imageType":"png"}]`
+	bttvChannel := `{"channelEmotes":[],"sharedEmotes":[]}`
+	ffzGlobal := `{"default_sets":[3],"sets":{"3":{"emoticons":[{"id":1,"name":"ZrehplaR","urls":{"1":"//cdn.frankerfacez.com/1.png"}}]}}}`
+	ffzRoom := `{"room":{"set":500},"sets":{"500":{"emoticons":[]}}}`
+	twitchGlobalEmotes := `{"data":[],"template":""}`
+	twitchChannelEmotes := `{"data":[],"template":""}`
+	twitchGlobalBadges := `{"data":[]}`
+	twitchChannelBadges := `{"data":[]}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/emote-sets/global"):
+			_, _ = io.WriteString(w, sevenTVGlobal)
+		case strings.Contains(r.URL.Path, "/users/twitch/"):
+			_, _ = io.WriteString(w, sevenTVUser)
+		case strings.HasSuffix(r.URL.Path, "/cached/emotes/global"):
+			_, _ = io.WriteString(w, bttvGlobal)
+		case strings.Contains(r.URL.Path, "/cached/users/twitch/"):
+			_, _ = io.WriteString(w, bttvChannel)
+		case strings.HasSuffix(r.URL.Path, "/set/global"):
+			_, _ = io.WriteString(w, ffzGlobal)
+		case strings.Contains(r.URL.Path, "/room/id/"):
+			_, _ = io.WriteString(w, ffzRoom)
+		case strings.HasSuffix(r.URL.Path, "/chat/emotes/global"):
+			_, _ = io.WriteString(w, twitchGlobalEmotes)
+		case strings.HasPrefix(r.URL.Path, "/chat/emotes"):
+			_, _ = io.WriteString(w, twitchChannelEmotes)
+		case strings.HasSuffix(r.URL.Path, "/chat/badges/global"):
+			_, _ = io.WriteString(w, twitchGlobalBadges)
+		case strings.HasPrefix(r.URL.Path, "/chat/badges"):
+			_, _ = io.WriteString(w, twitchChannelBadges)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	f := &emotes.Fetcher{
+		Twitch:  &emotes.TwitchClient{BaseURL: srv.URL, ClientID: "cid", AccessToken: "tok"},
+		SevenTV: &emotes.SevenTVClient{BaseURL: srv.URL},
+		BTTV:    &emotes.BTTVClient{BaseURL: srv.URL},
+		FFZ:     &emotes.FFZClient{BaseURL: srv.URL},
+	}
+
+	var gotType string
+	var gotPayload any
+	notify := func(mt string, p any) { gotType = mt; gotPayload = p }
+
+	fetchAndEmit(context.Background(), f, "b1", notify, zerolog.Nop())
+
+	if gotType != "emote_bundle" {
+		t.Fatalf("expected type=emote_bundle, got %q", gotType)
+	}
+	bundle, ok := gotPayload.(emotes.Bundle)
+	if !ok {
+		t.Fatalf("expected emotes.Bundle payload, got %T", gotPayload)
+	}
+	if len(bundle.SevenTVGlobal.Emotes) == 0 {
+		t.Error("expected 7TV global emotes")
+	}
+	if len(bundle.BTTVGlobal.Emotes) == 0 {
+		t.Error("expected BTTV global emotes")
+	}
+	if len(bundle.FFZGlobal.Emotes) == 0 {
+		t.Error("expected FFZ global emotes")
+	}
+
+	// JSON round-trip has to succeed: this is the on-the-wire contract.
+	raw, err := json.Marshal(control.Message{Type: gotType, Payload: bundle})
+	if err != nil {
+		t.Fatalf("bundle message failed to marshal: %v", err)
+	}
+	if !strings.Contains(string(raw), `"type":"emote_bundle"`) {
+		t.Errorf("marshalled message missing type: %s", raw)
+	}
+	if !strings.Contains(string(raw), `"seventv_global"`) {
+		t.Errorf("marshalled bundle missing seventv_global field: %s", raw)
+	}
+}
+
+func TestFetchAndNotifyEmotes_CancelledContextSuppressesEmit(t *testing.T) {
+	// Use a server that blocks until the context is cancelled; confirm no
+	// emit fires when the context is already done by the time Fetch returns.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+
+	f := &emotes.Fetcher{
+		SevenTV: &emotes.SevenTVClient{BaseURL: srv.URL},
+		BTTV:    &emotes.BTTVClient{BaseURL: srv.URL},
+		FFZ:     &emotes.FFZClient{BaseURL: srv.URL},
+	}
+
+	var called atomic.Bool
+	notify := func(string, any) { called.Store(true) }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	fetchAndEmit(ctx, f, "b1", notify, zerolog.Nop())
+
+	if called.Load() {
+		t.Fatal("expected no emit when context is cancelled before fetch returns")
+	}
+}
+
+func TestProviderError_JSONIncludesErrorString(t *testing.T) {
+	pe := emotes.ProviderError{
+		Provider: emotes.ProviderBTTV,
+		Scope:    emotes.ScopeGlobal,
+		Err:      errors.New("network down"),
+	}
+	raw, err := json.Marshal(pe)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	got := string(raw)
+	if !strings.Contains(got, `"provider":"bttv"`) ||
+		!strings.Contains(got, `"scope":"global"`) ||
+		!strings.Contains(got, `"error":"network down"`) {
+		t.Errorf("unexpected JSON: %s", got)
 	}
 }
