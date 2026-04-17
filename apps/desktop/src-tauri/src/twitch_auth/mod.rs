@@ -16,11 +16,16 @@
 //! The module is pure-logic and async-only; wiring into the supervisor
 //! lives in PRI-21.
 
+pub mod commands;
 pub mod errors;
 pub mod manager;
 pub mod storage;
 pub mod tokens;
 
+pub use commands::{
+    twitch_auth_status, twitch_cancel_login, twitch_complete_login, twitch_logout,
+    twitch_start_login, AuthState, AuthStatus, AuthStatusState, DeviceCodeView,
+};
 pub use errors::AuthError;
 pub use manager::{AuthManager, AuthManagerBuilder, PendingDeviceFlow, REFRESH_THRESHOLD_MS};
 pub use storage::{KeychainStore, MemoryStore, TokenStore, KEYCHAIN_SERVICE};
