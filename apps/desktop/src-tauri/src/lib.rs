@@ -69,10 +69,19 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
     use tokio::sync::Notify;
     use twitch_auth::{AuthManager, AuthState, KeychainStore, TWITCH_CLIENT_ID};
 
-    let http_client = reqwest::Client::builder()
+    let http_client = match reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()
-        .expect("failed to build reqwest client");
+    {
+        Ok(client) => client,
+        Err(err) => {
+            tracing::error!(
+                error = %err,
+                "failed to build reqwest client; skipping auth manager and sidecar"
+            );
+            return Ok(());
+        }
+    };
     let auth = Arc::new(AuthManager::builder(TWITCH_CLIENT_ID).build(KeychainStore, http_client));
     let wakeup = Arc::new(Notify::new());
     app.manage(AuthState::new(auth.clone(), wakeup.clone()));

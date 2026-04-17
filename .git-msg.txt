@@ -1,0 +1,10 @@
+fix(auth): address copilot review on PR #78
+
+- Switch wakeup notifier from notify_waiters() to notify_one() so the
+  permit is stored if the supervisor isn't currently parked, preventing
+  dropped login/logout signals.
+- Degrade gracefully when reqwest::Client::builder() fails in setup
+  instead of panicking the app (per docs/stability.md).
+- Rename SignIn cancel button to "Start over" and add a generation
+  counter so stale completeLogin() resolutions from a previous attempt
+  can't accidentally authenticate the user.

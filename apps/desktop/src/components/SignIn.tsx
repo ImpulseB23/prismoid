@@ -24,47 +24,55 @@ const SignIn: Component<SignInProps> = (props) => {
   const [pending, setPending] = createSignal<DeviceCodeView | null>(null);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+  // Tauri commands have no cancellation token, so an in-flight
+  // completeLogin() Promise keeps polling Twitch even after the user
+  // hits "Start over". The generation counter lets us ignore stale
+  // resolutions/rejections from the previous attempt.
+  let generation = 0;
 
   onMount(() => {
-    // If a previous flow was abandoned (window closed, hot reload),
-    // make sure the backend slot is empty so the next click starts
-    // clean.
     void cancelLogin().catch(() => {});
   });
 
   const beginFlow = async () => {
+    generation += 1;
+    const gen = generation;
     setError(null);
     setBusy(true);
     try {
       const details = await startLogin();
+      if (gen !== generation) return;
       setPending(details);
-      // Best-effort: open the user's default browser. If the shell call
-      // fails (Linux without xdg-open, etc.), the URL stays visible on
-      // screen so the user can copy it manually.
       void openVerificationUri(details.verification_uri).catch(() => {});
 
       const status = await completeLogin();
+      if (gen !== generation) return;
       if (status.state === "logged_in" && status.login) {
         props.onAuthenticated(status.login);
       } else {
         setError("Sign-in returned without a login. Please try again.");
       }
     } catch (e) {
+      if (gen !== generation) return;
       if (isAuthError(e)) {
         setError(authErrorMessage(e));
       } else {
         setError(e instanceof Error ? e.message : String(e));
       }
     } finally {
-      setBusy(false);
-      setPending(null);
+      if (gen === generation) {
+        setBusy(false);
+        setPending(null);
+      }
     }
   };
 
-  const cancel = async () => {
-    await cancelLogin().catch(() => {});
+  const startOver = async () => {
+    generation += 1;
     setPending(null);
     setBusy(false);
+    setError(null);
+    await cancelLogin().catch(() => {});
   };
 
   return (
@@ -139,7 +147,7 @@ const SignIn: Component<SignInProps> = (props) => {
               </a>
             </p>
             <button
-              onClick={cancel}
+              onClick={startOver}
               style={{
                 padding: "6px 12px",
                 "font-size": "13px",
@@ -150,7 +158,7 @@ const SignIn: Component<SignInProps> = (props) => {
                 cursor: "pointer",
               }}
             >
-              Cancel
+              Start over
             </button>
           </div>
         )}

@@ -150,7 +150,10 @@ pub async fn twitch_complete_login(
         message: "twitch_start_login has not been called".into(),
     })?;
     let tokens = state.manager.complete_device_flow(pending).await?;
-    state.wakeup.notify_waiters();
+    // notify_one stores a permit if the supervisor isn't currently parked
+    // on notified(), so the wake can't be lost between login completing and
+    // the supervisor reaching its await.
+    state.wakeup.notify_one();
     Ok(AuthStatus {
         state: AuthStatusState::LoggedIn,
         login: Some(tokens.login),
@@ -167,7 +170,7 @@ pub async fn twitch_cancel_login(state: State<'_, AuthState>) -> Result<(), Auth
 pub async fn twitch_logout(state: State<'_, AuthState>) -> Result<(), AuthCommandError> {
     state.manager.logout()?;
     state.pending.lock().await.take();
-    state.wakeup.notify_waiters();
+    state.wakeup.notify_one();
     Ok(())
 }
 
@@ -274,17 +277,13 @@ mod tests {
         let store = MemoryStore::default();
         store.save(&fixture_tokens()).unwrap();
         let state = build_state_with_store(store);
-        // Notifier permit consumed by a waiter; logout must release it.
         let wakeup = state.wakeup.clone();
         let waiter = tokio::spawn(async move {
             wakeup.notified().await;
         });
-        // Yield so the waiter is parked before notify_waiters fires;
-        // notify_waiters wakes only currently-parked waiters.
-        tokio::task::yield_now().await;
 
         state.manager.logout().unwrap();
-        state.wakeup.notify_waiters();
+        state.wakeup.notify_one();
 
         assert!(state.manager.peek_login().unwrap().is_none());
         tokio::time::timeout(std::time::Duration::from_secs(1), waiter)
