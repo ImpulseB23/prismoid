@@ -1,35 +1,54 @@
 import { Title, Meta } from "@solidjs/meta";
-import { createSignal, onCleanup } from "solid-js";
+import { createSignal } from "solid-js";
 import GithubPreview from "~/components/GithubPreview";
 import "./index.css";
 
-const DOWNLOAD_TEASERS = [
+const NOT_READY_QUIPS = [
+  "not quite there yet",
   "still cooking",
   "soon™",
-  "compiling",
-  "not yet",
-  "patience",
-  "writing the tests",
+  "patience, friend",
+  "one more refactor",
   "fighting the borrow checker",
   "waiting on CI",
-  "v0.0.0-notyet",
-  "one more refactor",
+  "nope, still compiling",
 ];
 
-function DownloadTeaser() {
-  const [i, setI] = createSignal(0);
-  const id = setInterval(
-    () => setI((n) => (n + 1) % DOWNLOAD_TEASERS.length),
-    2200,
-  );
-  onCleanup(() => clearInterval(id));
+function DownloadButton() {
+  const [hovered, setHovered] = createSignal(false);
+  const [shake, setShake] = createSignal(false);
+  const [quip, setQuip] = createSignal(NOT_READY_QUIPS[0]);
+
+  const onEnter = () => {
+    const next =
+      NOT_READY_QUIPS[Math.floor(Math.random() * NOT_READY_QUIPS.length)];
+    setQuip(next);
+    setHovered(true);
+  };
+
+  const onClick = () => {
+    setQuip(
+      NOT_READY_QUIPS[Math.floor(Math.random() * NOT_READY_QUIPS.length)],
+    );
+    setShake(false);
+    requestAnimationFrame(() => setShake(true));
+  };
+
   return (
-    <span
-      class="btn btn-primary btn-disabled"
-      title="no releases yet, but keep watching"
+    <button
+      type="button"
+      class="btn btn-primary btn-teaser"
+      classList={{ "is-shaking": shake() }}
+      onMouseEnter={onEnter}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={onEnter}
+      onBlur={() => setHovered(false)}
+      onClick={onClick}
+      onAnimationEnd={() => setShake(false)}
+      aria-label="Download (not yet released)"
     >
-      Download <span class="download-teaser">({DOWNLOAD_TEASERS[i()]})</span>
-    </span>
+      {hovered() ? quip() : "Download"}
+    </button>
   );
 }
 
@@ -95,7 +114,7 @@ export default function Home() {
           </span>
         </div>
         <div class="hero-actions">
-          <DownloadTeaser />
+          <DownloadButton />
           <GithubPreview
             href="https://github.com/ImpulseB23/Prismoid"
             class="btn btn-outline"
