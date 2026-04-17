@@ -139,6 +139,30 @@ func TestRunWriter_StopsOnContextCancel(t *testing.T) {
 	}
 }
 
+func TestRunWriter_StopsOnChannelClose(t *testing.T) {
+	writer, _ := makeTestRingBuffer(t, 4096)
+
+	in := make(chan []byte, 1)
+	var signalCount atomic.Int32
+	signal := func() { signalCount.Add(1) }
+
+	done := make(chan struct{})
+	go func() {
+		RunWriter(context.Background(), in, writer, signal)
+		close(done)
+	}()
+
+	close(in)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("RunWriter did not exit on channel close")
+	}
+	if got := signalCount.Load(); got != 0 {
+		t.Errorf("expected no signals from a closed empty channel, got %d", got)
+	}
+}
+
 func TestRunWriter_SkipsSignalOnRejectedPayload(t *testing.T) {
 	// 32-byte ring; a 32-byte payload would frame to 36 bytes, exceeding
 	// capacity, so writer.Write returns false and signal must not fire.

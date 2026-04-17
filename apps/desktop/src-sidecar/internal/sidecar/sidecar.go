@@ -178,7 +178,10 @@ func RunWriter(ctx context.Context, in <-chan []byte, writer *ringbuf.Writer, si
 		select {
 		case <-ctx.Done():
 			return
-		case data := <-in:
+		case data, ok := <-in:
+			if !ok {
+				return
+			}
 			if !writer.Write(data) {
 				log.Warn().Int("bytes", len(data)).Msg("ring buffer rejected malformed payload")
 				continue

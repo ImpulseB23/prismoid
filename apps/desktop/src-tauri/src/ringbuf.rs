@@ -824,16 +824,18 @@ mod tests {
     }
 
     #[test]
-    fn drain_discards_frame_when_min_read_advances_mid_copy() {
-        // Reader copies a frame, then the writer (simulated here by mutating
-        // min_read_pos directly) evicts past it. The seqlock check must
-        // recognize the clobber and discard the read frame.
+    fn drain_skips_fully_evicted_region_even_with_live_write_pos() {
+        // Writer advanced write_index past a frame, then evicted that same
+        // frame by raising min_read_pos to the new write_index. Drain must
+        // observe the floor and emit no messages. (The deterministic test
+        // of the post-copy seqlock re-check requires a concurrent writer
+        // racing the reader; that path is exercised by the benchmark and
+        // by integration tests, not here.)
         let mut reader = RingBufReader::create_owner(64).unwrap();
         reader.__bench_write(&[b"first frame!"]);
 
         let (_, _, min_read_slot, _, _) = reader.header();
         unsafe {
-            // Advance the floor past the frame we just wrote (16 bytes).
             (*min_read_slot).index.store(16, Ordering::Release);
         }
 
