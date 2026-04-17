@@ -84,21 +84,118 @@ func TestWriteMultipleMessages(t *testing.T) {
 	}
 }
 
-func TestWriteFullBuffer(t *testing.T) {
+func TestWriteRejectsEmptyPayload(t *testing.T) {
+	mem := makeBuf(64)
+	w, err := Open(mem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.Write(nil) {
+		t.Fatal("nil payload should be rejected")
+	}
+	if w.Write([]byte{}) {
+		t.Fatal("empty payload should be rejected")
+	}
+}
+
+func TestWriteRejectsPayloadLargerThanCapacity(t *testing.T) {
+	mem := makeBuf(32)
+	w, err := Open(mem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 4 (length) + 32 (payload) > 32 cap, eviction can never make room.
+	if w.Write(make([]byte, 32)) {
+		t.Fatal("oversized payload should be rejected")
+	}
+}
+
+func TestWriteEvictsOldestWhenFull(t *testing.T) {
 	mem := makeBuf(32)
 	w, err := Open(mem)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	ok := w.Write(make([]byte, 20))
-	if !ok {
+	// First write: 4 + 12 = 16 bytes, fits.
+	if !w.Write([]byte("AAAAAAAAAAAA")) {
 		t.Fatal("first write should succeed")
 	}
+	// Second write: 4 + 12 = 16 bytes, fills the ring exactly.
+	if !w.Write([]byte("BBBBBBBBBBBB")) {
+		t.Fatal("second write should succeed")
+	}
 
-	ok = w.Write(make([]byte, 20))
-	if ok {
-		t.Fatal("second write should fail (buffer full)")
+	if got := atomic.LoadUint64(w.minReadIndex()); got != 0 {
+		t.Fatalf("min_read_pos should still be 0, got %d", got)
+	}
+
+	// Third write needs 16 bytes; reader is idle so the writer must evict
+	// the first frame (16 bytes) to make room.
+	if !w.Write([]byte("CCCCCCCCCCCC")) {
+		t.Fatal("third write should succeed via eviction")
+	}
+
+	if got := atomic.LoadUint64(w.minReadIndex()); got != 16 {
+		t.Fatalf("expected min_read_pos=16 after evicting one frame, got %d", got)
+	}
+	if got := atomic.LoadUint64(w.droppedFrames()); got != 1 {
+		t.Fatalf("expected dropped_frames=1, got %d", got)
+	}
+	if got := atomic.LoadUint64(w.writeIndex()); got != 48 {
+		t.Fatalf("expected write_index=48, got %d", got)
+	}
+}
+
+func TestWriteEvictsMultipleFramesWhenNeeded(t *testing.T) {
+	mem := makeBuf(64)
+	w, err := Open(mem)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Four 12-byte payloads = four 16-byte frames, exactly fills 64.
+	for i := 0; i < 4; i++ {
+		if !w.Write([]byte("xxxxxxxxxxxx")) {
+			t.Fatalf("write %d should succeed", i)
+		}
+	}
+
+	// One 28-byte payload = 32-byte frame; writer must evict 2 frames.
+	if !w.Write(make([]byte, 28)) {
+		t.Fatal("large write should succeed via eviction")
+	}
+
+	if got := atomic.LoadUint64(w.droppedFrames()); got != 2 {
+		t.Fatalf("expected dropped_frames=2, got %d", got)
+	}
+	if got := atomic.LoadUint64(w.minReadIndex()); got != 32 {
+		t.Fatalf("expected min_read_pos=32, got %d", got)
+	}
+}
+
+func TestWriteRespectsReaderProgress(t *testing.T) {
+	mem := makeBuf(32)
+	w, err := Open(mem)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !w.Write([]byte("AAAAAAAAAAAA")) {
+		t.Fatal("first write should succeed")
+	}
+	if !w.Write([]byte("BBBBBBBBBBBB")) {
+		t.Fatal("second write should succeed")
+	}
+
+	// Reader caught up to the first frame; writer should not need to evict.
+	atomic.StoreUint64(w.readIndex(), 16)
+
+	if !w.Write([]byte("CCCCCCCCCCCC")) {
+		t.Fatal("third write should succeed without eviction")
+	}
+	if got := atomic.LoadUint64(w.droppedFrames()); got != 0 {
+		t.Fatalf("expected no drops when reader has progressed, got %d", got)
 	}
 }
 

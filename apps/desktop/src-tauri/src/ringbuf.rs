@@ -27,9 +27,16 @@ use std::io;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 const CACHE_LINE: usize = 64;
-const HEADER_SIZE: usize = CACHE_LINE * 3;
+const HEADER_SIZE: usize = CACHE_LINE * 5;
 
 pub const DEFAULT_CAPACITY: usize = 4 * 1024 * 1024; // 4MB ring data
+
+// Header layout (5 cache lines, see `writer.go`):
+//   [0..64)    write_index    writer-only stores
+//   [64..128)  read_index     reader-only stores
+//   [128..192) capacity       immutable
+//   [192..256) min_read_pos   writer-only stores; drop-oldest floor
+//   [256..320) dropped_frames writer-only stores; monotonic counter
 
 /// Portable integer representation of a platform shared memory handle.
 /// On Windows this is a `HANDLE` cast through `usize`. On POSIX platforms this
@@ -51,6 +58,18 @@ struct ReadSlot {
 #[repr(C, align(64))]
 struct MetaSlot {
     capacity: u64,
+    _pad: [u8; CACHE_LINE - 8],
+}
+
+#[repr(C, align(64))]
+struct MinReadSlot {
+    index: AtomicU64,
+    _pad: [u8; CACHE_LINE - 8],
+}
+
+#[repr(C, align(64))]
+struct DroppedSlot {
+    count: AtomicU64,
     _pad: [u8; CACHE_LINE - 8],
 }
 
@@ -311,12 +330,28 @@ impl RingBufReader {
         self.map_size
     }
 
-    fn header(&self) -> (*const WriteSlot, *const ReadSlot, u64) {
+    fn header(
+        &self,
+    ) -> (
+        *const WriteSlot,
+        *const ReadSlot,
+        *const MinReadSlot,
+        *const DroppedSlot,
+        u64,
+    ) {
         unsafe {
             let write_slot = self.base as *const WriteSlot;
             let read_slot = self.base.add(CACHE_LINE) as *const ReadSlot;
             let meta = &*(self.base.add(CACHE_LINE * 2) as *const MetaSlot);
-            (write_slot, read_slot, meta.capacity)
+            let min_read_slot = self.base.add(CACHE_LINE * 3) as *const MinReadSlot;
+            let dropped_slot = self.base.add(CACHE_LINE * 4) as *const DroppedSlot;
+            (
+                write_slot,
+                read_slot,
+                min_read_slot,
+                dropped_slot,
+                meta.capacity,
+            )
         }
     }
 
@@ -324,8 +359,15 @@ impl RingBufReader {
         unsafe { self.base.add(self.data_offset) }
     }
 
+    /// Total number of frames the writer has evicted via drop-oldest since the
+    /// section was created. Monotonic; callers compute per-tick deltas.
+    pub fn dropped_frames(&self) -> u64 {
+        let (_, _, _, dropped_slot, _) = self.header();
+        unsafe { (*dropped_slot).count.load(Ordering::Acquire) }
+    }
+
     pub fn drain(&mut self) -> Vec<Vec<u8>> {
-        let (write_slot, read_slot, capacity) = self.header();
+        let (write_slot, read_slot, min_read_slot, _dropped_slot, capacity) = self.header();
         let cap = capacity as usize;
         let data = self.data_ptr();
 
@@ -335,7 +377,16 @@ impl RingBufReader {
             let write_pos = (*write_slot).index.load(Ordering::Acquire) as usize;
             let mut read_pos = (*read_slot).index.load(Ordering::Relaxed) as usize;
 
+            // Honor the writer's drop-oldest floor: any frames behind
+            // min_read_pos have been logically evicted and the bytes may be
+            // overwritten at any moment.
+            let min_read = (*min_read_slot).index.load(Ordering::Acquire) as usize;
+            if min_read > read_pos {
+                read_pos = min_read;
+            }
+
             while read_pos + 4 <= write_pos {
+                let frame_start = read_pos;
                 let len = self.read_u32_wrapped(data, read_pos, cap);
                 let msg_len = len as usize;
 
@@ -354,6 +405,15 @@ impl RingBufReader {
 
                 let mut msg = vec![0u8; msg_len];
                 self.read_wrapped(data, read_pos + 4, cap, &mut msg);
+
+                // Seqlock-style clobber check: if the writer advanced
+                // min_read_pos past this frame while we were copying, the
+                // bytes may be torn. Discard and snap forward.
+                let min_read_after = (*min_read_slot).index.load(Ordering::Acquire) as usize;
+                if min_read_after > frame_start {
+                    read_pos = min_read_after;
+                    continue;
+                }
 
                 messages.push(msg);
                 read_pos += 4 + msg_len;
@@ -435,7 +495,7 @@ fn windows_err(err: windows::core::Error) -> io::Error {
 impl RingBufReader {
     #[doc(hidden)]
     pub fn __bench_write(&self, payloads: &[&[u8]]) {
-        let (write_slot, _, capacity) = self.header();
+        let (write_slot, _, _, _, capacity) = self.header();
         let cap = capacity as usize;
         let data = self.data_ptr() as *mut u8;
 
@@ -540,7 +600,7 @@ mod tests {
     #[test]
     fn drain_stops_on_corrupt_length() {
         let mut reader = RingBufReader::create_owner(256).unwrap();
-        let (write_slot, _, _) = reader.header();
+        let (write_slot, _, _, _, _) = reader.header();
         let data = unsafe { reader.base.add(HEADER_SIZE) };
 
         let bad_len: u32 = 257;
@@ -560,7 +620,7 @@ mod tests {
     #[test]
     fn drain_stops_on_partial_message() {
         let mut reader = RingBufReader::create_owner(4096).unwrap();
-        let (write_slot, _, _) = reader.header();
+        let (write_slot, _, _, _, _) = reader.header();
         let data = unsafe { reader.base.add(HEADER_SIZE) };
 
         let len_bytes = 100u32.to_be_bytes();
@@ -577,7 +637,7 @@ mod tests {
     #[test]
     fn read_wraps_around_boundary() {
         let mut reader = RingBufReader::create_owner(32).unwrap();
-        let (write_slot, read_slot, _) = reader.header();
+        let (write_slot, read_slot, _, _, _) = reader.header();
 
         unsafe {
             (*write_slot).index.store(24, Ordering::Release);
@@ -722,5 +782,64 @@ mod tests {
         let attached = RingBufReader::attach(owner.raw_handle(), owner.map_size()).unwrap();
         let err = attached.wait_for_signal(10).unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::Unsupported);
+    }
+
+    #[test]
+    fn dropped_frames_starts_at_zero() {
+        let reader = RingBufReader::create_owner(4096).unwrap();
+        assert_eq!(reader.dropped_frames(), 0);
+    }
+
+    #[test]
+    fn drain_snaps_forward_to_min_read_pos() {
+        // Simulate the writer having evicted everything before offset 16:
+        // write_pos points past a fresh "GHIJ" frame at 20, min_read_pos
+        // floors any older read cursor at 16. The reader should skip the
+        // pre-floor region and only return the live frame.
+        let mut reader = RingBufReader::create_owner(64).unwrap();
+        let (write_slot, read_slot, min_read_slot, dropped_slot, _) = reader.header();
+
+        unsafe {
+            (*read_slot).index.store(0, Ordering::Release);
+            (*min_read_slot).index.store(16, Ordering::Release);
+            (*dropped_slot).count.store(1, Ordering::Release);
+            (*write_slot).index.store(16, Ordering::Release);
+        }
+        reader.__bench_write(&[b"GHIJ"]);
+
+        let messages = reader.drain();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0], b"GHIJ");
+        assert_eq!(reader.dropped_frames(), 1);
+    }
+
+    #[test]
+    fn drain_observes_dropped_frames_counter() {
+        let reader = RingBufReader::create_owner(4096).unwrap();
+        let (_, _, _, dropped_slot, _) = reader.header();
+        unsafe {
+            (*dropped_slot).count.store(42, Ordering::Release);
+        }
+        assert_eq!(reader.dropped_frames(), 42);
+    }
+
+    #[test]
+    fn drain_skips_fully_evicted_region_even_with_live_write_pos() {
+        // Writer advanced write_index past a frame, then evicted that same
+        // frame by raising min_read_pos to the new write_index. Drain must
+        // observe the floor and emit no messages. (The deterministic test
+        // of the post-copy seqlock re-check requires a concurrent writer
+        // racing the reader; that path is exercised by the benchmark and
+        // by integration tests, not here.)
+        let mut reader = RingBufReader::create_owner(64).unwrap();
+        reader.__bench_write(&[b"first frame!"]);
+
+        let (_, _, min_read_slot, _, _) = reader.header();
+        unsafe {
+            (*min_read_slot).index.store(16, Ordering::Release);
+        }
+
+        let messages = reader.drain();
+        assert!(messages.is_empty());
     }
 }

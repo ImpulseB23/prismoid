@@ -162,11 +162,11 @@ func ReadBootstrap(scanner *bufio.Scanner) (control.Bootstrap, error) {
 // the ring buffer, calling `signal` after each successful write so the host
 // can wake from WaitForSingleObject immediately.
 //
-// Backpressure: when the ring buffer is full, writer.Write returns false and
-// the current message is dropped (drop-newest). docs/architecture.md describes
-// drop-oldest semantics at the ring buffer layer; the current SPSC primitive
-// cannot evict already-written messages without reader-side cooperation that
-// has not been built yet. Tracked separately.
+// Backpressure: the ring buffer evicts oldest unread frames in place when a
+// new write would not fit (drop-oldest). writer.Write only returns false when
+// the payload itself is malformed (empty or larger than the ring capacity);
+// those should never happen with normalized envelopes but are logged so a
+// regression surfaces.
 //
 // Memory ordering: `writer.Write` ends with an atomic.StoreUint64 on the
 // write index (release store in Go's memory model). `signal` ultimately makes
@@ -178,9 +178,12 @@ func RunWriter(ctx context.Context, in <-chan []byte, writer *ringbuf.Writer, si
 		select {
 		case <-ctx.Done():
 			return
-		case data := <-in:
+		case data, ok := <-in:
+			if !ok {
+				return
+			}
 			if !writer.Write(data) {
-				log.Warn().Msg("ring buffer full, dropping message")
+				log.Warn().Int("bytes", len(data)).Msg("ring buffer rejected malformed payload")
 				continue
 			}
 			signal()
