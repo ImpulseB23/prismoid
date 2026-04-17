@@ -1,5 +1,5 @@
 import { Title, Meta } from "@solidjs/meta";
-import { createSignal } from "solid-js";
+import { createSignal, onCleanup } from "solid-js";
 import GithubPreview from "~/components/GithubPreview";
 import "./index.css";
 
@@ -8,7 +8,6 @@ const NOT_READY_QUIPS = [
   "soon™",
   "patience",
   "compiling",
-  "nuh uh",
   "try later",
   "hold up",
   "no dice",
@@ -17,21 +16,33 @@ const NOT_READY_QUIPS = [
 ];
 
 function DownloadButton() {
-  const [hovered, setHovered] = createSignal(false);
+  const [label, setLabel] = createSignal("Download");
   const [shake, setShake] = createSignal(false);
-  const [quip, setQuip] = createSignal(NOT_READY_QUIPS[0]);
+  let cycleId: ReturnType<typeof setInterval> | null = null;
+  let idx = 0;
 
-  const onEnter = () => {
-    const next =
-      NOT_READY_QUIPS[Math.floor(Math.random() * NOT_READY_QUIPS.length)];
-    setQuip(next);
-    setHovered(true);
+  const startCycle = () => {
+    if (cycleId !== null) return;
+    idx = Math.floor(Math.random() * NOT_READY_QUIPS.length);
+    setLabel(NOT_READY_QUIPS[idx]);
+    cycleId = setInterval(() => {
+      idx = (idx + 1) % NOT_READY_QUIPS.length;
+      setLabel(NOT_READY_QUIPS[idx]);
+    }, 900);
   };
 
+  const stopCycle = () => {
+    if (cycleId !== null) {
+      clearInterval(cycleId);
+      cycleId = null;
+    }
+    setLabel("Download");
+  };
+
+  onCleanup(stopCycle);
+
   const onClick = () => {
-    setQuip(
-      NOT_READY_QUIPS[Math.floor(Math.random() * NOT_READY_QUIPS.length)],
-    );
+    setLabel("nuh uh");
     setShake(false);
     requestAnimationFrame(() => setShake(true));
   };
@@ -41,15 +52,15 @@ function DownloadButton() {
       type="button"
       class="btn btn-primary btn-teaser"
       classList={{ "is-shaking": shake() }}
-      onMouseEnter={onEnter}
-      onMouseLeave={() => setHovered(false)}
-      onFocus={onEnter}
-      onBlur={() => setHovered(false)}
+      onMouseEnter={startCycle}
+      onMouseLeave={stopCycle}
+      onFocus={startCycle}
+      onBlur={stopCycle}
       onClick={onClick}
       onAnimationEnd={() => setShake(false)}
       aria-label="Download (not yet released)"
     >
-      {hovered() ? quip() : "Download"}
+      {label()}
     </button>
   );
 }
