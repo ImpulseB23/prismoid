@@ -1,9 +1,16 @@
 import { createResource, createSignal, Show } from "solid-js";
+import { query } from "@solidjs/router";
 import "./GithubPreview.css";
 
 const REPO = "ImpulseB23/Prismoid";
 const REPO_URL = `https://github.com/${REPO}`;
-const CACHE_TTL = 5 * 60 * 1000;
+
+// Cloudflare edge cache TTL. Cached at the PoP, shared across all visitors,
+// so GitHub's unauthenticated 60/hr limit per IP never becomes the site's
+// problem. We also fall back to stale data on any upstream error.
+const EDGE_CACHE_SECONDS = 15 * 60;
+const STALE_CACHE_SECONDS = 24 * 60 * 60;
+const CACHE_URL = "https://prismoid-edge-cache.internal/gh-preview/v1";
 
 interface RepoInfo {
   stars: number;
@@ -15,24 +22,55 @@ interface RepoInfo {
   lastCommitTime: string;
 }
 
-let cached: { data: RepoInfo; ts: number } | null = null;
+async function readStale(
+  cache: Cache | undefined,
+  req: Request,
+): Promise<RepoInfo | null> {
+  if (!cache) return null;
+  try {
+    const hit = await cache.match(req);
+    if (!hit) return null;
+    return (await hit.json()) as RepoInfo;
+  } catch {
+    return null;
+  }
+}
 
-async function fetchRepoInfo(): Promise<RepoInfo | null> {
-  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
+const fetchRepoInfo = query(async (): Promise<RepoInfo | null> => {
+  "use server";
+  const edgeCache = (globalThis as unknown as { caches?: CacheStorage }).caches
+    ?.default;
+  const cacheReq = new Request(CACHE_URL);
 
+  if (edgeCache) {
+    const hit = await edgeCache.match(cacheReq);
+    if (hit) {
+      try {
+        return (await hit.json()) as RepoInfo;
+      } catch {
+        // fall through to refetch on parse error
+      }
+    }
+  }
+
+  const headers = { "User-Agent": "prismoid-website" };
   try {
     const [repoRes, issuesRes, prsRes, commitsRes] = await Promise.all([
-      fetch(`https://api.github.com/repos/${REPO}`),
+      fetch(`https://api.github.com/repos/${REPO}`, { headers }),
       fetch(
         `https://api.github.com/repos/${REPO}/issues?state=open&per_page=100`,
+        { headers },
       ),
       fetch(
         `https://api.github.com/repos/${REPO}/pulls?state=open&per_page=100`,
+        { headers },
       ),
-      fetch(`https://api.github.com/repos/${REPO}/commits?per_page=1`),
+      fetch(`https://api.github.com/repos/${REPO}/commits?per_page=1`, {
+        headers,
+      }),
     ]);
 
-    if (!repoRes.ok || !commitsRes.ok) return cached?.data ?? null;
+    if (!repoRes.ok || !commitsRes.ok) return readStale(edgeCache, cacheReq);
 
     const repo = await repoRes.json();
     const issues = await issuesRes.json();
@@ -40,12 +78,13 @@ async function fetchRepoInfo(): Promise<RepoInfo | null> {
     const commits = await commitsRes.json();
     const latest = commits[0];
 
-    if (!latest?.commit) return cached?.data ?? null;
+    if (!latest?.commit) return readStale(edgeCache, cacheReq);
 
     const data: RepoInfo = {
       stars: repo.stargazers_count ?? 0,
       openIssues: Array.isArray(issues)
-        ? issues.filter((i: any) => !i.pull_request).length
+        ? issues.filter((i: { pull_request?: unknown }) => !i.pull_request)
+            .length
         : 0,
       openPRs: Array.isArray(prs) ? prs.length : 0,
       lastCommitMsg: latest.commit.message.split("\n")[0],
@@ -54,12 +93,25 @@ async function fetchRepoInfo(): Promise<RepoInfo | null> {
       lastCommitTime: timeAgo(new Date(latest.commit.author.date)),
     };
 
-    cached = { data, ts: Date.now() };
+    if (edgeCache) {
+      // Cache.put keeps the body for EDGE_CACHE_SECONDS, and we set a longer
+      // browser Cache-Control so Cloudflare keeps a stale copy available
+      // for the error-fallback path even after the fresh TTL expires.
+      await edgeCache.put(
+        cacheReq,
+        new Response(JSON.stringify(data), {
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": `public, s-maxage=${EDGE_CACHE_SECONDS}, max-age=${STALE_CACHE_SECONDS}`,
+          },
+        }),
+      );
+    }
     return data;
   } catch {
-    return cached?.data ?? null;
+    return readStale(edgeCache, cacheReq);
   }
-}
+}, "gh-preview");
 
 function timeAgo(date: Date): string {
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000);

@@ -76,16 +76,47 @@
   align-items: center;
 }
 
-.hero-actions .btn {
-  width: 10.5rem;
-  justify-content: center;
+.btn-hero {
+  padding: 0.95rem 1.9rem;
+  font-size: 0.9375rem;
 }
 
 .btn-teaser {
-  font: inherit;
+  position: relative;
   cursor: pointer;
-  white-space: nowrap;
   overflow: hidden;
+}
+
+/* The ::before reserves the natural width of "Download" so the button
+   size never changes when the hover label swaps in. */
+.btn-teaser::before {
+  content: "Download";
+  visibility: hidden;
+  white-space: nowrap;
+}
+
+.btn-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  will-change: transform, opacity;
+}
+
+.btn-teaser.is-animated .btn-label {
+  animation: label-swap 0.22s cubic-bezier(0.2, 0.85, 0.3, 1.05);
+}
+
+@keyframes label-swap {
+  from {
+    transform: translateY(55%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .btn-teaser.is-shaking {
@@ -113,7 +144,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .btn-teaser.is-shaking {
+  .btn-teaser.is-shaking,
+  .btn-label {
     animation: none;
   }
 }

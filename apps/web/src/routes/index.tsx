@@ -1,66 +1,63 @@
 import { Title, Meta } from "@solidjs/meta";
-import { createSignal, onCleanup } from "solid-js";
+import { createSignal, onCleanup, onMount, Show } from "solid-js";
+import { isServer } from "solid-js/web";
 import GithubPreview from "~/components/GithubPreview";
 import "./index.css";
-
-const NOT_READY_QUIPS = [
-  "not yet",
-  "soon™",
-  "patience",
-  "compiling",
-  "try later",
-  "hold up",
-  "no dice",
-  "cooking",
-  "wip",
-];
 
 function DownloadButton() {
   const [label, setLabel] = createSignal("Download");
   const [shake, setShake] = createSignal(false);
-  let cycleId: ReturnType<typeof setInterval> | null = null;
-  let idx = 0;
+  // Skip the keyed-swap remount animation on the very first paint so the
+  // button doesn't fade its default label in on page load.
+  const [animate, setAnimate] = createSignal(false);
 
-  const startCycle = () => {
-    if (cycleId !== null) return;
-    idx = Math.floor(Math.random() * NOT_READY_QUIPS.length);
-    setLabel(NOT_READY_QUIPS[idx]);
-    cycleId = setInterval(() => {
-      idx = (idx + 1) % NOT_READY_QUIPS.length;
-      setLabel(NOT_READY_QUIPS[idx]);
-    }, 900);
-  };
-
-  const stopCycle = () => {
-    if (cycleId !== null) {
-      clearInterval(cycleId);
-      cycleId = null;
-    }
+  const reset = () => {
     setLabel("Download");
   };
 
-  onCleanup(stopCycle);
+  const onEnter = () => {
+    setAnimate(true);
+    setLabel("compiling");
+  };
 
   const onClick = () => {
+    setAnimate(true);
     setLabel("nuh uh");
     setShake(false);
     requestAnimationFrame(() => setShake(true));
   };
 
+  onMount(() => {
+    if (isServer) return;
+    // Tabbing out/in or window blur doesn't always fire mouseleave on the
+    // button. Reset to the default label whenever the page loses focus.
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") reset();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("blur", reset);
+    onCleanup(() => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("blur", reset);
+    });
+  });
+
   return (
     <button
       type="button"
-      class="btn btn-primary btn-teaser"
-      classList={{ "is-shaking": shake() }}
-      onMouseEnter={startCycle}
-      onMouseLeave={stopCycle}
-      onFocus={startCycle}
-      onBlur={stopCycle}
+      class="btn btn-primary btn-hero btn-teaser"
+      classList={{ "is-shaking": shake(), "is-animated": animate() }}
+      onMouseEnter={onEnter}
+      onMouseLeave={reset}
+      onFocus={onEnter}
+      onBlur={reset}
       onClick={onClick}
       onAnimationEnd={() => setShake(false)}
       aria-label="Download (not yet released)"
     >
-      {label()}
+      <Show when={label()} keyed>
+        {(l) => <span class="btn-label">{l}</span>}
+      </Show>
     </button>
   );
 }
@@ -130,7 +127,7 @@ export default function Home() {
           <DownloadButton />
           <GithubPreview
             href="https://github.com/ImpulseB23/Prismoid"
-            class="btn btn-outline"
+            class="btn btn-outline btn-hero"
             target="_blank"
           >
             <GitHubIcon /> View source
