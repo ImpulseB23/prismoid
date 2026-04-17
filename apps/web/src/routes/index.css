@@ -79,8 +79,10 @@
 .btn-teaser {
   font: inherit;
   cursor: pointer;
-  min-width: 11rem;
+  width: 9rem;
   text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .btn-teaser.is-shaking {

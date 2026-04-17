@@ -4,14 +4,16 @@ import GithubPreview from "~/components/GithubPreview";
 import "./index.css";
 
 const NOT_READY_QUIPS = [
-  "not quite there yet",
-  "still cooking",
+  "not yet",
   "soon™",
-  "patience, friend",
-  "one more refactor",
-  "fighting the borrow checker",
-  "waiting on CI",
-  "nope, still compiling",
+  "patience",
+  "compiling",
+  "nuh uh",
+  "try later",
+  "hold up",
+  "no dice",
+  "cooking",
+  "wip",
 ];
 
 function DownloadButton() {
