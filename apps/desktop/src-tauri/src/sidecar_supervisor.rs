@@ -309,8 +309,10 @@ async fn run_once<R: Runtime>(
     // the rest of the function so its stdin stays open for the duration
     // of the session (dropping it mid-session would close stdin and
     // strand the control protocol). It also lets us force-kill on a
-    // heartbeat timeout without waiting for Tauri's Drop path.
-    let child = child.release();
+    // heartbeat timeout without waiting for Tauri's Drop path. Wrapped
+    // in Option so the heartbeat-timeout branch can take ownership for
+    // the `kill(self)` call.
+    let mut child = Some(child.release());
 
     // EmoteIndex lives for the lifetime of this sidecar run; a fresh one is
     // built on every respawn. Shared by the control-plane reader (which
@@ -335,6 +337,7 @@ async fn run_once<R: Runtime>(
     // respawns a fresh process. Initial deadline starts from bootstrap so
     // a sidecar that never emits a first heartbeat still gets killed.
     let mut last_heartbeat = Instant::now();
+    let mut killed = false;
     loop {
         let deadline = last_heartbeat + cfg.heartbeat_timeout;
         tokio::select! {
@@ -367,7 +370,7 @@ async fn run_once<R: Runtime>(
                     }
                 }
             }
-            _ = tokio::time::sleep_until(tokio::time::Instant::from_std(deadline)) => {
+            _ = tokio::time::sleep_until(tokio::time::Instant::from_std(deadline)), if !killed => {
                 let gap_ms = last_heartbeat.elapsed().as_millis() as u64;
                 tracing::error!(
                     attempt,
@@ -376,13 +379,16 @@ async fn run_once<R: Runtime>(
                     "heartbeat timeout; killing sidecar to force respawn"
                 );
                 emit_status(app, "unhealthy", attempt, None);
-                if let Err(e) = child.kill() {
-                    tracing::error!(error = %e, "kill after heartbeat timeout failed");
+                if let Some(c) = child.take() {
+                    if let Err(e) = c.kill() {
+                        tracing::error!(error = %e, "kill after heartbeat timeout failed");
+                    }
                 }
-                // Fall through to drain the stream until Terminated arrives
-                // so the drain loop gets a clean shutdown and we don't leak
-                // the task.
-                break;
+                // Disable the timeout branch and keep draining events so the
+                // outer supervise loop doesn't race a respawn against the
+                // dying child. We exit when we see Terminated or the stream
+                // closes on its own.
+                killed = true;
             }
         }
     }
