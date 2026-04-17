@@ -52,6 +52,58 @@ impl AuthState {
             wakeup,
         }
     }
+
+    pub fn status(&self) -> Result<AuthStatus, AuthCommandError> {
+        let login = self.manager.peek_login()?;
+        Ok(match login {
+            Some(l) => AuthStatus {
+                state: AuthStatusState::LoggedIn,
+                login: Some(l),
+            },
+            None => AuthStatus {
+                state: AuthStatusState::LoggedOut,
+                login: None,
+            },
+        })
+    }
+
+    pub async fn start_login(&self) -> Result<DeviceCodeView, AuthCommandError> {
+        let pending = self.manager.start_device_flow().await?;
+        let view = DeviceCodeView {
+            verification_uri: pending.details().verification_uri.clone(),
+            user_code: pending.details().user_code.clone(),
+            expires_in_secs: pending.details().expires_in,
+        };
+        *self.pending.lock().await = Some(pending);
+        Ok(view)
+    }
+
+    pub async fn complete_login(&self) -> Result<AuthStatus, AuthCommandError> {
+        let pending = self.pending.lock().await.take().ok_or(AuthCommandError {
+            kind: "no_pending_flow",
+            message: "twitch_start_login has not been called".into(),
+        })?;
+        let tokens = self.manager.complete_device_flow(pending).await?;
+        // notify_one stores a permit if the supervisor isn't currently
+        // parked on notified(), so the wake can't be lost between login
+        // completing and the supervisor reaching its await.
+        self.wakeup.notify_one();
+        Ok(AuthStatus {
+            state: AuthStatusState::LoggedIn,
+            login: Some(tokens.login),
+        })
+    }
+
+    pub async fn cancel_login(&self) {
+        self.pending.lock().await.take();
+    }
+
+    pub async fn logout(&self) -> Result<(), AuthCommandError> {
+        self.manager.logout()?;
+        self.pending.lock().await.take();
+        self.wakeup.notify_one();
+        Ok(())
+    }
 }
 
 /// Result of `twitch_auth_status`. The frontend uses `state` to pick
@@ -114,64 +166,32 @@ impl From<AuthError> for AuthCommandError {
 pub async fn twitch_auth_status(
     state: State<'_, AuthState>,
 ) -> Result<AuthStatus, AuthCommandError> {
-    let login = state.manager.peek_login()?;
-    Ok(match login {
-        Some(l) => AuthStatus {
-            state: AuthStatusState::LoggedIn,
-            login: Some(l),
-        },
-        None => AuthStatus {
-            state: AuthStatusState::LoggedOut,
-            login: None,
-        },
-    })
+    state.status()
 }
 
 #[tauri::command]
 pub async fn twitch_start_login(
     state: State<'_, AuthState>,
 ) -> Result<DeviceCodeView, AuthCommandError> {
-    let pending = state.manager.start_device_flow().await?;
-    let view = DeviceCodeView {
-        verification_uri: pending.details().verification_uri.clone(),
-        user_code: pending.details().user_code.clone(),
-        expires_in_secs: pending.details().expires_in,
-    };
-    *state.pending.lock().await = Some(pending);
-    Ok(view)
+    state.start_login().await
 }
 
 #[tauri::command]
 pub async fn twitch_complete_login(
     state: State<'_, AuthState>,
 ) -> Result<AuthStatus, AuthCommandError> {
-    let pending = state.pending.lock().await.take().ok_or(AuthCommandError {
-        kind: "no_pending_flow",
-        message: "twitch_start_login has not been called".into(),
-    })?;
-    let tokens = state.manager.complete_device_flow(pending).await?;
-    // notify_one stores a permit if the supervisor isn't currently parked
-    // on notified(), so the wake can't be lost between login completing and
-    // the supervisor reaching its await.
-    state.wakeup.notify_one();
-    Ok(AuthStatus {
-        state: AuthStatusState::LoggedIn,
-        login: Some(tokens.login),
-    })
+    state.complete_login().await
 }
 
 #[tauri::command]
 pub async fn twitch_cancel_login(state: State<'_, AuthState>) -> Result<(), AuthCommandError> {
-    state.pending.lock().await.take();
+    state.cancel_login().await;
     Ok(())
 }
 
 #[tauri::command]
 pub async fn twitch_logout(state: State<'_, AuthState>) -> Result<(), AuthCommandError> {
-    state.manager.logout()?;
-    state.pending.lock().await.take();
-    state.wakeup.notify_one();
-    Ok(())
+    state.logout().await
 }
 
 #[cfg(test)]
@@ -224,6 +244,27 @@ mod tests {
     }
 
     #[test]
+    fn auth_command_error_maps_keychain() {
+        let mapped: AuthCommandError = AuthError::Keychain(keyring::Error::NoEntry).into();
+        assert_eq!(mapped.kind, "keychain");
+        assert!(!mapped.message.is_empty());
+    }
+
+    #[test]
+    fn auth_command_error_maps_json() {
+        let json_err = serde_json::from_str::<TwitchTokens>("not json").unwrap_err();
+        let mapped: AuthCommandError = AuthError::Json(json_err).into();
+        assert_eq!(mapped.kind, "json");
+    }
+
+    #[test]
+    fn auth_command_error_maps_config() {
+        let mapped: AuthCommandError = AuthError::Config("bad scope".into()).into();
+        assert_eq!(mapped.kind, "config");
+        assert!(mapped.message.contains("bad scope"));
+    }
+
+    #[test]
     fn auth_status_serializes_logged_out_without_login_field() {
         let s = AuthStatus {
             state: AuthStatusState::LoggedOut,
@@ -260,8 +301,9 @@ mod tests {
         store.save(&fixture_tokens()).unwrap();
         let state = build_state_with_store(store);
 
-        let login = state.manager.peek_login().unwrap();
-        assert_eq!(login.as_deref(), Some("tester"));
+        let status = state.status().unwrap();
+        assert_eq!(status.state, AuthStatusState::LoggedIn);
+        assert_eq!(status.login.as_deref(), Some("tester"));
     }
 
     #[tokio::test]
@@ -269,7 +311,37 @@ mod tests {
         let store = MemoryStore::default();
         let state = build_state_with_store(store);
 
-        assert!(state.manager.peek_login().unwrap().is_none());
+        let status = state.status().unwrap();
+        assert_eq!(status.state, AuthStatusState::LoggedOut);
+        assert!(status.login.is_none());
+    }
+
+    #[tokio::test]
+    async fn complete_login_without_pending_returns_no_pending_flow() {
+        let state = build_state_with_store(MemoryStore::default());
+        let err = state.complete_login().await.unwrap_err();
+        assert_eq!(err.kind, "no_pending_flow");
+    }
+
+    #[tokio::test]
+    async fn logout_when_empty_store_still_clears_and_notifies() {
+        let state = build_state_with_store(MemoryStore::default());
+        let wakeup = state.wakeup.clone();
+
+        state.logout().await.unwrap();
+        // notify_one stored a permit, so a subsequent notified() resolves
+        // immediately even though no waiter was parked at signal time.
+        tokio::time::timeout(std::time::Duration::from_secs(1), wakeup.notified())
+            .await
+            .expect("permit should be available");
+    }
+
+    #[tokio::test]
+    async fn cancel_login_is_idempotent() {
+        let state = build_state_with_store(MemoryStore::default());
+        state.cancel_login().await;
+        state.cancel_login().await;
+        assert!(state.pending.lock().await.is_none());
     }
 
     #[tokio::test]
@@ -282,8 +354,7 @@ mod tests {
             wakeup.notified().await;
         });
 
-        state.manager.logout().unwrap();
-        state.wakeup.notify_one();
+        state.logout().await.unwrap();
 
         assert!(state.manager.peek_login().unwrap().is_none());
         tokio::time::timeout(std::time::Duration::from_secs(1), waiter)
@@ -295,11 +366,7 @@ mod tests {
     #[tokio::test]
     async fn cancel_login_clears_pending_slot() {
         let state = build_state_with_store(MemoryStore::default());
-        // Can't construct a real PendingDeviceFlow in unit tests (it
-        // requires a Twitch round-trip), so verify the slot ops only.
-        assert!(state.pending.lock().await.is_none());
-        // After explicit clear it remains None and no error is raised.
-        state.pending.lock().await.take();
+        state.cancel_login().await;
         assert!(state.pending.lock().await.is_none());
     }
 }
