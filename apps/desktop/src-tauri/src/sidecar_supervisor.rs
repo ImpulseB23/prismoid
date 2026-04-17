@@ -445,7 +445,8 @@ fn handle_sidecar_stdout<R: Runtime>(
 /// (emotes + badges + per-provider errors) so it can render emote and
 /// badge images and surface partial-failure state without a second round
 /// trip; only the emote sets feed [`EmoteIndex::load_bundle`], which is
-/// lock-free for readers.
+/// lock-free for readers. Badges are resolved entirely on the frontend
+/// from the same bundle — keeping the message hot path allocation-free.
 #[cfg(windows)]
 fn apply_emote_bundle<R: Runtime>(
     bundle: Box<EmoteBundle>,

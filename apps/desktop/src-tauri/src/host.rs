@@ -41,10 +41,13 @@ pub struct TwitchCreds {
 /// The caller is responsible for clearing the scratch between drain ticks;
 /// this function only appends.
 ///
-/// Each successful parse is scanned against `emote_index` and the resulting
-/// spans are attached to the message. Scans are cheap when the index is
-/// empty (no automaton, early return) so passing a fresh index is fine in
-/// tests and during the gap before `emote_bundle` arrives.
+/// Each successful parse is scanned for emotes against `emote_index`. The
+/// scan is cheap when the index is empty (no automaton, early return) so
+/// passing a fresh index is fine in tests and during the gap before
+/// `emote_bundle` arrives. Badges stay as `{set_id, id}` pairs on the
+/// wire; the frontend resolves them against its own bundle-derived store,
+/// which keeps the hot path allocation-free and avoids copying the same
+/// URL strings into every message.
 ///
 /// Messages that fail to parse or that aren't chat notifications are dropped
 /// with a log. Each parse is wrapped in `catch_unwind` so a panicking parser
