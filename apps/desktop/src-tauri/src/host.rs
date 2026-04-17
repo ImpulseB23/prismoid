@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 
+use crate::emote_index::EmoteBundle;
 use crate::message::{parse_twitch_envelope, UnifiedMessage};
 use crate::ringbuf::RawHandle;
 
@@ -152,6 +153,66 @@ pub fn unmark_handle_inheritable(_handle: RawHandle) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Parsed variant of a single line the sidecar emits on stdout. Unknown or
+/// malformed lines are surfaced as explicit variants so the caller can log
+/// them consistently rather than swallowing.
+pub enum SidecarEvent {
+    /// `{"type":"heartbeat","payload":{...}}`. The supervisor tracks
+    /// liveness via child-process exit rather than heartbeat gaps so this
+    /// variant is currently just a structured marker for future watchdogs.
+    Heartbeat,
+    /// `{"type":"emote_bundle","payload":Bundle}`. Built on channel-join,
+    /// consumed by the host to rebuild its emote index. Boxed because the
+    /// bundle is much larger than the other variants.
+    EmoteBundle(Box<EmoteBundle>),
+    /// A well-formed `{type, payload}` message the host does not yet
+    /// recognize. The inner string is the type tag.
+    Other(String),
+    /// Line was not valid JSON or lacked the `{type, payload}` shape.
+    Invalid,
+}
+
+/// Parses one line of sidecar stdout into a [`SidecarEvent`]. The sidecar
+/// writes one JSON object per line via `json.Encoder.Encode`, so `bytes`
+/// should be the full line without the trailing newline. Leading/trailing
+/// whitespace is tolerated.
+pub fn parse_sidecar_event(bytes: &[u8]) -> SidecarEvent {
+    #[derive(serde::Deserialize)]
+    struct Envelope {
+        #[serde(rename = "type", default)]
+        msg_type: String,
+        #[serde(default)]
+        payload: Option<serde_json::Value>,
+    }
+
+    let trimmed = bytes
+        .iter()
+        .position(|b| !b.is_ascii_whitespace())
+        .map(|i| &bytes[i..])
+        .unwrap_or(&[]);
+    if trimmed.is_empty() {
+        return SidecarEvent::Invalid;
+    }
+    let Ok(env) = serde_json::from_slice::<Envelope>(trimmed) else {
+        return SidecarEvent::Invalid;
+    };
+    match env.msg_type.as_str() {
+        "heartbeat" => SidecarEvent::Heartbeat,
+        "emote_bundle" => {
+            let payload = env.payload.unwrap_or(serde_json::Value::Null);
+            match serde_json::from_value::<EmoteBundle>(payload) {
+                Ok(b) => SidecarEvent::EmoteBundle(Box::new(b)),
+                Err(e) => {
+                    tracing::warn!(error = %e, "emote_bundle payload decode failed");
+                    SidecarEvent::Invalid
+                }
+            }
+        }
+        "" => SidecarEvent::Invalid,
+        other => SidecarEvent::Other(other.to_owned()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -253,5 +314,66 @@ mod tests {
 
         mark_handle_inheritable(handle).expect("mark should succeed");
         unmark_handle_inheritable(handle).expect("unmark should succeed");
+    }
+
+    #[test]
+    fn parse_sidecar_event_recognizes_heartbeat() {
+        let line = br#"{"type":"heartbeat","payload":{"ts_ms":123,"counter":4}}"#;
+        assert!(matches!(parse_sidecar_event(line), SidecarEvent::Heartbeat));
+    }
+
+    #[test]
+    fn parse_sidecar_event_decodes_emote_bundle() {
+        let line = br#"{"type":"emote_bundle","payload":{
+            "twitch_global_emotes":{"provider":"twitch","scope":"global","emotes":[
+                {"id":"1","code":"Kappa","provider":"twitch","url_1x":"https://t/1"}
+            ]},
+            "twitch_channel_emotes":{"provider":"twitch","scope":"channel","emotes":[]},
+            "twitch_global_badges":{"scope":"global","badges":[]},
+            "twitch_channel_badges":{"scope":"channel","badges":[]},
+            "seventv_global":{"provider":"7tv","scope":"global","emotes":[]},
+            "seventv_channel":{"provider":"7tv","scope":"channel","emotes":[]},
+            "bttv_global":{"provider":"bttv","scope":"global","emotes":[]},
+            "bttv_channel":{"provider":"bttv","scope":"channel","emotes":[]},
+            "ffz_global":{"provider":"ffz","scope":"global","emotes":[]},
+            "ffz_channel":{"provider":"ffz","scope":"channel","emotes":[]}
+        }}"#;
+        match parse_sidecar_event(line) {
+            SidecarEvent::EmoteBundle(b) => {
+                assert_eq!(b.total_emotes(), 1);
+                assert_eq!(b.twitch_global_emotes.emotes[0].code.as_ref(), "Kappa");
+            }
+            _ => panic!("expected EmoteBundle variant"),
+        }
+    }
+
+    #[test]
+    fn parse_sidecar_event_handles_unknown_type() {
+        let line = br#"{"type":"future_thing","payload":{"x":1}}"#;
+        match parse_sidecar_event(line) {
+            SidecarEvent::Other(t) => assert_eq!(t, "future_thing"),
+            _ => panic!("expected Other variant"),
+        }
+    }
+
+    #[test]
+    fn parse_sidecar_event_rejects_non_json() {
+        assert!(matches!(
+            parse_sidecar_event(b"plain text log line"),
+            SidecarEvent::Invalid
+        ));
+        assert!(matches!(
+            parse_sidecar_event(b"   \t  "),
+            SidecarEvent::Invalid
+        ));
+        assert!(matches!(parse_sidecar_event(b""), SidecarEvent::Invalid));
+    }
+
+    #[test]
+    fn parse_sidecar_event_rejects_malformed_emote_bundle_payload() {
+        // Type tag is right but payload shape is wrong. Return Invalid so the
+        // caller logs it, rather than silently dropping it as Other.
+        let line = br#"{"type":"emote_bundle","payload":{"twitch_global_emotes":"oops"}}"#;
+        assert!(matches!(parse_sidecar_event(line), SidecarEvent::Invalid));
     }
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/ImpulseB23/Prismoid/sidecar/internal/control"
+	"github.com/ImpulseB23/Prismoid/sidecar/internal/emotes"
 	"github.com/ImpulseB23/Prismoid/sidecar/internal/ringbuf"
 	"github.com/ImpulseB23/Prismoid/sidecar/internal/twitch"
 )
@@ -374,6 +375,12 @@ func HandleDeleteMessage(cmd control.Command, logger zerolog.Logger) {
 // HandleTwitchConnect spawns a Twitch EventSub client for the broadcaster in
 // cmd if there isn't already one running. The client writes envelope bytes to
 // `out`, which the writer goroutine drains into the ring buffer.
+//
+// A parallel goroutine fetches the channel's emote and badge bundle (Helix +
+// 7TV + BTTV + FFZ) and emits it as a single `emote_bundle` control message.
+// Fetches share the client's cancel context, so twitch_disconnect also
+// cancels an in-flight bundle fetch. Failures per provider are captured in
+// [emotes.Bundle.Errors] rather than blocking the chat connection.
 func HandleTwitchConnect(ctx context.Context, cmd control.Command, clients map[string]context.CancelFunc, out chan<- []byte, notify twitch.Notify, logger zerolog.Logger) {
 	if _, exists := clients[cmd.BroadcasterID]; exists {
 		logger.Warn().Str("broadcaster", cmd.BroadcasterID).Msg("already connected, ignoring")
@@ -403,7 +410,78 @@ func HandleTwitchConnect(ctx context.Context, cmd control.Command, clients map[s
 		}
 	}()
 
+	go emoteFetchFn(clientCtx, cmd, notify, logger)
+
 	logger.Info().Str("broadcaster", cmd.BroadcasterID).Msg("twitch client started")
+}
+
+// emoteFetchFn is the goroutine entry point for fetching an emote bundle on
+// twitch_connect. Package-level so tests can stub it to a no-op without
+// spinning up httptest servers for all four providers.
+var emoteFetchFn = FetchAndNotifyEmotes
+
+// FetchAndNotifyEmotes builds a [emotes.Fetcher] from the connect command's
+// credentials, fetches the channel's full emote/badge bundle, and emits it
+// to the host as an `emote_bundle` control message. Extracted so tests can
+// drive it directly without spinning up the full command loop.
+//
+// An empty BroadcasterID is treated as "nothing to fetch" and the function
+// returns without emitting. A cancelled context (twitch_disconnect or parent
+// shutdown mid-fetch) short-circuits the emit alike.
+func FetchAndNotifyEmotes(ctx context.Context, cmd control.Command, notify twitch.Notify, logger zerolog.Logger) {
+	if cmd.BroadcasterID == "" {
+		return
+	}
+	fetchAndEmit(ctx, buildFetcher(cmd), cmd.BroadcasterID, notify, logger)
+}
+
+// fetchAndEmit is the test-friendly core of [FetchAndNotifyEmotes]: given an
+// already-constructed fetcher, run the fetch and emit the bundle.
+func fetchAndEmit(ctx context.Context, f *emotes.Fetcher, broadcasterID string, notify twitch.Notify, logger zerolog.Logger) {
+	bundle := f.Fetch(ctx, broadcasterID)
+	if ctx.Err() != nil {
+		return
+	}
+	for _, pe := range bundle.Errors {
+		logger.Warn().
+			Str("broadcaster", broadcasterID).
+			Str("provider", string(pe.Provider)).
+			Str("scope", string(pe.Scope)).
+			Err(pe.Err).
+			Msg("emote provider fetch failed")
+	}
+	notify("emote_bundle", bundle)
+	logger.Info().
+		Str("broadcaster", broadcasterID).
+		Int("twitch_global", len(bundle.TwitchGlobalEmotes.Emotes)).
+		Int("twitch_channel", len(bundle.TwitchChannelEmotes.Emotes)).
+		Int("seventv_global", len(bundle.SevenTVGlobal.Emotes)).
+		Int("seventv_channel", len(bundle.SevenTVChannel.Emotes)).
+		Int("bttv_global", len(bundle.BTTVGlobal.Emotes)).
+		Int("bttv_channel", len(bundle.BTTVChannel.Emotes)).
+		Int("ffz_global", len(bundle.FFZGlobal.Emotes)).
+		Int("ffz_channel", len(bundle.FFZChannel.Emotes)).
+		Int("errors", len(bundle.Errors)).
+		Msg("emote bundle ready")
+}
+
+// buildFetcher constructs an [emotes.Fetcher] from a twitch_connect command.
+// Twitch Helix lookups require a client ID and bearer token; without them
+// the first-party sub-client is left nil and the fetcher skips those
+// endpoints entirely (third-party providers still run).
+func buildFetcher(cmd control.Command) *emotes.Fetcher {
+	f := &emotes.Fetcher{
+		SevenTV: &emotes.SevenTVClient{},
+		BTTV:    &emotes.BTTVClient{},
+		FFZ:     &emotes.FFZClient{},
+	}
+	if cmd.ClientID != "" && cmd.Token != "" {
+		f.Twitch = &emotes.TwitchClient{
+			ClientID:    cmd.ClientID,
+			AccessToken: cmd.Token,
+		}
+	}
+	return f
 }
 
 // HandleTwitchDisconnect cancels and removes a previously-connected client.

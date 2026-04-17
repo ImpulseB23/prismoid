@@ -32,9 +32,12 @@ use tauri_plugin_shell::{
 };
 
 #[cfg(windows)]
+use crate::emote_index::{EmoteBundle, EmoteIndex};
+#[cfg(windows)]
 use crate::host::{
     build_bootstrap_line, build_twitch_connect_line, mark_handle_inheritable, parse_batch,
-    unmark_handle_inheritable, TwitchCreds, SIDECAR_BINARY, SIGNAL_WAIT_TIMEOUT,
+    parse_sidecar_event, unmark_handle_inheritable, SidecarEvent, TwitchCreds, SIDECAR_BINARY,
+    SIGNAL_WAIT_TIMEOUT,
 };
 #[cfg(windows)]
 use crate::message::UnifiedMessage;
@@ -310,10 +313,16 @@ async fn run_once<R: Runtime>(
 
     emit_status(app, "running", attempt, None);
 
+    // EmoteIndex lives for the lifetime of this sidecar run; a fresh one is
+    // built on every respawn. Not yet consumed on the message hot path
+    // (follow-up) but held here so `emote_bundle` messages have a stable
+    // target while the frontend already receives the bundle for rendering.
+    let emote_index: Arc<EmoteIndex> = Arc::new(EmoteIndex::new());
+
     while let Some(event) = rx.recv().await {
         match event {
             CommandEvent::Stdout(bytes) => {
-                tracing::debug!(line = %String::from_utf8_lossy(&bytes), "sidecar stdout");
+                handle_sidecar_stdout(&bytes, app, &emote_index);
             }
             CommandEvent::Stderr(bytes) => {
                 tracing::debug!(line = %String::from_utf8_lossy(&bytes), "sidecar stderr");
@@ -395,6 +404,60 @@ fn drain_and_emit<R: Runtime>(
     if let Err(e) = app.emit("chat_messages", &*batch) {
         tracing::error!(error = %e, "failed to emit chat_messages");
     }
+}
+
+/// Processes one line of sidecar stdout. Tauri's shell plugin (in
+/// non-raw mode, which is our default) emits one [`CommandEvent::Stdout`]
+/// per `\n`-terminated line written by the child, with the trailing
+/// newline stripped, so a partial line never reaches us. The split-on-`\n`
+/// here is defensive: if the plugin ever changes that contract or the
+/// sidecar buffers multiple JSON objects per write, each object still
+/// parses independently. Empty pieces (trailing newline, blank lines) are
+/// skipped.
+#[cfg(windows)]
+fn handle_sidecar_stdout<R: Runtime>(
+    bytes: &[u8],
+    app: &AppHandle<R>,
+    emote_index: &Arc<EmoteIndex>,
+) {
+    for line in bytes.split(|b| *b == b'\n') {
+        if line.is_empty() {
+            continue;
+        }
+        match parse_sidecar_event(line) {
+            SidecarEvent::Heartbeat => {}
+            SidecarEvent::EmoteBundle(bundle) => apply_emote_bundle(bundle, app, emote_index),
+            SidecarEvent::Other(t) => {
+                tracing::debug!(msg_type = %t, "unhandled sidecar control message");
+            }
+            SidecarEvent::Invalid => {
+                tracing::debug!(line = %String::from_utf8_lossy(line), "sidecar stdout (non-control)");
+            }
+        }
+    }
+}
+
+/// Swaps a fresh [`EmoteBundle`] into the supervisor's [`EmoteIndex`] and
+/// forwards a clone to the frontend. The frontend gets the full bundle
+/// (emotes + badges + per-provider errors) so it can render emote and
+/// badge images and surface partial-failure state without a second round
+/// trip; only the emote sets feed [`EmoteIndex::load_bundle`], which is
+/// lock-free for readers.
+#[cfg(windows)]
+fn apply_emote_bundle<R: Runtime>(
+    bundle: Box<EmoteBundle>,
+    app: &AppHandle<R>,
+    emote_index: &Arc<EmoteIndex>,
+) {
+    let total = bundle.total_emotes();
+    // Frontend needs the full bundle to render URLs; cloning is cheap
+    // compared to the network fetch that produced it and happens at most
+    // once per channel join.
+    if let Err(e) = app.emit("emote_bundle", bundle.as_ref()) {
+        tracing::error!(error = %e, "failed to emit emote_bundle");
+    }
+    emote_index.load_bundle(*bundle);
+    tracing::info!(total_emotes = total, "emote index rebuilt");
 }
 
 fn emit_status<R: Runtime>(

@@ -2,6 +2,7 @@ package emotes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 )
@@ -13,18 +14,22 @@ import (
 // Any provider fetch that fails is reported in [Bundle.Errors] and the
 // corresponding field is left zero-valued. A failing provider never fails
 // the whole bundle — a dead BTTV CDN must not stop Twitch chat.
+//
+// The JSON shape is the on-the-wire contract for the `emote_bundle` control
+// message the sidecar emits to the Rust host; changes here must be mirrored
+// in `src-tauri/src/emote_index.rs` deserialization.
 type Bundle struct {
-	TwitchGlobalEmotes  EmoteSet
-	TwitchChannelEmotes EmoteSet
-	TwitchGlobalBadges  BadgeSet
-	TwitchChannelBadges BadgeSet
-	SevenTVGlobal       EmoteSet
-	SevenTVChannel      EmoteSet
-	BTTVGlobal          EmoteSet
-	BTTVChannel         EmoteSet
-	FFZGlobal           EmoteSet
-	FFZChannel          EmoteSet
-	Errors              []ProviderError
+	TwitchGlobalEmotes  EmoteSet        `json:"twitch_global_emotes"`
+	TwitchChannelEmotes EmoteSet        `json:"twitch_channel_emotes"`
+	TwitchGlobalBadges  BadgeSet        `json:"twitch_global_badges"`
+	TwitchChannelBadges BadgeSet        `json:"twitch_channel_badges"`
+	SevenTVGlobal       EmoteSet        `json:"seventv_global"`
+	SevenTVChannel      EmoteSet        `json:"seventv_channel"`
+	BTTVGlobal          EmoteSet        `json:"bttv_global"`
+	BTTVChannel         EmoteSet        `json:"bttv_channel"`
+	FFZGlobal           EmoteSet        `json:"ffz_global"`
+	FFZChannel          EmoteSet        `json:"ffz_channel"`
+	Errors              []ProviderError `json:"errors,omitempty"`
 }
 
 // ProviderError attributes a fetch failure to a specific provider and scope.
@@ -50,6 +55,21 @@ func (e *ProviderError) Unwrap() error {
 		return nil
 	}
 	return e.Err
+}
+
+// MarshalJSON renders the error string so the host can log it without
+// needing a Go error type on the Rust side. `error` is an interface and
+// marshals to `{}` by default.
+func (e ProviderError) MarshalJSON() ([]byte, error) {
+	var msg string
+	if e.Err != nil {
+		msg = e.Err.Error()
+	}
+	return json.Marshal(struct {
+		Provider Provider `json:"provider"`
+		Scope    Scope    `json:"scope"`
+		Error    string   `json:"error"`
+	}{e.Provider, e.Scope, msg})
 }
 
 // Fetcher is the aggregate client for a single channel join. Each sub-client

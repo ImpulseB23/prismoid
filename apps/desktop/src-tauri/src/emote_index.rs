@@ -31,7 +31,7 @@ pub enum Provider {
 /// Normalized metadata for a single emote. Fields match the Go side
 /// (`sidecar/internal/emotes.Emote`) so the sidecar can write these directly
 /// over the control plane.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EmoteMeta {
     pub id: Box<str>,
     /// Emote code (what users type). Stored as `Arc<str>` so the index can
@@ -52,6 +52,113 @@ pub struct EmoteMeta {
     pub animated: bool,
     #[serde(default)]
     pub zero_width: bool,
+}
+
+/// One provider+scope slice of an [`EmoteBundle`]. Mirrors the
+/// payload-bearing field of `sidecar/internal/emotes.EmoteSet`. The Go
+/// type also carries `provider`, `scope`, and `channel_id` for debugging
+/// — those are intentionally dropped here because the bundle field name
+/// itself (`seventv_global`, `twitch_channel_emotes`, …) already encodes
+/// the provider+scope pair, and the channel ID lives on the parent join
+/// command. Adding extra `#[serde]` attributes would be needed to ignore
+/// them; serde's default behaviour already does so silently.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct EmoteSet {
+    #[serde(default)]
+    pub emotes: Vec<EmoteMeta>,
+}
+
+/// A single chat badge as delivered by the sidecar in a [`BadgeSet`].
+/// Carried through the bundle untouched so the frontend can render badge
+/// images; not consumed by the host scanner.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Badge {
+    pub set: Box<str>,
+    pub version: Box<str>,
+    #[serde(default)]
+    pub title: Box<str>,
+    #[serde(rename = "url_1x")]
+    pub url_1x: Box<str>,
+    #[serde(rename = "url_2x", default)]
+    pub url_2x: Box<str>,
+    #[serde(rename = "url_4x", default)]
+    pub url_4x: Box<str>,
+}
+
+/// Provider+scope slice of badges. Mirrors
+/// `sidecar/internal/emotes.BadgeSet`'s payload field; see [`EmoteSet`]
+/// for why the metadata fields are omitted.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BadgeSet {
+    #[serde(default)]
+    pub badges: Vec<Badge>,
+}
+
+/// The full per-channel emote and badge catalog as delivered by the sidecar
+/// in a single `emote_bundle` control message. The four emote sets feed
+/// [`EmoteIndex::load_bundle`]; the two badge sets and the error list pass
+/// through the bundle unchanged so the frontend can render badges and
+/// surface partial-failure state without a second round trip.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct EmoteBundle {
+    #[serde(default)]
+    pub twitch_global_emotes: EmoteSet,
+    #[serde(default)]
+    pub twitch_channel_emotes: EmoteSet,
+    #[serde(default)]
+    pub twitch_global_badges: BadgeSet,
+    #[serde(default)]
+    pub twitch_channel_badges: BadgeSet,
+    #[serde(default)]
+    pub seventv_global: EmoteSet,
+    #[serde(default)]
+    pub seventv_channel: EmoteSet,
+    #[serde(default)]
+    pub bttv_global: EmoteSet,
+    #[serde(default)]
+    pub bttv_channel: EmoteSet,
+    #[serde(default)]
+    pub ffz_global: EmoteSet,
+    #[serde(default)]
+    pub ffz_channel: EmoteSet,
+    /// Per-provider fetch failures from the sidecar, rendered as opaque
+    /// JSON values. Each entry has the shape
+    /// `{"provider": "...", "scope": "...", "error": "..."}`.
+    #[serde(default)]
+    pub errors: Vec<serde_json::Value>,
+}
+
+impl EmoteBundle {
+    /// Iterates every emote in the order [`EmoteIndex::load_bundle`] uses
+    /// to resolve duplicate codes: global first, then channel, with
+    /// third-party providers overriding Twitch within each scope. The
+    /// Chatterino convention, and the expected one for users coming from
+    /// other Twitch chat clients.
+    fn iter_in_precedence_order(self) -> impl Iterator<Item = EmoteMeta> {
+        self.twitch_global_emotes
+            .emotes
+            .into_iter()
+            .chain(self.bttv_global.emotes)
+            .chain(self.ffz_global.emotes)
+            .chain(self.seventv_global.emotes)
+            .chain(self.twitch_channel_emotes.emotes)
+            .chain(self.bttv_channel.emotes)
+            .chain(self.ffz_channel.emotes)
+            .chain(self.seventv_channel.emotes)
+    }
+
+    /// Total emote count across all eight sets. Exposed for logging + the
+    /// frontend status UI, not used on the hot path.
+    pub fn total_emotes(&self) -> usize {
+        self.twitch_global_emotes.emotes.len()
+            + self.twitch_channel_emotes.emotes.len()
+            + self.seventv_global.emotes.len()
+            + self.seventv_channel.emotes.len()
+            + self.bttv_global.emotes.len()
+            + self.bttv_channel.emotes.len()
+            + self.ffz_global.emotes.len()
+            + self.ffz_channel.emotes.len()
+    }
 }
 
 /// Byte range of a matched emote code inside a message's `message_text`,
@@ -147,6 +254,15 @@ impl EmoteIndex {
             patterns,
             ac,
         }));
+    }
+
+    /// Replace the current snapshot with one built from an [`EmoteBundle`]
+    /// delivered by the sidecar. Equivalent to calling [`load`](Self::load)
+    /// with the bundle's emotes in the documented precedence order so
+    /// channel-scoped emotes and third-party providers win over Twitch
+    /// globals.
+    pub fn load_bundle(&self, bundle: EmoteBundle) {
+        self.load(bundle.iter_in_precedence_order());
     }
 
     /// Look up an emote by its exact code. Case-sensitive — Twitch and
@@ -408,5 +524,116 @@ mod tests {
         assert_eq!(got.provider, Provider::SevenTv);
         assert!(got.animated && got.zero_width);
         assert_eq!(got.width, 32);
+    }
+
+    #[test]
+    fn bundle_deserializes_from_sidecar_json() {
+        // Matches the on-wire shape emitted by sidecar FetchAndNotifyEmotes.
+        // Extra fields (badges, errors) are tolerated via serde's default
+        // "ignore unknown" behaviour.
+        let raw = r#"{
+            "twitch_global_emotes": {"provider":"twitch","scope":"global","emotes":[
+                {"id":"1","code":"Kappa","provider":"twitch","url_1x":"https://t/1"}
+            ]},
+            "twitch_channel_emotes": {"provider":"twitch","scope":"channel","emotes":[]},
+            "twitch_global_badges": {"scope":"global","badges":[]},
+            "twitch_channel_badges": {"scope":"channel","badges":[]},
+            "seventv_global": {"provider":"7tv","scope":"global","emotes":[
+                {"id":"2","code":"PepegaAim","provider":"7tv","url_1x":"https://s/2"}
+            ]},
+            "seventv_channel": {"provider":"7tv","scope":"channel","emotes":[]},
+            "bttv_global": {"provider":"bttv","scope":"global","emotes":[]},
+            "bttv_channel": {"provider":"bttv","scope":"channel","emotes":[]},
+            "ffz_global": {"provider":"ffz","scope":"global","emotes":[]},
+            "ffz_channel": {"provider":"ffz","scope":"channel","emotes":[]},
+            "errors": []
+        }"#;
+        let b: EmoteBundle = serde_json::from_str(raw).unwrap();
+        assert_eq!(b.total_emotes(), 2);
+        assert_eq!(b.twitch_global_emotes.emotes[0].code.as_ref(), "Kappa");
+        assert_eq!(b.seventv_global.emotes[0].provider, Provider::SevenTv);
+    }
+
+    #[test]
+    fn load_bundle_channel_overrides_global() {
+        let idx = EmoteIndex::new();
+        let mut bundle = EmoteBundle::default();
+        bundle
+            .twitch_global_emotes
+            .emotes
+            .push(meta("Kappa", Provider::Twitch));
+        bundle
+            .seventv_channel
+            .emotes
+            .push(meta("Kappa", Provider::SevenTv));
+
+        idx.load_bundle(bundle);
+
+        // Channel-scoped 7TV overrides the global Twitch emote with the same code.
+        let hit = idx.lookup("Kappa").unwrap();
+        assert_eq!(hit.provider, Provider::SevenTv);
+    }
+
+    #[test]
+    fn load_bundle_third_party_overrides_twitch_in_same_scope() {
+        let idx = EmoteIndex::new();
+        let mut bundle = EmoteBundle::default();
+        bundle
+            .twitch_global_emotes
+            .emotes
+            .push(meta("PogChamp", Provider::Twitch));
+        bundle
+            .seventv_global
+            .emotes
+            .push(meta("PogChamp", Provider::SevenTv));
+
+        idx.load_bundle(bundle);
+
+        let hit = idx.lookup("PogChamp").unwrap();
+        assert_eq!(hit.provider, Provider::SevenTv);
+    }
+
+    #[test]
+    fn load_bundle_empty_is_safe() {
+        let idx = EmoteIndex::new();
+        idx.load_bundle(EmoteBundle::default());
+        assert!(idx.is_empty());
+    }
+
+    #[test]
+    fn bundle_round_trips_badges_and_errors() {
+        let wire = serde_json::json!({
+            "twitch_global_emotes": {"emotes": []},
+            "twitch_channel_emotes": {"emotes": []},
+            "twitch_global_badges": {"badges": [
+                {"set": "moderator", "version": "1", "url_1x": "https://cdn/mod/1x", "url_2x": "https://cdn/mod/2x"}
+            ]},
+            "twitch_channel_badges": {"badges": []},
+            "seventv_global": {"emotes": []},
+            "seventv_channel": {"emotes": []},
+            "bttv_global": {"emotes": []},
+            "bttv_channel": {"emotes": []},
+            "ffz_global": {"emotes": []},
+            "ffz_channel": {"emotes": []},
+            "errors": [{"provider": "bttv", "scope": "channel", "error": "boom"}]
+        });
+        let bundle: EmoteBundle = serde_json::from_value(wire).unwrap();
+        assert_eq!(bundle.twitch_global_badges.badges.len(), 1);
+        assert_eq!(
+            bundle.twitch_global_badges.badges[0].set.as_ref(),
+            "moderator"
+        );
+        assert_eq!(
+            bundle.twitch_global_badges.badges[0].url_2x.as_ref(),
+            "https://cdn/mod/2x"
+        );
+        assert_eq!(bundle.errors.len(), 1);
+
+        let reserialized = serde_json::to_value(&bundle).unwrap();
+        assert_eq!(
+            reserialized["twitch_global_badges"]["badges"][0]["url_1x"],
+            "https://cdn/mod/1x"
+        );
+        assert_eq!(reserialized["errors"][0]["error"], "boom");
     }
 }
