@@ -25,7 +25,7 @@ import (
 
 const (
 	testCacheLine  = 64
-	testHeaderSize = testCacheLine * 3
+	testHeaderSize = testCacheLine * 5
 )
 
 // makeTestRingBuffer constructs a ring buffer writer backed by a plain []byte.
@@ -139,14 +139,14 @@ func TestRunWriter_StopsOnContextCancel(t *testing.T) {
 	}
 }
 
-func TestRunWriter_SkipsSignalOnFullRing(t *testing.T) {
-	// Tiny 32-byte data region; each message is 4 bytes framing + 20 bytes
-	// payload = 24 bytes. Second write should fail (capacity 32 < 48).
+func TestRunWriter_SkipsSignalOnRejectedPayload(t *testing.T) {
+	// 32-byte ring; a 32-byte payload would frame to 36 bytes, exceeding
+	// capacity, so writer.Write returns false and signal must not fire.
 	writer, _ := makeTestRingBuffer(t, 32)
 
-	in := make(chan []byte, 4)
-	in <- make([]byte, 20)
-	in <- make([]byte, 20)
+	in := make(chan []byte, 2)
+	in <- make([]byte, 32)
+	in <- make([]byte, 8)
 
 	var signalCount atomic.Int32
 	signal := func() { signalCount.Add(1) }
@@ -162,9 +162,9 @@ func TestRunWriter_SkipsSignalOnFullRing(t *testing.T) {
 	cancel()
 	<-done
 
-	// Only the first write succeeded, so signal should have fired exactly once.
+	// Only the second (valid) write should have signaled.
 	if got := signalCount.Load(); got != 1 {
-		t.Errorf("expected 1 signal (dropped writes must not signal), got %d", got)
+		t.Errorf("expected 1 signal (rejected writes must not signal), got %d", got)
 	}
 }
 
