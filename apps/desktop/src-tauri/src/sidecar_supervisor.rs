@@ -330,22 +330,73 @@ async fn run_once<R: Runtime>(
 
     emit_status(app, "running", attempt, None);
 
-    // Heartbeat deadline tracking. The sidecar emits a heartbeat every
-    // 1 s (see `src-sidecar/internal/sidecar/sidecar.go::heartbeatPeriod`);
-    // if `cfg.heartbeat_timeout` elapses without one, the child is
-    // considered wedged and we force-kill it so the outer supervise loop
-    // respawns a fresh process. Initial deadline starts from bootstrap so
-    // a sidecar that never emits a first heartbeat still gets killed.
+    run_event_loop(
+        &mut rx,
+        cfg.heartbeat_timeout,
+        attempt,
+        |bytes| handle_sidecar_stdout(bytes, app, &emote_index),
+        || {
+            if let Some(c) = child.take() {
+                if let Err(e) = c.kill() {
+                    tracing::error!(error = %e, "kill after heartbeat timeout failed");
+                }
+            }
+        },
+        || emit_status(app, "unhealthy", attempt, None),
+    )
+    .await;
+
+    // Release-store the shutdown flag; the drain loop does an Acquire-load
+    // at the top of every iteration and exits after one final drain pass
+    // so no pending messages are dropped on the floor.
+    shutdown.store(true, Ordering::Release);
+    if let Err(e) = drain_handle.await {
+        tracing::error!(error = %e, "drain task join failed");
+    }
+
+    emit_status(app, "terminated", attempt, None);
+    Ok(())
+}
+
+/// Drives the CommandEvent stream until the sidecar terminates or its
+/// heartbeat stream goes silent for longer than `heartbeat_timeout`.
+///
+/// Extracted from [`run_once`] so the heartbeat/respawn logic can be
+/// tested without a real Tauri runtime. Callers inject:
+/// * `on_stdout`: parses each stdout batch and returns `true` if any
+///   line was a heartbeat (resets the timeout deadline).
+/// * `on_timeout_kill`: force-kills the child process. Called at most
+///   once, the first time the heartbeat deadline elapses.
+/// * `on_unhealthy`: emits the "unhealthy" sidecar status so the
+///   frontend can render a respawn indicator.
+///
+/// After the first timeout fires the timeout branch is disabled and the
+/// loop keeps draining events so the outer supervise loop doesn't race a
+/// respawn against the dying child: we exit only on `Terminated` or when
+/// the event stream closes on its own.
+#[cfg(windows)]
+async fn run_event_loop<F, K, U>(
+    rx: &mut tauri::async_runtime::Receiver<CommandEvent>,
+    heartbeat_timeout: Duration,
+    attempt: u32,
+    mut on_stdout: F,
+    mut on_timeout_kill: K,
+    mut on_unhealthy: U,
+) where
+    F: FnMut(&[u8]) -> bool,
+    K: FnMut(),
+    U: FnMut(),
+{
     let mut last_heartbeat = Instant::now();
     let mut killed = false;
     loop {
-        let deadline = last_heartbeat + cfg.heartbeat_timeout;
+        let deadline = last_heartbeat + heartbeat_timeout;
         tokio::select! {
             maybe_event = rx.recv() => {
                 let Some(event) = maybe_event else { break };
                 match event {
                     CommandEvent::Stdout(bytes) => {
-                        if handle_sidecar_stdout(&bytes, app, &emote_index) {
+                        if on_stdout(&bytes) {
                             last_heartbeat = Instant::now();
                         }
                     }
@@ -375,34 +426,15 @@ async fn run_once<R: Runtime>(
                 tracing::error!(
                     attempt,
                     gap_ms,
-                    timeout_ms = cfg.heartbeat_timeout.as_millis() as u64,
+                    timeout_ms = heartbeat_timeout.as_millis() as u64,
                     "heartbeat timeout; killing sidecar to force respawn"
                 );
-                emit_status(app, "unhealthy", attempt, None);
-                if let Some(c) = child.take() {
-                    if let Err(e) = c.kill() {
-                        tracing::error!(error = %e, "kill after heartbeat timeout failed");
-                    }
-                }
-                // Disable the timeout branch and keep draining events so the
-                // outer supervise loop doesn't race a respawn against the
-                // dying child. We exit when we see Terminated or the stream
-                // closes on its own.
+                on_unhealthy();
+                on_timeout_kill();
                 killed = true;
             }
         }
     }
-
-    // Release-store the shutdown flag; the drain loop does an Acquire-load
-    // at the top of every iteration and exits after one final drain pass
-    // so no pending messages are dropped on the floor.
-    shutdown.store(true, Ordering::Release);
-    if let Err(e) = drain_handle.await {
-        tracing::error!(error = %e, "drain task join failed");
-    }
-
-    emit_status(app, "terminated", attempt, None);
-    Ok(())
 }
 
 #[cfg(windows)]
@@ -665,5 +697,244 @@ mod tests {
         batch.extend_from_slice(br#"{"type":"heartbeat","payload":{"ts_ms":3,"counter":3}}"#);
         batch.extend_from_slice(b"\n\n");
         assert!(scan_sidecar_stdout(&batch, |_| panic!("no bundle")));
+    }
+
+    // -- run_event_loop tests --------------------------------------------
+    //
+    // These drive the real event loop with an mpsc channel of
+    // `CommandEvent`s under `tokio::time::pause()`, letting us assert the
+    // heartbeat-respawn behaviour deterministically without a Tauri
+    // runtime or a real child process.
+
+    use std::cell::Cell;
+    use std::rc::Rc;
+    use tauri_plugin_shell::process::TerminatedPayload;
+    use tokio::sync::mpsc;
+
+    const HB_LINE: &[u8] = br#"{"type":"heartbeat","payload":{"ts_ms":1,"counter":1}}"#;
+
+    #[derive(Default)]
+    struct LoopProbe {
+        stdout_calls: Rc<Cell<u32>>,
+        kill_calls: Rc<Cell<u32>>,
+        unhealthy_calls: Rc<Cell<u32>>,
+    }
+
+    impl LoopProbe {
+        fn stdout(&self) -> u32 {
+            self.stdout_calls.get()
+        }
+        fn kills(&self) -> u32 {
+            self.kill_calls.get()
+        }
+        fn unhealthy(&self) -> u32 {
+            self.unhealthy_calls.get()
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn run_event_loop_exits_on_terminated_event() {
+        let (tx, mut rx) = mpsc::channel::<CommandEvent>(4);
+        let probe = LoopProbe::default();
+        let stdout_calls = probe.stdout_calls.clone();
+        let kill_calls = probe.kill_calls.clone();
+        let unhealthy_calls = probe.unhealthy_calls.clone();
+
+        tx.send(CommandEvent::Terminated(TerminatedPayload {
+            code: Some(0),
+            signal: None,
+        }))
+        .await
+        .unwrap();
+
+        run_event_loop(
+            &mut rx,
+            Duration::from_secs(60),
+            1,
+            |_| {
+                stdout_calls.set(stdout_calls.get() + 1);
+                false
+            },
+            || kill_calls.set(kill_calls.get() + 1),
+            || unhealthy_calls.set(unhealthy_calls.get() + 1),
+        )
+        .await;
+
+        assert_eq!(probe.stdout(), 0);
+        assert_eq!(probe.kills(), 0);
+        assert_eq!(probe.unhealthy(), 0);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn run_event_loop_exits_when_stream_closes() {
+        let (tx, mut rx) = mpsc::channel::<CommandEvent>(4);
+        drop(tx); // close the channel immediately
+        let probe = LoopProbe::default();
+        let kill_calls = probe.kill_calls.clone();
+        let unhealthy_calls = probe.unhealthy_calls.clone();
+
+        run_event_loop(
+            &mut rx,
+            Duration::from_secs(60),
+            1,
+            |_| false,
+            || kill_calls.set(kill_calls.get() + 1),
+            || unhealthy_calls.set(unhealthy_calls.get() + 1),
+        )
+        .await;
+
+        assert_eq!(probe.kills(), 0);
+        assert_eq!(probe.unhealthy(), 0);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn run_event_loop_kills_on_heartbeat_timeout() {
+        let (tx, mut rx) = mpsc::channel::<CommandEvent>(4);
+        let probe = LoopProbe::default();
+        let kill_calls = probe.kill_calls.clone();
+        let unhealthy_calls = probe.unhealthy_calls.clone();
+
+        // Drive the loop and feed a Terminated after the kill fires so it
+        // exits cleanly. spawn_local isn't available on a single-threaded
+        // runtime without LocalSet, so send the event synchronously after
+        // `tokio::time::advance`.
+        let timeout = Duration::from_secs(3);
+        let loop_fut = run_event_loop(
+            &mut rx,
+            timeout,
+            1,
+            |_| false,
+            || kill_calls.set(kill_calls.get() + 1),
+            || unhealthy_calls.set(unhealthy_calls.get() + 1),
+        );
+
+        tokio::pin!(loop_fut);
+
+        // Advance past the heartbeat deadline; the select! should pick the
+        // timeout branch.
+        tokio::select! {
+            _ = &mut loop_fut => panic!("loop exited before timeout"),
+            _ = tokio::time::sleep(timeout + Duration::from_millis(100)) => {}
+        }
+
+        // Now close the stream so the loop exits.
+        drop(tx);
+        loop_fut.await;
+
+        assert_eq!(probe.kills(), 1);
+        assert_eq!(probe.unhealthy(), 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn run_event_loop_heartbeat_resets_deadline() {
+        let (tx, mut rx) = mpsc::channel::<CommandEvent>(16);
+        let probe = LoopProbe::default();
+        let stdout_calls = probe.stdout_calls.clone();
+        let kill_calls = probe.kill_calls.clone();
+
+        let timeout = Duration::from_secs(3);
+
+        // Pre-load two heartbeat batches, each followed by a ~2s pause.
+        // After the second heartbeat we send Terminated so the loop exits
+        // without the timeout branch ever firing.
+        tx.send(CommandEvent::Stdout(HB_LINE.to_vec()))
+            .await
+            .unwrap();
+        tx.send(CommandEvent::Stdout(HB_LINE.to_vec()))
+            .await
+            .unwrap();
+        tx.send(CommandEvent::Terminated(TerminatedPayload {
+            code: Some(0),
+            signal: None,
+        }))
+        .await
+        .unwrap();
+
+        run_event_loop(
+            &mut rx,
+            timeout,
+            1,
+            |bytes| {
+                stdout_calls.set(stdout_calls.get() + 1);
+                // Forward to the pure scanner so heartbeat detection is real.
+                scan_sidecar_stdout(bytes, |_| {})
+            },
+            || kill_calls.set(kill_calls.get() + 1),
+            || {},
+        )
+        .await;
+
+        assert_eq!(probe.stdout(), 2);
+        assert_eq!(probe.kills(), 0);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn run_event_loop_logs_stderr_and_error_without_affecting_state() {
+        let (tx, mut rx) = mpsc::channel::<CommandEvent>(8);
+        let probe = LoopProbe::default();
+        let kill_calls = probe.kill_calls.clone();
+
+        tx.send(CommandEvent::Stderr(b"some warning\n".to_vec()))
+            .await
+            .unwrap();
+        tx.send(CommandEvent::Error("stream hiccup".into()))
+            .await
+            .unwrap();
+        tx.send(CommandEvent::Terminated(TerminatedPayload {
+            code: Some(1),
+            signal: None,
+        }))
+        .await
+        .unwrap();
+
+        run_event_loop(
+            &mut rx,
+            Duration::from_secs(60),
+            7,
+            |_| false,
+            || kill_calls.set(kill_calls.get() + 1),
+            || {},
+        )
+        .await;
+
+        assert_eq!(probe.kills(), 0);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn run_event_loop_kills_at_most_once_across_multiple_deadlines() {
+        let (tx, mut rx) = mpsc::channel::<CommandEvent>(4);
+        let probe = LoopProbe::default();
+        let kill_calls = probe.kill_calls.clone();
+        let unhealthy_calls = probe.unhealthy_calls.clone();
+
+        let timeout = Duration::from_millis(500);
+        let loop_fut = run_event_loop(
+            &mut rx,
+            timeout,
+            1,
+            |_| false,
+            || kill_calls.set(kill_calls.get() + 1),
+            || unhealthy_calls.set(unhealthy_calls.get() + 1),
+        );
+        tokio::pin!(loop_fut);
+
+        // Let the timeout branch fire once.
+        tokio::select! {
+            _ = &mut loop_fut => panic!("loop exited before timeout"),
+            _ = tokio::time::sleep(timeout * 2) => {}
+        }
+
+        // Advance another few timeouts with the stream still open; the
+        // timeout branch is gated on `!killed` so it must not fire again.
+        tokio::select! {
+            _ = &mut loop_fut => panic!("loop exited unexpectedly"),
+            _ = tokio::time::sleep(timeout * 5) => {}
+        }
+
+        drop(tx);
+        loop_fut.await;
+
+        assert_eq!(probe.kills(), 1);
+        assert_eq!(probe.unhealthy(), 1);
     }
 }
