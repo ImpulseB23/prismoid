@@ -285,10 +285,10 @@ pub fn parse_kick_event(bytes: &[u8]) -> Result<Option<UnifiedMessage>, ParseErr
 
     let badges: Vec<Badge> = identity
         .badges
-        .iter()
+        .into_iter()
         .map(|b| Badge {
-            set_id: b.badge_type.clone(),
-            id: b.text.clone().unwrap_or_default(),
+            set_id: b.badge_type,
+            id: b.text.unwrap_or_default(),
         })
         .collect();
 

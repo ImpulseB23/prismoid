@@ -171,19 +171,18 @@ func TestRunWriter_SkipsSignalOnRejectedPayload(t *testing.T) {
 	in := make(chan []byte, 2)
 	in <- make([]byte, 32)
 	in <- make([]byte, 8)
+	close(in)
 
 	var signalCount atomic.Int32
 	signal := func() { signalCount.Add(1) }
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx := context.Background()
 	done := make(chan struct{})
 	go func() {
 		RunWriter(ctx, in, writer, signal)
 		close(done)
 	}()
 
-	time.Sleep(50 * time.Millisecond)
-	cancel()
 	<-done
 
 	// Only the second (valid) write should have signaled.

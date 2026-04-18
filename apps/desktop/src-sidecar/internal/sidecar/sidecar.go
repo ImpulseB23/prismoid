@@ -509,6 +509,10 @@ func HandleTwitchDisconnect(cmd control.Command, clients map[string]context.Canc
 // cmd if there isn't already one running. Uses the chatroom ID as the client
 // registry key (prefixed with "kick:" to avoid collisions with Twitch IDs).
 func HandleKickConnect(ctx context.Context, cmd control.Command, clients map[string]context.CancelFunc, out chan<- []byte, logger zerolog.Logger) {
+	if cmd.ChatroomID <= 0 {
+		logger.Warn().Int("chatroom", cmd.ChatroomID).Msg("kick_connect missing chatroom_id; ignoring")
+		return
+	}
 	key := kickClientKey(cmd.ChatroomID)
 	if _, exists := clients[key]; exists {
 		logger.Warn().Int("chatroom", cmd.ChatroomID).Msg("kick already connected, ignoring")

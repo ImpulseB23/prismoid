@@ -142,22 +142,35 @@ func (c *Client) subscribe(ctx context.Context, conn *websocket.Conn) error {
 }
 
 func (c *Client) listenLoop(ctx context.Context, conn *websocket.Conn, activityTimeoutSec int) error {
-	// Pusher recommends sending a ping after activity_timeout seconds of
-	// inactivity, and closing if no pong arrives within 30s. We use
-	// activityTimeout + 10s as the read deadline to account for ping/pong.
-	timeout := time.Duration(activityTimeoutSec)*time.Second + 10*time.Second
-
-	lastActivity := time.Now()
 	pingInterval := time.Duration(activityTimeoutSec) * time.Second
+	pongTimeout := 30 * time.Second
+	waitingForPong := false
+
+	readDeadline := func() time.Duration {
+		if waitingForPong {
+			return pongTimeout
+		}
+		return pingInterval
+	}
 
 	for {
-		readCtx, cancel := context.WithTimeout(ctx, timeout)
+		readCtx, cancel := context.WithTimeout(ctx, readDeadline())
 		_, data, err := conn.Read(readCtx)
 		cancel()
 		if err != nil {
 			if errors.Is(err, context.Canceled) && ctx.Err() != nil {
 				_ = conn.Close(websocket.StatusNormalClosure, "shutting down")
 				return ctx.Err()
+			}
+			if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+				if waitingForPong {
+					return fmt.Errorf("pong timeout after %s", pongTimeout)
+				}
+				if err := c.sendPing(ctx, conn); err != nil {
+					return err
+				}
+				waitingForPong = true
+				continue
 			}
 			return fmt.Errorf("read: %w", err)
 		}
@@ -168,28 +181,24 @@ func (c *Client) listenLoop(ctx context.Context, conn *websocket.Conn, activityT
 			continue
 		}
 
-		now := time.Now()
+		waitingForPong = false
 
 		switch {
 		case ev.Event == "pusher:ping":
-			pong, _ := json.Marshal(PusherEvent{Event: "pusher:pong", Data: "{}"})
-			writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			_ = conn.Write(writeCtx, websocket.MessageText, pong)
-			cancel()
-			lastActivity = now
+			if err := c.sendPong(ctx, conn); err != nil {
+				return err
+			}
 
 		case ev.Event == "pusher:pong":
-			lastActivity = now
+			// pong received, waitingForPong already cleared above
 
 		case ev.Event == "pusher:error":
 			c.Log.Warn().Str("data", ev.Data).Msg("pusher error")
 
 		case ev.Event == "pusher_internal:subscription_succeeded":
-			lastActivity = now
+			// no-op
 
 		case ev.Channel != "":
-			// Channel event (chat message, ban, etc). Forward the raw
-			// Pusher event bytes tagged for the Rust parser.
 			tagged := make([]byte, 1+len(data))
 			tagged[0] = control.TagKick
 			copy(tagged[1:], data)
@@ -198,20 +207,31 @@ func (c *Client) listenLoop(ctx context.Context, conn *websocket.Conn, activityT
 			default:
 				c.Log.Warn().Msg("output channel full, dropping message")
 			}
-			lastActivity = now
 
 		default:
 			c.Log.Debug().Str("event", ev.Event).Msg("unhandled pusher event")
 		}
-
-		if now.Sub(lastActivity) >= pingInterval {
-			ping, _ := json.Marshal(PusherEvent{Event: "pusher:ping", Data: "{}"})
-			writeCtx, wCancel := context.WithTimeout(ctx, 5*time.Second)
-			_ = conn.Write(writeCtx, websocket.MessageText, ping)
-			wCancel()
-			lastActivity = now
-		}
 	}
+}
+
+func (c *Client) sendPing(ctx context.Context, conn *websocket.Conn) error {
+	msg, _ := json.Marshal(PusherEvent{Event: "pusher:ping", Data: "{}"})
+	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := conn.Write(writeCtx, websocket.MessageText, msg); err != nil {
+		return fmt.Errorf("write ping: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) sendPong(ctx context.Context, conn *websocket.Conn) error {
+	msg, _ := json.Marshal(PusherEvent{Event: "pusher:pong", Data: "{}"})
+	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := conn.Write(writeCtx, websocket.MessageText, msg); err != nil {
+		return fmt.Errorf("write pong: %w", err)
+	}
+	return nil
 }
 
 // isFatalClose checks if the error contains a Pusher close code in the
