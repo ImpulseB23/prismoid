@@ -18,15 +18,32 @@ export interface HeaderProps {
 const Header: Component<HeaderProps> = (props) => {
   const [state, setState] = createSignal<SidecarState | null>(null);
   let unlisten: UnlistenFn | undefined;
+  // listen() is async, so a fast unmount can race the registration: if
+  // onCleanup runs first, `unlisten` is still undefined and the listener
+  // would leak when the promise resolves later. Track disposal explicitly
+  // so the late-arriving handle can be torn down immediately.
+  let disposed = false;
 
-  onMount(async () => {
-    unlisten = await listen<SidecarStatus>("sidecar_status", (evt) => {
+  onMount(() => {
+    listen<SidecarStatus>("sidecar_status", (evt) => {
       setState(evt.payload.state);
-    });
+    })
+      .then((next) => {
+        if (disposed) {
+          next();
+          return;
+        }
+        unlisten = next;
+      })
+      .catch((err: unknown) => {
+        console.error("failed to subscribe to sidecar_status", err);
+      });
   });
 
   onCleanup(() => {
+    disposed = true;
     unlisten?.();
+    unlisten = undefined;
   });
 
   return (

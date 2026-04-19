@@ -44,9 +44,18 @@ const App: Component = () => {
             onAuthenticated={(login) => setAuth({ state: "logged_in", login })}
           />
         </Match>
-        <Match when={auth()?.state === "logged_in"}>
-          <Header login={auth()?.login ?? ""} />
-          <ChatFeed />
+        <Match
+          when={(() => {
+            const a = auth();
+            return a?.state === "logged_in" ? a : null;
+          })()}
+        >
+          {(loggedIn) => (
+            <>
+              <Header login={loggedIn().login} />
+              <ChatFeed />
+            </>
+          )}
         </Match>
       </Switch>
     </div>
