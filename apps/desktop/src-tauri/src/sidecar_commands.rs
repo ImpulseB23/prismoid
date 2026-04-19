@@ -28,13 +28,64 @@ use tauri_plugin_shell::process::CommandChild;
 use crate::host::{build_send_chat_message_line, SendChatMessageArgs, SendChatResult};
 use crate::twitch_auth::{AuthError, AuthState, TWITCH_CLIENT_ID};
 
+/// Pure registry of in-flight `send_chat_message` requests. Carved out
+/// of [`Inner`] so the id-allocation, completion-routing, and clear
+/// semantics can be unit-tested without any IPC mockery.
+#[derive(Default)]
+struct Pending {
+    map: HashMap<u64, oneshot::Sender<SendChatResult>>,
+    next_id: u64,
+}
+
+impl Pending {
+    fn new() -> Self {
+        // Start at 1 so a serialized 0 (which the Go side may omit
+        // because of `omitempty`) can never be confused with a real id.
+        Self {
+            map: HashMap::new(),
+            next_id: 1,
+        }
+    }
+
+    /// Reserves the next id and registers `tx` under it. Returns the id
+    /// the caller must serialize into the outbound control line.
+    fn allocate(&mut self, tx: oneshot::Sender<SendChatResult>) -> u64 {
+        let id = self.next_id;
+        self.map.insert(id, tx);
+        self.next_id = advance_request_id(self.next_id);
+        id
+    }
+
+    /// Removes the registration for `id`. Used to roll back when the
+    /// outbound write fails after `allocate` already inserted the
+    /// completer, so the caller's `Drop` of the oneshot Sender resolves
+    /// the awaiting future immediately instead of after the next clear.
+    fn cancel(&mut self, id: u64) {
+        self.map.remove(&id);
+    }
+
+    /// Routes a `send_chat_result` notification to the awaiting
+    /// completer. A no-op if none is registered (e.g. the awaiting
+    /// future was dropped before the response landed).
+    fn complete(&mut self, result: SendChatResult) {
+        if let Some(tx) = self.map.remove(&result.request_id) {
+            let _: Result<(), _> = tx.send(result);
+        }
+    }
+
+    /// Drops every registered completer so awaiting commands resolve
+    /// with [`SendCommandError::SidecarNotRunning`] instead of hanging.
+    fn clear(&mut self) {
+        self.map.clear();
+    }
+}
+
 /// Inner state shared between the supervisor (publish/clear), the
 /// command (write/register), and the stdout dispatcher (complete).
 struct Inner {
     #[cfg(windows)]
     child: Option<CommandChild>,
-    pending: HashMap<u64, oneshot::Sender<SendChatResult>>,
-    next_id: u64,
+    pending: Pending,
 }
 
 impl Default for Inner {
@@ -42,10 +93,7 @@ impl Default for Inner {
         Self {
             #[cfg(windows)]
             child: None,
-            pending: HashMap::new(),
-            // Start at 1 so a serialized 0 (which the Go side may omit
-            // because of `omitempty`) can never be confused with a real id.
-            next_id: 1,
+            pending: Pending::new(),
         }
     }
 }
@@ -105,15 +153,14 @@ impl SidecarCommandSender {
     /// registered for the id (e.g. the awaiting future was dropped).
     pub fn complete_send_chat(&self, result: SendChatResult) {
         let mut g = unpoison(self.inner.lock());
-        if let Some(tx) = g.pending.remove(&result.request_id) {
-            let _: Result<(), _> = tx.send(result);
-        }
+        g.pending.complete(result);
     }
 
     /// Allocates a fresh request id, registers the oneshot sender under
     /// it, and writes the given control line to the child's stdin in a
     /// single locked section so the line and the registration can't race
-    /// against a concurrent `clear`.
+    /// against a concurrent `clear`. Rolls back the registration if the
+    /// write fails so the caller's awaiting future fails fast.
     #[cfg(windows)]
     fn send_with_pending<F>(
         &self,
@@ -127,21 +174,26 @@ impl SidecarCommandSender {
         if g.child.is_none() {
             return Err(SendCommandError::SidecarNotRunning);
         }
-        let id = g.next_id;
-        let line = build_line(id).map_err(|e| SendCommandError::Json {
-            message: e.to_string(),
-        })?;
+        let id = g.pending.allocate(tx);
+        let line = match build_line(id) {
+            Ok(line) => line,
+            Err(e) => {
+                g.pending.cancel(id);
+                return Err(SendCommandError::Json {
+                    message: e.to_string(),
+                });
+            }
+        };
         let child = g
             .child
             .as_mut()
             .ok_or(SendCommandError::SidecarNotRunning)?;
-        child
-            .write(&line)
-            .map_err(|e: tauri_plugin_shell::Error| SendCommandError::Io {
+        if let Err(e) = child.write(&line) {
+            g.pending.cancel(id);
+            return Err(SendCommandError::Io {
                 message: e.to_string(),
-            })?;
-        g.next_id = advance_request_id(g.next_id);
-        g.pending.insert(id, tx);
+            });
+        }
         Ok(())
     }
 
@@ -380,7 +432,7 @@ mod tests {
         let (tx, mut rx) = oneshot::channel::<SendChatResult>();
         {
             let mut g = unpoison(sender.inner.lock());
-            g.pending.insert(7, tx);
+            g.pending.map.insert(7, tx);
         }
         let _ = sender.clear();
         match rx.try_recv() {
@@ -395,7 +447,7 @@ mod tests {
         let (tx, mut rx) = oneshot::channel::<SendChatResult>();
         {
             let mut g = unpoison(sender.inner.lock());
-            g.pending.insert(42, tx);
+            g.pending.map.insert(42, tx);
         }
         let mut r = make_result(true, "", "", "");
         r.request_id = 42;
@@ -448,6 +500,96 @@ mod tests {
     #[test]
     fn advance_request_id_skips_zero_on_wrap() {
         assert_eq!(advance_request_id(u64::MAX), 1);
+    }
+
+    #[test]
+    fn pending_allocate_assigns_monotonic_ids_starting_at_one() {
+        let mut p = Pending::new();
+        let (tx1, _rx1) = oneshot::channel::<SendChatResult>();
+        let (tx2, _rx2) = oneshot::channel::<SendChatResult>();
+        assert_eq!(p.allocate(tx1), 1);
+        assert_eq!(p.allocate(tx2), 2);
+        assert_eq!(p.next_id, 3);
+        assert_eq!(p.map.len(), 2);
+    }
+
+    #[test]
+    fn pending_allocate_skips_zero_after_wrap() {
+        let mut p = Pending::new();
+        p.next_id = u64::MAX;
+        let (tx, _rx) = oneshot::channel::<SendChatResult>();
+        assert_eq!(p.allocate(tx), u64::MAX);
+        assert_eq!(p.next_id, 1);
+    }
+
+    #[test]
+    fn pending_cancel_removes_completer() {
+        let mut p = Pending::new();
+        let (tx, mut rx) = oneshot::channel::<SendChatResult>();
+        let id = p.allocate(tx);
+        p.cancel(id);
+        assert!(p.map.is_empty());
+        match rx.try_recv() {
+            Err(oneshot::error::TryRecvError::Closed) => {}
+            other => panic!("expected Closed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn pending_cancel_unknown_id_is_noop() {
+        let mut p = Pending::new();
+        p.cancel(999);
+        assert!(p.map.is_empty());
+    }
+
+    #[test]
+    fn pending_complete_routes_to_registered_completer() {
+        let mut p = Pending::new();
+        let (tx, mut rx) = oneshot::channel::<SendChatResult>();
+        let id = p.allocate(tx);
+        let mut r = SendChatResult {
+            request_id: id,
+            ok: true,
+            message_id: "m".into(),
+            drop_code: String::new(),
+            drop_message: String::new(),
+            error_message: String::new(),
+        };
+        r.request_id = id;
+        p.complete(r);
+        let got = rx.try_recv().expect("delivered");
+        assert_eq!(got.request_id, id);
+    }
+
+    #[test]
+    fn pending_complete_unknown_is_noop() {
+        let mut p = Pending::new();
+        p.complete(SendChatResult {
+            request_id: 7,
+            ok: true,
+            message_id: String::new(),
+            drop_code: String::new(),
+            drop_message: String::new(),
+            error_message: String::new(),
+        });
+    }
+
+    #[test]
+    fn pending_clear_drops_all_completers() {
+        let mut p = Pending::new();
+        let (tx_a, mut rx_a) = oneshot::channel::<SendChatResult>();
+        let (tx_b, mut rx_b) = oneshot::channel::<SendChatResult>();
+        p.allocate(tx_a);
+        p.allocate(tx_b);
+        p.clear();
+        assert!(matches!(
+            rx_a.try_recv(),
+            Err(oneshot::error::TryRecvError::Closed)
+        ));
+        assert!(matches!(
+            rx_b.try_recv(),
+            Err(oneshot::error::TryRecvError::Closed)
+        ));
     }
 
     #[test]

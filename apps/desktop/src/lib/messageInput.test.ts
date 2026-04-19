@@ -70,6 +70,22 @@ describe("toSendError", () => {
     expect(toSendError(helix)).toBe(helix);
   });
 
+  it("accepts every known variant when shape matches", () => {
+    const cases = [
+      { kind: "empty_message" },
+      { kind: "sidecar_not_running" },
+      { kind: "not_logged_in", message: "x" },
+      { kind: "io", message: "x" },
+      { kind: "auth", message: "x" },
+      { kind: "json", message: "x" },
+      { kind: "message_too_long", max_bytes: 500 },
+      { kind: "helix", code: "c", message: "m" },
+    ];
+    for (const c of cases) {
+      expect(toSendError(c)).toBe(c);
+    }
+  });
+
   it("rejects look-alike objects with the wrong shape", () => {
     // missing required `max_bytes`
     expect(toSendError({ kind: "message_too_long" })).toBe("[object Object]");
