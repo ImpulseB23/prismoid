@@ -3,7 +3,7 @@
 // `sidecar_status` event. Purely presentational: no commands invoked, so
 // a broken supervisor can't brick the UI.
 
-import { Component, Show, createSignal, onCleanup, onMount } from "solid-js";
+import { Component, createSignal, onCleanup, onMount } from "solid-js";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   indicatorFor,
@@ -82,44 +82,30 @@ const Header: Component<HeaderProps> = (props) => {
       </span>
       <span style={{ "font-weight": 600 }}>{props.login}</span>
       <span style={{ flex: 1 }} />
-      <ConnectionChip state={state()} />
+      <StatusDot state={state()} />
     </header>
   );
 };
 
-const ConnectionChip: Component<{ state: SidecarState | null }> = (props) => {
+const StatusDot: Component<{ state: SidecarState | null }> = (props) => {
   const info = () => indicatorFor(props.state);
+  const tooltip = () => {
+    const i = info();
+    if (props.state === "running") return "Twitch: connected";
+    return i.label;
+  };
   return (
     <span
-      data-testid="connection-chip"
+      data-testid="connection-dot"
       data-state={props.state ?? "initial"}
-      style={{
-        display: "inline-flex",
-        "align-items": "center",
-        gap: "6px",
-        padding: "2px 8px",
-        "border-radius": "10px",
-        background: "#1f1f23",
-        border: "1px solid #2a2a2e",
-        "font-size": "12px",
-        color: "#c8c8d0",
-      }}
-    >
-      <Dot color={info().color} />
-      <Show when={info().label}>{info().label}</Show>
-    </span>
-  );
-};
-
-const Dot: Component<{ color: string }> = (props) => {
-  return (
-    <span
+      title={tooltip()}
       style={{
         display: "inline-block",
         width: "8px",
         height: "8px",
         "border-radius": "50%",
-        background: props.color,
+        background: info().color,
+        cursor: "default",
       }}
     />
   );
