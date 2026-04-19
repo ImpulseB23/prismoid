@@ -1042,3 +1042,112 @@ func TestDispatchCommand_RoutesKickDisconnect(t *testing.T) {
 		t.Fatal("expected kick_disconnect to cancel client")
 	}
 }
+
+func TestHandleYouTubeConnect_AddsClient(t *testing.T) {
+	clients := make(map[string]context.CancelFunc)
+	out := make(chan []byte, 1)
+	cmd := control.Command{
+		Cmd:        "youtube_connect",
+		LiveChatID: "abc",
+		APIKey:     "key",
+	}
+
+	HandleYouTubeConnect(context.Background(), cmd, clients, out, func(string, any) {}, zerolog.Nop())
+
+	if _, ok := clients["yt:abc"]; !ok {
+		t.Fatal("expected youtube client to be registered")
+	}
+	clients["yt:abc"]()
+}
+
+func TestHandleYouTubeConnect_RejectsMissingChatID(t *testing.T) {
+	clients := make(map[string]context.CancelFunc)
+	out := make(chan []byte, 1)
+	cmd := control.Command{Cmd: "youtube_connect"}
+
+	HandleYouTubeConnect(context.Background(), cmd, clients, out, func(string, any) {}, zerolog.Nop())
+
+	if len(clients) != 0 {
+		t.Fatalf("expected no clients for missing chat_id, got %d", len(clients))
+	}
+}
+
+func TestHandleYouTubeConnect_RejectsDuplicate(t *testing.T) {
+	clients := make(map[string]context.CancelFunc)
+	out := make(chan []byte, 1)
+
+	var cancelled atomic.Bool
+	clients["yt:abc"] = func() { cancelled.Store(true) }
+
+	cmd := control.Command{Cmd: "youtube_connect", LiveChatID: "abc", APIKey: "key"}
+	HandleYouTubeConnect(context.Background(), cmd, clients, out, func(string, any) {}, zerolog.Nop())
+
+	if cancelled.Load() {
+		t.Fatal("existing youtube client cancel was overwritten")
+	}
+	if len(clients) != 1 {
+		t.Fatalf("expected 1 client, got %d", len(clients))
+	}
+}
+
+func TestHandleYouTubeDisconnect_CancelsAndRemoves(t *testing.T) {
+	clients := make(map[string]context.CancelFunc)
+	var cancelled atomic.Bool
+	clients["yt:abc"] = func() { cancelled.Store(true) }
+
+	cmd := control.Command{Cmd: "youtube_disconnect", LiveChatID: "abc"}
+	HandleYouTubeDisconnect(cmd, clients, zerolog.Nop())
+
+	if !cancelled.Load() {
+		t.Fatal("expected youtube client to be cancelled")
+	}
+	if _, ok := clients["yt:abc"]; ok {
+		t.Fatal("expected youtube client to be removed from registry")
+	}
+}
+
+func TestHandleYouTubeDisconnect_NoOpForUnknown(t *testing.T) {
+	clients := make(map[string]context.CancelFunc)
+	cmd := control.Command{Cmd: "youtube_disconnect", LiveChatID: "missing"}
+
+	HandleYouTubeDisconnect(cmd, clients, zerolog.Nop())
+}
+
+func TestHandleYouTubeDisconnect_RejectsMissingChatID(t *testing.T) {
+	clients := make(map[string]context.CancelFunc)
+	cmd := control.Command{Cmd: "youtube_disconnect"}
+
+	HandleYouTubeDisconnect(cmd, clients, zerolog.Nop())
+
+	if len(clients) != 0 {
+		t.Fatalf("expected no client mutations, got %d", len(clients))
+	}
+}
+
+func TestDispatchCommand_RoutesYouTubeConnect(t *testing.T) {
+	clients := make(map[string]context.CancelFunc)
+	out := make(chan []byte, 1)
+	cmd := control.Command{Cmd: "youtube_connect", LiveChatID: "xyz", APIKey: "k"}
+
+	DispatchCommand(context.Background(), cmd, clients, out, func(string, any) {}, zerolog.Nop())
+
+	if _, ok := clients["yt:xyz"]; !ok {
+		t.Fatal("expected youtube_connect to register client")
+	}
+	clients["yt:xyz"]()
+}
+
+func TestDispatchCommand_RoutesYouTubeDisconnect(t *testing.T) {
+	var cancelled atomic.Bool
+	clients := map[string]context.CancelFunc{
+		"yt:xyz": func() { cancelled.Store(true) },
+	}
+	out := make(chan []byte, 1)
+	cmd := control.Command{Cmd: "youtube_disconnect", LiveChatID: "xyz"}
+
+	DispatchCommand(context.Background(), cmd, clients, out, func(string, any) {}, zerolog.Nop())
+
+	if !cancelled.Load() {
+		t.Fatal("expected youtube_disconnect to cancel client")
+	}
+}
