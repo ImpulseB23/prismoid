@@ -28,6 +28,7 @@ ignore:
   - "apps/desktop/node_modules/"
   - "apps/desktop/dist/"
   - "apps/desktop/src-sidecar/cmd/" # entry-point shims; logic lives in internal/sidecar
+  - "apps/desktop/src-sidecar/internal/youtube/ytpb/" # generated protobuf/grpc bindings
   - "apps/desktop/src-tauri/src/lib.rs" # tauri entry + setup wiring; logic lives in host.rs
   - "apps/desktop/src-tauri/src/main.rs" # 3-line binary shim
   - "apps/desktop/src-tauri/src/twitch_auth/commands.rs" # thin #[tauri::command] adapters; logic lives in auth_state.rs
