@@ -173,6 +173,7 @@ func (c *Client) listenLoop(ctx context.Context, conn *websocket.Conn, keepalive
 			tagged := make([]byte, 1+len(data))
 			tagged[0] = control.TagTwitch
 			copy(tagged[1:], data)
+
 			select {
 			case c.Out <- tagged:
 			default:
