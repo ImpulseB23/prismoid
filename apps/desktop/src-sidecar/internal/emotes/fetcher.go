@@ -219,7 +219,7 @@ func (f *Fetcher) Fetch(ctx context.Context, broadcasterID string) Bundle {
 	}
 
 	wg.Wait()
-	b.YouTubeBadges = youTubeBadges
+	b.YouTubeBadges = youtubeBadges
 	b.KickBadges = kickBadges
 	return b
 }

@@ -296,7 +296,7 @@ pub fn parse_youtube_message(bytes: &[u8]) -> Result<Option<UnifiedMessage>, Par
     let is_mod = is_broadcaster || author.is_chat_moderator.unwrap_or(false);
     let is_subscriber = author.is_chat_sponsor.unwrap_or(false);
 
-    let mut badges = Vec::new();
+    let mut badges = Vec::with_capacity(2);
     if is_broadcaster {
         badges.push(Badge {
             set_id: String::from("youtube/owner"),

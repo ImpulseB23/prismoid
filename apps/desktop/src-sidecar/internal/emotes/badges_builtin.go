@@ -8,7 +8,7 @@ package emotes
 // YouTube badges. Role flags come from author_details on each
 // LiveChatMessage; the Rust parser synthesizes {set_id, id} pairs that
 // map 1:1 to these entries.
-var youTubeBadges = BadgeSet{
+var youtubeBadges = BadgeSet{
 	Scope: ScopeGlobal,
 	Badges: []Badge{
 		{Set: "youtube/owner", Version: "1", Title: "Channel Owner", URL1x: ytOwnerURI},
@@ -35,22 +35,22 @@ var kickBadges = BadgeSet{
 // left empty; the frontend renders url_1x at the badge slot size.
 
 // YouTube owner: wrench, #FFD600 (YouTube verified-owner gold).
-const ytOwnerURI = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath fill='%23FFD600' d='M14.4 3.6a4.5 4.5 0 00-6 .4L3.5 9l5.5 5.5 4.9-4.9a4.5 4.5 0 00.4-6l-2.7 2.7-1.8-1.8 2.6-2.9zM2 15.3l1.3 1.3 2-2-1.3-1.3-2 2z'/%3E%3C/svg%3E"
+const ytOwnerURI = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2018%2018'%3E%3Cpath%20fill='%23FFD600'%20d='M14.4%203.6a4.5%204.5%200%2000-6%20.4L3.5%209l5.5%205.5%204.9-4.9a4.5%204.5%200%2000.4-6l-2.7%202.7-1.8-1.8%202.6-2.9zM2%2015.3l1.3%201.3%202-2-1.3-1.3-2%202z'/%3E%3C/svg%3E"
 
 // YouTube moderator: wrench, #5E84F1 (YouTube moderator blue).
-const ytModeratorURI = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath fill='%235E84F1' d='M14.4 3.6a4.5 4.5 0 00-6 .4L3.5 9l5.5 5.5 4.9-4.9a4.5 4.5 0 00.4-6l-2.7 2.7-1.8-1.8 2.6-2.9zM2 15.3l1.3 1.3 2-2-1.3-1.3-2 2z'/%3E%3C/svg%3E"
+const ytModeratorURI = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2018%2018'%3E%3Cpath%20fill='%235E84F1'%20d='M14.4%203.6a4.5%204.5%200%2000-6%20.4L3.5%209l5.5%205.5%204.9-4.9a4.5%204.5%200%2000.4-6l-2.7%202.7-1.8-1.8%202.6-2.9zM2%2015.3l1.3%201.3%202-2-1.3-1.3-2%202z'/%3E%3C/svg%3E"
 
 // YouTube member: heart, #2BA640 (YouTube member green).
-const ytMemberURI = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath fill='%232BA640' d='M9 15.3l-1-1C4.1 11 2 9 2 6.6A3.7 3.7 0 015.7 3c1 0 2 .5 3.3 1.5C10 3.5 11 3 12.3 3A3.7 3.7 0 0116 6.6c0 2.4-2.1 4.4-6 7.7l-1 1z'/%3E%3C/svg%3E"
+const ytMemberURI = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2018%2018'%3E%3Cpath%20fill='%232BA640'%20d='M9%2015.3l-1-1C4.1%2011%202%209%202%206.6A3.7%203.7%200%20015.7%203c1%200%202%20.5%203.3%201.5C10%203.5%2011%203%2012.3%203A3.7%203.7%200%200116%206.6c0%202.4-2.1%204.4-6%207.7l-1%201z'/%3E%3C/svg%3E"
 
 // Kick broadcaster: crown, #53FC18 (Kick green).
-const kickBroadcasterURI = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath fill='%2353FC18' d='M15 5l-3 3-3-4-3 4-3-3v8h12V5zM3 14h12v2H3v-2z'/%3E%3C/svg%3E"
+const kickBroadcasterURI = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2018%2018'%3E%3Cpath%20fill='%2353FC18'%20d='M15%205l-3%203-3-4-3%204-3-3v8h12V5zM3%2014h12v2H3v-2z'/%3E%3C/svg%3E"
 
 // Kick moderator: shield, #53FC18 (Kick green).
-const kickModeratorURI = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath fill='%2353FC18' d='M9 1L3 4v5c0 4.2 2.6 8.1 6 9 3.4-.9 6-4.8 6-9V4L9 1z'/%3E%3C/svg%3E"
+const kickModeratorURI = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2018%2018'%3E%3Cpath%20fill='%2353FC18'%20d='M9%201L3%204v5c0%204.2%202.6%208.1%206%209%203.4-.9%206-4.8%206-9V4L9%201z'/%3E%3C/svg%3E"
 
 // Kick subscriber: star, #00D4FF (Kick subscriber blue).
-const kickSubscriberURI = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath fill='%2300D4FF' d='M9 1.5l2.5 5 5.5.8-4 3.9 1 5.6L9 14l-5 2.8 1-5.6-4-3.9 5.5-.8z'/%3E%3C/svg%3E"
+const kickSubscriberURI = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2018%2018'%3E%3Cpath%20fill='%2300D4FF'%20d='M9%201.5l2.5%205%205.5.8-4%203.9%201%205.6L9%2014l-5%202.8%201-5.6-4-3.9%205.5-.8z'/%3E%3C/svg%3E"
 
 // Kick VIP: diamond, #E69E04 (amber/gold).
-const kickVIPURI = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath fill='%23E69E04' d='M9 2L3 8l6 8 6-8L9 2z'/%3E%3C/svg%3E"
+const kickVIPURI = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2018%2018'%3E%3Cpath%20fill='%23E69E04'%20d='M9%202L3%208l6%208%206-8L9%202z'/%3E%3C/svg%3E"
