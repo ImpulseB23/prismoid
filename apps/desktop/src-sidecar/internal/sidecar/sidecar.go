@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/ImpulseB23/Prismoid/sidecar/internal/control"
 	"github.com/ImpulseB23/Prismoid/sidecar/internal/emotes"
+	"github.com/ImpulseB23/Prismoid/sidecar/internal/kick"
 	"github.com/ImpulseB23/Prismoid/sidecar/internal/ringbuf"
 	"github.com/ImpulseB23/Prismoid/sidecar/internal/twitch"
 	"github.com/ImpulseB23/Prismoid/sidecar/internal/youtube"
@@ -274,6 +276,10 @@ func DispatchCommand(ctx context.Context, cmd control.Command, clients map[strin
 		HandleYouTubeConnect(ctx, cmd, clients, out, notify, logger)
 	case "youtube_disconnect":
 		HandleYouTubeDisconnect(cmd, clients, logger)
+	case "kick_connect":
+		HandleKickConnect(ctx, cmd, clients, out, logger)
+	case "kick_disconnect":
+		HandleKickDisconnect(cmd, clients, logger)
 	case "ban_user":
 		HandleBanUser(cmd, logger)
 	case "unban_user":
@@ -558,6 +564,57 @@ func HandleYouTubeDisconnect(cmd control.Command, clients map[string]context.Can
 	cancelFn()
 	delete(clients, key)
 	logger.Info().Str("chat_id", chatID).Msg("youtube client disconnected")
+}
+
+// HandleKickConnect spawns a Kick Pusher WebSocket client for the chatroom in
+// cmd if there isn't already one running. Uses the chatroom ID as the client
+// registry key (prefixed with "kick:" to avoid collisions with Twitch IDs).
+func HandleKickConnect(ctx context.Context, cmd control.Command, clients map[string]context.CancelFunc, out chan<- []byte, logger zerolog.Logger) {
+	if cmd.ChatroomID <= 0 {
+		logger.Warn().Int("chatroom", cmd.ChatroomID).Msg("kick_connect missing chatroom_id; ignoring")
+		return
+	}
+	key := kickClientKey(cmd.ChatroomID)
+	if _, exists := clients[key]; exists {
+		logger.Warn().Int("chatroom", cmd.ChatroomID).Msg("kick already connected, ignoring")
+		return
+	}
+
+	clientCtx, clientCancel := context.WithCancel(ctx)
+
+	client := &kick.Client{
+		ChatroomID: cmd.ChatroomID,
+		Out:        out,
+		Log:        logger.With().Int("chatroom", cmd.ChatroomID).Logger(),
+		Notify:     func(string, any) {},
+	}
+
+	clients[key] = clientCancel
+
+	go func() {
+		if err := client.Run(clientCtx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error().Err(err).Int("chatroom", cmd.ChatroomID).Msg("kick client exited")
+		}
+	}()
+
+	logger.Info().Int("chatroom", cmd.ChatroomID).Msg("kick client started")
+}
+
+// HandleKickDisconnect cancels and removes a previously-connected Kick client.
+func HandleKickDisconnect(cmd control.Command, clients map[string]context.CancelFunc, logger zerolog.Logger) {
+	key := kickClientKey(cmd.ChatroomID)
+	cancelFn, exists := clients[key]
+	if !exists {
+		logger.Warn().Int("chatroom", cmd.ChatroomID).Msg("no active kick connection to disconnect")
+		return
+	}
+	cancelFn()
+	delete(clients, key)
+	logger.Info().Int("chatroom", cmd.ChatroomID).Msg("kick client disconnected")
+}
+
+func kickClientKey(chatroomID int) string {
+	return "kick:" + strconv.Itoa(chatroomID)
 }
 
 // readerScanner is a small helper used by tests; production code constructs

@@ -12,8 +12,15 @@ use std::time::Duration;
 use serde::Serialize;
 
 use crate::emote_index::{EmoteBundle, EmoteIndex};
-use crate::message::{parse_twitch_envelope, parse_youtube_message, UnifiedMessage};
+use crate::message::{
+    parse_kick_event, parse_twitch_envelope, parse_youtube_message, UnifiedMessage,
+};
 use crate::ringbuf::RawHandle;
+
+/// Platform tag bytes prepended by the Go sidecar. Must match control.go.
+const TAG_TWITCH: u8 = 0x01;
+const TAG_KICK: u8 = 0x02;
+const TAG_YOUTUBE: u8 = 0x03;
 
 /// Timeout for [`ringbuf::RingBufReader::wait_for_signal`] in the host drain
 /// loop. In the happy path the sidecar signals the auto-reset event after
@@ -56,28 +63,22 @@ pub struct TwitchCreds {
 /// Messages that fail to parse or that aren't chat notifications are dropped
 /// with a log. Each parse is wrapped in `catch_unwind` so a panicking parser
 /// cannot kill the drain loop (`docs/stability.md` §Rust Panic Handling).
-const TAG_TWITCH: u8 = 0x01;
-const TAG_YOUTUBE: u8 = 0x03;
-
 pub fn parse_batch(raw: &[Vec<u8>], batch: &mut Vec<UnifiedMessage>, emote_index: &EmoteIndex) {
     for payload in raw {
-        let slice = payload.as_slice();
-        if slice.is_empty() {
+        if payload.is_empty() {
             continue;
         }
-
-        let tag = slice[0];
-        let body = &slice[1..];
-
+        let tag = payload[0];
+        let data = &payload[1..];
         let outcome = std::panic::catch_unwind(|| match tag {
-            TAG_TWITCH => parse_twitch_envelope(body),
-            TAG_YOUTUBE => parse_youtube_message(body),
+            TAG_TWITCH => parse_twitch_envelope(data),
+            TAG_KICK => parse_kick_event(data),
+            TAG_YOUTUBE => parse_youtube_message(data),
             _ => {
                 tracing::warn!(tag, "unknown platform tag, dropping message");
                 Ok(None)
             }
         });
-
         match outcome {
             Ok(Ok(Some(mut msg))) => {
                 emote_index.scan_into(&msg.message_text, &mut msg.emote_spans);
@@ -160,6 +161,23 @@ pub fn build_youtube_connect_line(creds: &YouTubeCreds) -> serde_json::Result<Ve
         cmd: "youtube_connect",
         api_key: &creds.api_key,
         live_chat_id: &creds.live_chat_id,
+    };
+    let mut bytes = serde_json::to_vec(&cmd)?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
+/// Serializes a `kick_connect` control command line for the sidecar.
+#[allow(dead_code)]
+pub fn build_kick_connect_line(chatroom_id: i64) -> serde_json::Result<Vec<u8>> {
+    #[derive(Serialize)]
+    struct ConnectCmd {
+        cmd: &'static str,
+        chatroom_id: i64,
+    }
+    let cmd = ConnectCmd {
+        cmd: "kick_connect",
+        chatroom_id,
     };
     let mut bytes = serde_json::to_vec(&cmd)?;
     bytes.push(b'\n');
@@ -368,7 +386,6 @@ mod tests {
 
         let mut batch = Vec::new();
         let idx = EmoteIndex::new();
-        // Pretend a previous tick left one item in the scratch.
         parse_batch(std::slice::from_ref(&viewer), &mut batch, &idx);
         assert_eq!(batch.len(), 1);
         assert_eq!(batch[0].message_text, "second");
@@ -443,6 +460,23 @@ mod tests {
         assert_eq!(batch.len(), 2);
         assert!(matches!(batch[0].platform, Platform::Twitch));
         assert!(matches!(batch[1].platform, Platform::YouTube));
+    }
+
+    #[test]
+    fn parse_batch_handles_kick_messages() {
+        let kick_msg = {
+            let json = br##"{"event":"App\\Events\\ChatMessageEvent","data":"{\"id\":\"k1\",\"chatroom_id\":100,\"content\":\"hello from kick\",\"type\":\"message\",\"created_at\":\"2025-06-01T12:00:00Z\",\"sender\":{\"id\":42,\"username\":\"kuser\",\"slug\":\"kuser\",\"identity\":{\"color\":\"#00FF00\",\"badges\":[]}}}","channel":"chatrooms.100.v2"}"##;
+            let mut tagged = vec![TAG_KICK];
+            tagged.extend_from_slice(json);
+            tagged
+        };
+
+        let mut batch = Vec::new();
+        let idx = EmoteIndex::new();
+        parse_batch(std::slice::from_ref(&kick_msg), &mut batch, &idx);
+        assert_eq!(batch.len(), 1);
+        assert_eq!(batch[0].message_text, "hello from kick");
+        assert!(matches!(batch[0].platform, crate::message::Platform::Kick));
     }
 
     #[test]

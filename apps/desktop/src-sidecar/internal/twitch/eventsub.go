@@ -161,6 +161,15 @@ func (c *Client) listenLoop(ctx context.Context, conn *websocket.Conn, keepalive
 
 		switch env.Metadata.MessageType {
 		case "notification":
+			// Non-blocking send. The receiver (the writer goroutine in the
+			// sidecar) is the sole producer to the ring buffer; if its input
+			// channel is full it means the ring buffer is also full or close
+			// to it. We drop the *new* message (drop-newest) rather than
+			// stall the websocket reader. Note: docs/architecture.md
+			// describes drop-oldest at the ring buffer layer; the current
+			// SPSC primitive cannot evict already-written messages without a
+			// reader-side cooperation we haven't built yet. Tracked
+			// separately.
 			tagged := make([]byte, 1+len(data))
 			tagged[0] = control.TagTwitch
 			copy(tagged[1:], data)

@@ -4,6 +4,7 @@ package control
 // can dispatch to the correct parser without inspecting the JSON body.
 const (
 	TagTwitch  byte = 0x01
+	TagKick    byte = 0x02
 	TagYouTube byte = 0x03
 )
 
@@ -42,6 +43,10 @@ type Command struct {
 	// moderator's ID for mod actions. Twitch Helix's moderation endpoints
 	// require the moderator_id to match the token's authenticated user.
 	UserID string `json:"user_id,omitempty"`
+
+	// ChatroomID is the Kick chatroom numeric ID. Used by kick_connect to
+	// subscribe to the Pusher channel for this chatroom.
+	ChatroomID int `json:"chatroom_id,omitempty"`
 
 	// Mod action fields. Only set by ban_user / unban_user / timeout_user /
 	// delete_message commands.
