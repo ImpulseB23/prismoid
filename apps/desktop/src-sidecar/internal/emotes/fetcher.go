@@ -29,6 +29,8 @@ type Bundle struct {
 	BTTVChannel         EmoteSet        `json:"bttv_channel"`
 	FFZGlobal           EmoteSet        `json:"ffz_global"`
 	FFZChannel          EmoteSet        `json:"ffz_channel"`
+	YouTubeBadges       BadgeSet        `json:"youtube_badges"`
+	KickBadges          BadgeSet        `json:"kick_badges"`
 	Errors              []ProviderError `json:"errors,omitempty"`
 }
 
@@ -217,5 +219,7 @@ func (f *Fetcher) Fetch(ctx context.Context, broadcasterID string) Bundle {
 	}
 
 	wg.Wait()
+	b.YouTubeBadges = youTubeBadges
+	b.KickBadges = kickBadges
 	return b
 }

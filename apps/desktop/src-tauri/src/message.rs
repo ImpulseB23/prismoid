@@ -296,6 +296,35 @@ pub fn parse_youtube_message(bytes: &[u8]) -> Result<Option<UnifiedMessage>, Par
     let is_mod = is_broadcaster || author.is_chat_moderator.unwrap_or(false);
     let is_subscriber = author.is_chat_sponsor.unwrap_or(false);
 
+    let mut badges = Vec::new();
+    if is_broadcaster {
+        badges.push(Badge {
+            set_id: String::from("youtube/owner"),
+            id: String::from("1"),
+        });
+    } else if author.is_chat_moderator.unwrap_or(false) {
+        badges.push(Badge {
+            set_id: String::from("youtube/moderator"),
+            id: String::from("1"),
+        });
+    }
+    if is_subscriber {
+        badges.push(Badge {
+            set_id: String::from("youtube/member"),
+            id: String::from("1"),
+        });
+    }
+
+    let color = if is_broadcaster {
+        Some(String::from("#ffd600"))
+    } else if author.is_chat_moderator.unwrap_or(false) {
+        Some(String::from("#5e84f1"))
+    } else if is_subscriber {
+        Some(String::from("#2ba640"))
+    } else {
+        None
+    };
+
     let timestamp = match snippet.published_at.as_deref() {
         Some(s) => chrono::DateTime::parse_from_rfc3339(s)
             .map_err(ParseError::Timestamp)?
@@ -312,11 +341,11 @@ pub fn parse_youtube_message(bytes: &[u8]) -> Result<Option<UnifiedMessage>, Par
         display_name,
         platform_user_id: channel_id,
         message_text: text,
-        badges: Vec::new(),
+        badges,
         is_mod,
         is_subscriber,
         is_broadcaster,
-        color: None,
+        color,
         reply_to: None,
         emote_spans: Vec::new(),
     }))
@@ -362,8 +391,6 @@ struct KickIdentity {
 struct KickBadge {
     #[serde(rename = "type")]
     badge_type: String,
-    #[serde(default)]
-    text: Option<String>,
 }
 
 /// Parses a raw Kick Pusher channel event into a [`UnifiedMessage`] when the
@@ -399,18 +426,21 @@ pub fn parse_kick_event(bytes: &[u8]) -> Result<Option<UnifiedMessage>, ParseErr
         badges: Vec::new(),
     });
 
+    let is_broadcaster = identity
+        .badges
+        .iter()
+        .any(|b| b.badge_type == "broadcaster");
+    let is_mod = is_broadcaster || identity.badges.iter().any(|b| b.badge_type == "moderator");
+    let is_subscriber = identity.badges.iter().any(|b| b.badge_type == "subscriber");
+
     let badges: Vec<Badge> = identity
         .badges
         .into_iter()
         .map(|b| Badge {
-            set_id: b.badge_type,
-            id: b.text.unwrap_or_default(),
+            set_id: format!("kick/{}", b.badge_type),
+            id: String::from("1"),
         })
         .collect();
-
-    let is_broadcaster = badges.iter().any(|b| b.set_id == "broadcaster");
-    let is_mod = is_broadcaster || badges.iter().any(|b| b.set_id == "moderator");
-    let is_subscriber = badges.iter().any(|b| b.set_id == "subscriber");
 
     Ok(Some(UnifiedMessage {
         id: msg.id,
@@ -727,6 +757,7 @@ mod tests {
         assert!(!msg.is_subscriber);
         assert!(!msg.is_broadcaster);
         assert!(msg.color.is_none());
+        assert!(msg.badges.is_empty());
         assert!(msg.timestamp > 0);
     }
 
@@ -736,6 +767,10 @@ mod tests {
         assert!(msg.is_broadcaster);
         assert!(msg.is_mod);
         assert_eq!(msg.display_name, "Streamer");
+        assert_eq!(msg.badges.len(), 1);
+        assert_eq!(msg.badges[0].set_id, "youtube/owner");
+        assert_eq!(msg.badges[0].id, "1");
+        assert_eq!(msg.color.as_deref(), Some("#ffd600"));
     }
 
     #[test]
@@ -744,6 +779,10 @@ mod tests {
         assert!(msg.is_mod);
         assert!(msg.is_subscriber); // is_chat_sponsor maps to subscriber
         assert!(!msg.is_broadcaster);
+        assert_eq!(msg.badges.len(), 2);
+        assert_eq!(msg.badges[0].set_id, "youtube/moderator");
+        assert_eq!(msg.badges[1].set_id, "youtube/member");
+        assert_eq!(msg.color.as_deref(), Some("#5e84f1"));
     }
 
     #[test]
@@ -889,6 +928,10 @@ mod tests {
         assert!(msg.is_subscriber);
         assert!(!msg.is_broadcaster);
         assert_eq!(msg.badges.len(), 2);
+        assert_eq!(msg.badges[0].set_id, "kick/moderator");
+        assert_eq!(msg.badges[0].id, "1");
+        assert_eq!(msg.badges[1].set_id, "kick/subscriber");
+        assert_eq!(msg.badges[1].id, "1");
     }
 
     #[test]

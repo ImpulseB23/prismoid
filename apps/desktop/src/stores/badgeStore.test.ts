@@ -72,4 +72,41 @@ describe("BadgeStore", () => {
     expect(s.resolve("vip", "1")).toBeUndefined();
     expect(s.resolve("moderator", "1")).toBeDefined();
   });
+
+  it("resolves youtube badges", () => {
+    const s = createBadgeStore();
+    s.loadBundle({
+      youtube_badges: {
+        badges: [makeBadge("youtube/owner", "1")],
+      },
+    });
+    const r = s.resolve("youtube/owner", "1");
+    expect(r?.url_1x).toBe("https://cdn/youtube/owner/1/1x.png");
+  });
+
+  it("resolves kick badges", () => {
+    const s = createBadgeStore();
+    s.loadBundle({
+      kick_badges: {
+        badges: [
+          makeBadge("kick/moderator", "1"),
+          makeBadge("kick/subscriber", "1"),
+        ],
+      },
+    });
+    expect(s.resolve("kick/moderator", "1")).toBeDefined();
+    expect(s.resolve("kick/subscriber", "1")).toBeDefined();
+  });
+
+  it("all platform badges coexist in one bundle", () => {
+    const s = createBadgeStore();
+    s.loadBundle({
+      twitch_global_badges: { badges: [makeBadge("moderator", "1")] },
+      youtube_badges: { badges: [makeBadge("youtube/moderator", "1")] },
+      kick_badges: { badges: [makeBadge("kick/moderator", "1")] },
+    });
+    expect(s.resolve("moderator", "1")).toBeDefined();
+    expect(s.resolve("youtube/moderator", "1")).toBeDefined();
+    expect(s.resolve("kick/moderator", "1")).toBeDefined();
+  });
 });

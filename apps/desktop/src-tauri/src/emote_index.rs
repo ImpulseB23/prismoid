@@ -121,6 +121,10 @@ pub struct EmoteBundle {
     pub ffz_global: EmoteSet,
     #[serde(default)]
     pub ffz_channel: EmoteSet,
+    #[serde(default)]
+    pub youtube_badges: BadgeSet,
+    #[serde(default)]
+    pub kick_badges: BadgeSet,
     /// Per-provider fetch failures from the sidecar, rendered as opaque
     /// JSON values. Each entry has the shape
     /// `{"provider": "...", "scope": "...", "error": "..."}`.

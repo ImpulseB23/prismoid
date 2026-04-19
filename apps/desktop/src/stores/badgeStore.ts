@@ -32,6 +32,8 @@ export interface BadgeSet {
 export interface EmoteBundle {
   twitch_global_badges?: BadgeSet;
   twitch_channel_badges?: BadgeSet;
+  youtube_badges?: BadgeSet;
+  kick_badges?: BadgeSet;
 }
 
 export interface ResolvedBadge {
@@ -76,6 +78,8 @@ export function createBadgeStore(): BadgeStore {
     // Channel overrides global — mirrors EmoteIndex::load_bundle precedence.
     ingest(next, bundle.twitch_global_badges);
     ingest(next, bundle.twitch_channel_badges);
+    ingest(next, bundle.youtube_badges);
+    ingest(next, bundle.kick_badges);
     byKey = next;
     setRevision((r) => r + 1);
   }

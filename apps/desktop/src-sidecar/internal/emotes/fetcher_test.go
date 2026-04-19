@@ -87,6 +87,18 @@ func TestFetcher_AllProviders(t *testing.T) {
 	if b.FFZChannel.Emotes[0].Code != "C" {
 		t.Errorf("ffz channel: %+v", b.FFZChannel)
 	}
+	if len(b.YouTubeBadges.Badges) != 3 {
+		t.Errorf("youtube badges = %d, want 3", len(b.YouTubeBadges.Badges))
+	}
+	if b.YouTubeBadges.Badges[0].Set != "youtube/owner" {
+		t.Errorf("youtube badge[0]: %+v", b.YouTubeBadges.Badges[0])
+	}
+	if len(b.KickBadges.Badges) != 4 {
+		t.Errorf("kick badges = %d, want 4", len(b.KickBadges.Badges))
+	}
+	if b.KickBadges.Badges[0].Set != "kick/broadcaster" {
+		t.Errorf("kick badge[0]: %+v", b.KickBadges.Badges[0])
+	}
 }
 
 func TestFetcher_NilProvidersSkipped(t *testing.T) {
@@ -97,6 +109,13 @@ func TestFetcher_NilProvidersSkipped(t *testing.T) {
 	}
 	if len(b.TwitchGlobalEmotes.Emotes) != 0 || len(b.BTTVGlobal.Emotes) != 0 {
 		t.Error("nothing should be fetched when all clients are nil")
+	}
+	// Static badges are always present even with no providers.
+	if len(b.YouTubeBadges.Badges) != 3 {
+		t.Errorf("youtube badges = %d, want 3 even with nil providers", len(b.YouTubeBadges.Badges))
+	}
+	if len(b.KickBadges.Badges) != 4 {
+		t.Errorf("kick badges = %d, want 4 even with nil providers", len(b.KickBadges.Badges))
 	}
 }
 
