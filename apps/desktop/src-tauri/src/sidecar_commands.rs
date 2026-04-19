@@ -140,11 +140,7 @@ impl SidecarCommandSender {
             .map_err(|e: tauri_plugin_shell::Error| SendCommandError::Io {
                 message: e.to_string(),
             })?;
-        // Bump and skip 0 on wraparound.
-        g.next_id = match g.next_id.wrapping_add(1) {
-            0 => 1,
-            n => n,
-        };
+        g.next_id = advance_request_id(g.next_id);
         g.pending.insert(id, tx);
         Ok(())
     }
@@ -235,12 +231,10 @@ impl SendCommandError {
 /// payloads before they cross the IPC boundary.
 pub const MAX_CHAT_MESSAGE_BYTES: usize = 500;
 
-#[tauri::command]
-pub async fn twitch_send_message(
-    auth: State<'_, AuthState>,
-    sender: State<'_, SidecarCommandSender>,
-    text: String,
-) -> Result<(), SendCommandError> {
+/// Trims `text` and rejects empty or oversize messages with the
+/// matching frontend error variant. Extracted from the Tauri command
+/// body so the validation rules are unit-testable without a runtime.
+fn validate_message(text: &str) -> Result<&str, SendCommandError> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
         return Err(SendCommandError::EmptyMessage);
@@ -250,6 +244,26 @@ pub async fn twitch_send_message(
             max_bytes: MAX_CHAT_MESSAGE_BYTES,
         });
     }
+    Ok(trimmed)
+}
+
+/// Returns the successor of `current` for the request-id allocator,
+/// skipping zero on wraparound so a serialized 0 (which the Go side may
+/// omit because of `omitempty`) can never be confused with a real id.
+fn advance_request_id(current: u64) -> u64 {
+    match current.wrapping_add(1) {
+        0 => 1,
+        n => n,
+    }
+}
+
+#[tauri::command]
+pub async fn twitch_send_message(
+    auth: State<'_, AuthState>,
+    sender: State<'_, SidecarCommandSender>,
+    text: String,
+) -> Result<(), SendCommandError> {
+    let trimmed = validate_message(&text)?;
 
     let tokens = auth
         .manager
@@ -389,5 +403,97 @@ mod tests {
         let got = rx.try_recv().expect("should have received");
         assert_eq!(got.request_id, 42);
         assert!(got.ok);
+    }
+
+    #[test]
+    fn validate_message_trims_and_returns_inner() {
+        assert_eq!(validate_message("  hi  ").unwrap(), "hi");
+    }
+
+    #[test]
+    fn validate_message_rejects_empty() {
+        assert!(matches!(
+            validate_message("   ").unwrap_err(),
+            SendCommandError::EmptyMessage
+        ));
+        assert!(matches!(
+            validate_message("").unwrap_err(),
+            SendCommandError::EmptyMessage
+        ));
+    }
+
+    #[test]
+    fn validate_message_rejects_oversize() {
+        let big = "a".repeat(MAX_CHAT_MESSAGE_BYTES + 1);
+        match validate_message(&big).unwrap_err() {
+            SendCommandError::MessageTooLong { max_bytes } => {
+                assert_eq!(max_bytes, MAX_CHAT_MESSAGE_BYTES);
+            }
+            other => panic!("expected MessageTooLong, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_message_accepts_exactly_max_bytes() {
+        let max = "a".repeat(MAX_CHAT_MESSAGE_BYTES);
+        assert!(validate_message(&max).is_ok());
+    }
+
+    #[test]
+    fn advance_request_id_increments() {
+        assert_eq!(advance_request_id(1), 2);
+        assert_eq!(advance_request_id(99), 100);
+    }
+
+    #[test]
+    fn advance_request_id_skips_zero_on_wrap() {
+        assert_eq!(advance_request_id(u64::MAX), 1);
+    }
+
+    #[test]
+    fn send_command_error_serializes_with_kind_tag() {
+        let v = serde_json::to_value(SendCommandError::EmptyMessage).unwrap();
+        assert_eq!(v["kind"], "empty_message");
+
+        let v = serde_json::to_value(SendCommandError::MessageTooLong { max_bytes: 500 }).unwrap();
+        assert_eq!(v["kind"], "message_too_long");
+        assert_eq!(v["max_bytes"], 500);
+
+        let v = serde_json::to_value(SendCommandError::SidecarNotRunning).unwrap();
+        assert_eq!(v["kind"], "sidecar_not_running");
+
+        let v = serde_json::to_value(SendCommandError::NotLoggedIn {
+            message: "x".into(),
+        })
+        .unwrap();
+        assert_eq!(v["kind"], "not_logged_in");
+        assert_eq!(v["message"], "x");
+
+        let v = serde_json::to_value(SendCommandError::Helix {
+            code: "msg_duplicate".into(),
+            message: "dup".into(),
+        })
+        .unwrap();
+        assert_eq!(v["kind"], "helix");
+        assert_eq!(v["code"], "msg_duplicate");
+        assert_eq!(v["message"], "dup");
+
+        let v = serde_json::to_value(SendCommandError::Io {
+            message: "pipe".into(),
+        })
+        .unwrap();
+        assert_eq!(v["kind"], "io");
+
+        let v = serde_json::to_value(SendCommandError::Json {
+            message: "bad".into(),
+        })
+        .unwrap();
+        assert_eq!(v["kind"], "json");
+
+        let v = serde_json::to_value(SendCommandError::Auth {
+            message: "boom".into(),
+        })
+        .unwrap();
+        assert_eq!(v["kind"], "auth");
     }
 }
