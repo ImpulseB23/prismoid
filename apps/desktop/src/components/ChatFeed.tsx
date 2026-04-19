@@ -312,8 +312,7 @@ const ChatFeed: Component = () => {
                 <span
                   style={{
                     color: "#6e6e72",
-                    "margin-right": "4px",
-                    "white-space": "nowrap",
+                    "white-space": "pre",
                   }}
                 >
                   {item.prepared.timestamp}

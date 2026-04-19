@@ -89,11 +89,13 @@ export function prepareMessage(
   // Timestamp prefix: a single non-breaking text run so the username
   // never wraps onto a line by itself when the timestamp pushes the
   // first badge down. The trailing space keeps separation from badges
-  // without needing a separate item.
-  const timestamp = formatTimestamp(msg.timestamp);
+  // without needing a separate item, and we expose the exact same
+  // string to the DOM so Pretext's measurement matches what renders.
+  const formatted = formatTimestamp(msg.timestamp);
+  const timestamp = formatted ? `${formatted} ` : "";
   if (timestamp) {
     items.push({
-      text: `${timestamp} `,
+      text: timestamp,
       font: TIMESTAMP_FONT,
       break: "never",
     });
