@@ -2,7 +2,7 @@
 // apps/desktop/src-tauri/src/twitch_auth/commands.rs.
 
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-shell";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 export type AuthStatusState = "logged_out" | "logged_in";
 
@@ -54,8 +54,22 @@ export function logout(): Promise<void> {
   return invoke("twitch_logout");
 }
 
+const ALLOWED_HOSTS = ["www.twitch.tv", "id.twitch.tv"];
+
 export function openVerificationUri(uri: string): Promise<void> {
-  return open(uri);
+  let parsed: URL;
+  try {
+    parsed = new URL(uri);
+  } catch {
+    return Promise.reject(new Error("invalid verification URL"));
+  }
+  if (
+    parsed.protocol !== "https:" ||
+    !ALLOWED_HOSTS.includes(parsed.hostname)
+  ) {
+    return Promise.reject(new Error("verification URL not on a Twitch domain"));
+  }
+  return openUrl(uri);
 }
 
 // Frontend-facing error envelope from sidecar_commands::twitch_send_message.
