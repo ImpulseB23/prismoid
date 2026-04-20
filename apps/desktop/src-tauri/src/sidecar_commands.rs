@@ -651,4 +651,10 @@ mod tests {
         .unwrap();
         assert_eq!(v["kind"], "auth");
     }
+
+    #[test]
+    fn write_raw_returns_false_without_child() {
+        let sender = SidecarCommandSender::default();
+        assert!(!sender.write_raw(b"anything\n"));
+    }
 }
