@@ -210,7 +210,9 @@ impl SidecarCommandSender {
     }
 
     /// Writes a pre-serialized control line to the sidecar's stdin.
-    /// Returns `false` if no child is currently running.
+    /// `CommandChild::write` internally calls `write_all` on the pipe,
+    /// so partial writes cannot occur. Returns `false` if no child is
+    /// currently running.
     #[cfg(windows)]
     pub fn write_raw(&self, line: &[u8]) -> bool {
         let mut g = unpoison(self.inner.lock());

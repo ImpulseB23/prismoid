@@ -480,6 +480,8 @@ async fn token_refresh_loop(auth: Arc<AuthManager>, sender: SidecarCommandSender
     // a fresh token at sidecar spawn.
     interval.tick().await;
 
+    let mut last_token = String::new();
+
     loop {
         interval.tick().await;
 
@@ -491,6 +493,11 @@ async fn token_refresh_loop(auth: Arc<AuthManager>, sender: SidecarCommandSender
             }
         };
 
+        if tokens.access_token == last_token {
+            tracing::debug!("token unchanged, skipping refresh send");
+            continue;
+        }
+
         let line = match build_token_refresh_line(&tokens.access_token) {
             Ok(l) => l,
             Err(e) => {
@@ -500,6 +507,7 @@ async fn token_refresh_loop(auth: Arc<AuthManager>, sender: SidecarCommandSender
         };
 
         if sender.write_raw(&line) {
+            last_token = tokens.access_token;
             tracing::info!("proactive token refresh sent to sidecar");
         } else {
             tracing::debug!("sidecar gone before token refresh could be sent");
