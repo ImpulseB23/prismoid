@@ -18,11 +18,9 @@ import {
 const MessageInput: Component = () => {
   const [text, setText] = createSignal("");
   const [status, setStatus] = createSignal<string | null>(null);
-  const [pending, setPending] = createSignal(false);
   let inputEl: HTMLInputElement | undefined;
 
-  const submit = async () => {
-    if (pending()) return;
+  const submit = () => {
     const payload = normalizeOutgoing(text());
     if (!payload) {
       setStatus("Message is empty.");
@@ -32,22 +30,18 @@ const MessageInput: Component = () => {
       setStatus(`Message exceeds ${MAX_CHAT_MESSAGE_BYTES} bytes.`);
       return;
     }
-    setPending(true);
+    setText("");
     setStatus(null);
-    try {
-      await sendMessage(payload);
-      setText("");
-      inputEl?.focus();
-    } catch (raw) {
+    inputEl?.focus();
+
+    sendMessage(payload).catch((raw) => {
       const err = toSendError(raw);
       setStatus(
         typeof err === "string"
           ? err
           : formatSendError(err as SendMessageError),
       );
-    } finally {
-      setPending(false);
-    }
+    });
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
@@ -80,7 +74,6 @@ const MessageInput: Component = () => {
           aria-label="Send a chat message"
           value={text()}
           placeholder="Send a message"
-          disabled={pending()}
           onInput={(e) => setText(e.currentTarget.value)}
           onKeyDown={onKeyDown}
           style={{
@@ -98,7 +91,7 @@ const MessageInput: Component = () => {
         />
         <button
           type="button"
-          disabled={pending() || normalizeOutgoing(text()) === null}
+          disabled={normalizeOutgoing(text()) === null}
           onClick={() => void submit()}
           style={{
             "background-color": "#9147ff",
@@ -108,11 +101,10 @@ const MessageInput: Component = () => {
             padding: "6px 14px",
             "font-weight": 600,
             "font-size": "13px",
-            cursor: pending() ? "default" : "pointer",
-            opacity: pending() ? 0.6 : 1,
+            cursor: "pointer",
           }}
         >
-          {pending() ? "Sending" : "Chat"}
+          Chat
         </button>
       </div>
       <Show when={status()}>
