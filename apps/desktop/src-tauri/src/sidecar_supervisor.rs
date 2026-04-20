@@ -35,9 +35,9 @@ use tauri_plugin_shell::{
 use crate::emote_index::{EmoteBundle, EmoteIndex};
 #[cfg(windows)]
 use crate::host::{
-    build_bootstrap_line, build_twitch_connect_line, mark_handle_inheritable, parse_batch,
-    parse_sidecar_event, unmark_handle_inheritable, SidecarEvent, TwitchCreds, SIDECAR_BINARY,
-    SIGNAL_WAIT_TIMEOUT,
+    build_bootstrap_line, build_token_refresh_line, build_twitch_connect_line,
+    mark_handle_inheritable, parse_batch, parse_sidecar_event, unmark_handle_inheritable,
+    SidecarEvent, TwitchCreds, SIDECAR_BINARY, SIGNAL_WAIT_TIMEOUT,
 };
 #[cfg(windows)]
 use crate::message::UnifiedMessage;
@@ -179,7 +179,7 @@ async fn supervise<R: Runtime>(
         };
 
         let started = Instant::now();
-        match run_once(&app, &cfg, attempt, Some(&creds), &sender).await {
+        match run_once(&app, &cfg, attempt, Some(&creds), &sender, &auth).await {
             Ok(()) => tracing::info!(attempt, "sidecar iteration ended"),
             Err(e) => tracing::error!(error = %e, attempt, "sidecar iteration failed"),
         }
@@ -258,6 +258,7 @@ async fn run_once<R: Runtime>(
     attempt: u32,
     creds: Option<&TwitchCreds>,
     sender: &SidecarCommandSender,
+    auth: &Arc<AuthManager>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let reader = RingBufReader::create_owner(DEFAULT_CAPACITY)?;
     let handle = reader.raw_handle();
@@ -342,6 +343,18 @@ async fn run_once<R: Runtime>(
 
     emit_status(app, "running", attempt, None);
 
+    // Proactive token refresh (ADR 29): periodically check if the Twitch
+    // token is near expiry and push a fresh one to the sidecar so EventSub
+    // reconnects don't fail with a stale credential. The task is cancelled
+    // when the event loop exits (sidecar death or heartbeat timeout).
+    let refresh_handle = {
+        let auth = Arc::clone(auth);
+        let sender = sender.clone();
+        tauri::async_runtime::spawn(async move {
+            token_refresh_loop(auth, sender).await;
+        })
+    };
+
     run_event_loop(
         &mut rx,
         cfg.heartbeat_timeout,
@@ -357,6 +370,8 @@ async fn run_once<R: Runtime>(
         || emit_status(app, "unhealthy", attempt, None),
     )
     .await;
+
+    refresh_handle.abort();
 
     // Release-store the shutdown flag; the drain loop does an Acquire-load
     // at the top of every iteration and exits after one final drain pass
@@ -445,6 +460,50 @@ async fn run_event_loop<F, K, U>(
                 on_timeout_kill();
                 killed = true;
             }
+        }
+    }
+}
+
+/// Check interval for proactive token refresh. Slightly shorter than the
+/// 5-minute refresh threshold so we always refresh before the sidecar's
+/// token actually expires.
+#[cfg(windows)]
+const TOKEN_CHECK_INTERVAL: Duration = Duration::from_secs(4 * 60);
+
+/// Periodically checks if the Twitch access token is near expiry and
+/// pushes a fresh one to the running sidecar. Designed to be spawned as
+/// a tokio task and aborted when the sidecar iteration ends.
+#[cfg(windows)]
+async fn token_refresh_loop(auth: Arc<AuthManager>, sender: SidecarCommandSender) {
+    let mut interval = tokio::time::interval(TOKEN_CHECK_INTERVAL);
+    // The first tick fires immediately; skip it since we just loaded
+    // a fresh token at sidecar spawn.
+    interval.tick().await;
+
+    loop {
+        interval.tick().await;
+
+        let tokens = match auth.load_or_refresh().await {
+            Ok(t) => t,
+            Err(e) => {
+                tracing::warn!(error = %e, "proactive token refresh failed");
+                continue;
+            }
+        };
+
+        let line = match build_token_refresh_line(&tokens.access_token) {
+            Ok(l) => l,
+            Err(e) => {
+                tracing::error!(error = %e, "failed to serialize token_refresh command");
+                continue;
+            }
+        };
+
+        if sender.write_raw(&line) {
+            tracing::info!("proactive token refresh sent to sidecar");
+        } else {
+            tracing::debug!("sidecar gone before token refresh could be sent");
+            break;
         }
     }
 }

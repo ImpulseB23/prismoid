@@ -208,6 +208,17 @@ impl SidecarCommandSender {
     {
         Err(SendCommandError::SidecarNotRunning)
     }
+
+    /// Writes a pre-serialized control line to the sidecar's stdin.
+    /// Returns `false` if no child is currently running.
+    #[cfg(windows)]
+    pub fn write_raw(&self, line: &[u8]) -> bool {
+        let mut g = unpoison(self.inner.lock());
+        match g.child.as_mut() {
+            Some(child) => child.write(line).is_ok(),
+            None => false,
+        }
+    }
 }
 
 /// Frontend-facing error for `twitch_send_message` and any future
