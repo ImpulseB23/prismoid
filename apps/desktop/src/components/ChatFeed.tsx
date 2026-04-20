@@ -99,9 +99,15 @@ interface PositionedMessage {
   height: number;
 }
 
+interface CachedEntry {
+  prepared: PreparedMessage;
+  height: number;
+  measuredWidth: number;
+}
+
 const ChatFeed: Component = () => {
   let containerRef: HTMLDivElement | undefined;
-  const preparedCache = new Map<number, PreparedMessage>();
+  const entryCache = new Map<number, CachedEntry>();
   let lastBadgeRev = 0;
 
   const [width, setWidth] = createSignal(0);
@@ -143,11 +149,11 @@ const ChatFeed: Component = () => {
     const liveStart = v.start;
     const liveEnd = v.start + v.count;
 
-    for (const key of preparedCache.keys()) {
-      if (key < liveStart) preparedCache.delete(key);
+    for (const key of entryCache.keys()) {
+      if (key < liveStart) entryCache.delete(key);
     }
     if (rev !== lastBadgeRev) {
-      preparedCache.clear();
+      entryCache.clear();
       lastBadgeRev = rev;
     }
 
@@ -157,14 +163,24 @@ const ChatFeed: Component = () => {
     for (let mono = liveStart; mono < liveEnd; mono++) {
       const msg = getMessage(mono);
       if (!msg) continue;
-      let prepared = preparedCache.get(mono);
-      if (prepared === undefined) {
-        prepared = prepareMessage(msg, resolveBadge);
-        preparedCache.set(mono, prepared);
+      let entry = entryCache.get(mono);
+      if (entry === undefined || entry.measuredWidth !== w) {
+        const prepared =
+          entry !== undefined
+            ? entry.prepared
+            : prepareMessage(msg, resolveBadge);
+        const height = measureMessageHeight(prepared.prepared, w);
+        entry = { prepared, height, measuredWidth: w };
+        entryCache.set(mono, entry);
       }
-      const height = measureMessageHeight(prepared.prepared, w);
-      messages[writeIdx++] = { monoIndex: mono, msg, prepared, top: y, height };
-      y += height;
+      messages[writeIdx++] = {
+        monoIndex: mono,
+        msg,
+        prepared: entry.prepared,
+        top: y,
+        height: entry.height,
+      };
+      y += entry.height;
     }
     messages.length = writeIdx;
     return { messages, totalHeight: y };
