@@ -40,7 +40,7 @@ use crate::host::{
     SidecarEvent, TwitchCreds, SIDECAR_BINARY, SIGNAL_WAIT_TIMEOUT,
 };
 #[cfg(windows)]
-use crate::message::UnifiedMessage;
+use crate::message::{assign_arrival_seqs, UnifiedMessage};
 #[cfg(windows)]
 use crate::ringbuf::{RawHandle, RingBufReader, WaitOutcome, DEFAULT_CAPACITY};
 #[cfg(windows)]
@@ -538,10 +538,14 @@ fn run_drain_loop<R: Runtime>(
         .try_into()
         .expect("signal wait timeout fits in u32 ms");
     let mut batch: Vec<UnifiedMessage> = Vec::with_capacity(64);
+    // Per-process monotonic arrival counter. Persists for the lifetime of
+    // this drain loop (i.e. the lifetime of one sidecar run). The frontend
+    // uses `(effective_ts, arrival_seq)` as a stable sort key.
+    let mut next_seq: u64 = 0;
 
     loop {
         if shutdown.load(Ordering::Acquire) {
-            drain_and_emit(&mut reader, &app, &mut batch, &emote_index);
+            drain_and_emit(&mut reader, &app, &mut batch, &emote_index, &mut next_seq);
             return;
         }
         match reader.wait_for_signal(timeout_ms) {
@@ -551,7 +555,7 @@ fn run_drain_loop<R: Runtime>(
                 return;
             }
         }
-        drain_and_emit(&mut reader, &app, &mut batch, &emote_index);
+        drain_and_emit(&mut reader, &app, &mut batch, &emote_index, &mut next_seq);
     }
 }
 
@@ -561,6 +565,7 @@ fn drain_and_emit<R: Runtime>(
     app: &AppHandle<R>,
     batch: &mut Vec<UnifiedMessage>,
     emote_index: &EmoteIndex,
+    next_seq: &mut u64,
 ) {
     let raw = reader.drain();
     if raw.is_empty() {
@@ -571,6 +576,7 @@ fn drain_and_emit<R: Runtime>(
     if batch.is_empty() {
         return;
     }
+    assign_arrival_seqs(batch, next_seq);
     if let Err(e) = app.emit("chat_messages", &*batch) {
         tracing::error!(error = %e, "failed to emit chat_messages");
     }
