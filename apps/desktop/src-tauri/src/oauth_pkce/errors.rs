@@ -11,6 +11,12 @@ pub enum PkceError {
     #[error("failed to bind loopback listener: {0}")]
     Bind(#[source] std::io::Error),
 
+    /// OS RNG (`getrandom`) refused to fill the verifier/state buffer.
+    /// Practically unreachable on a desktop OS but surfaced rather
+    /// than panicked per docs/stability.md.
+    #[error("OS RNG unavailable: {0}")]
+    Rng(String),
+
     /// Listener bound but accepting / reading the inbound HTTP request
     /// failed.
     #[error("loopback I/O error: {0}")]

@@ -28,6 +28,11 @@ use crate::oauth_pkce::{
 /// Proactive refresh threshold per ADR 29.
 pub const REFRESH_THRESHOLD_MS: i64 = 5 * 60 * 1000;
 
+/// Wall-clock ceiling on `complete_login` waiting for the loopback
+/// redirect. Bounds stuck tasks if the user closes the browser tab
+/// without completing the consent screen.
+const LOGIN_TIMEOUT_SECS: u64 = 300;
+
 pub struct AuthManagerBuilder {
     client_id: String,
     client_secret: String,
@@ -138,8 +143,8 @@ impl AuthManager {
         let server = LoopbackServer::bind()
             .await
             .map_err(|e| AuthError::LoopbackBind(e.to_string()))?;
-        let pkce = Pkce::generate();
-        let state = State::generate();
+        let pkce = Pkce::generate()?;
+        let state = State::generate()?;
         let redirect_uri = server.redirect_uri();
 
         let authorization_uri = build_authorization_uri(
@@ -149,7 +154,7 @@ impl AuthManager {
             &self.scopes,
             &pkce,
             &state,
-        );
+        )?;
 
         Ok(PendingLogin {
             server,
@@ -171,7 +176,16 @@ impl AuthManager {
             redirect_uri,
             ..
         } = pending;
-        let redirect = server.wait_for_redirect().await?;
+        // RFC 8252 doesn't pin a number; 5 minutes is generous for a
+        // user toggling to the browser, completing Google's account
+        // chooser + 2FA, and toggling back, while still bounding stuck
+        // tasks if the tab is closed without completing.
+        let redirect = tokio::time::timeout(
+            Duration::from_secs(LOGIN_TIMEOUT_SECS),
+            server.wait_for_redirect(),
+        )
+        .await
+        .map_err(|_| AuthError::Timeout)??;
         let (code, returned_state) = redirect.into_code_and_state()?;
         if returned_state != state.as_str() {
             return Err(AuthError::StateMismatch);
@@ -192,7 +206,7 @@ impl AuthManager {
         .await?;
 
         let identity = self.fetch_channel(&response.access_token).await?;
-        let tokens = tokens_from_response(&response, identity, None);
+        let tokens = tokens_from_response(&response, identity, None)?;
         self.store.save(&tokens)?;
         Ok(tokens)
     }
@@ -220,14 +234,14 @@ impl AuthManager {
             ],
         )
         .await?;
-        Ok(tokens_from_response(
+        tokens_from_response(
             &response,
             ChannelIdentity {
                 channel_id: stored.channel_id.clone(),
                 channel_title: stored.channel_title.clone(),
             },
             Some(&stored.refresh_token),
-        ))
+        )
     }
 
     async fn fetch_channel(&self, access_token: &str) -> Result<ChannelIdentity, AuthError> {
@@ -323,9 +337,10 @@ fn build_authorization_uri(
     scopes: &[String],
     pkce: &Pkce,
     state: &State,
-) -> String {
+) -> Result<String, AuthError> {
     let scope = scopes.join(" ");
-    let mut url = Url::parse(endpoint).expect("auth endpoint must be a valid URL");
+    let mut url = Url::parse(endpoint)
+        .map_err(|e| AuthError::OAuth(format!("invalid auth endpoint {endpoint:?}: {e}")))?;
     url.query_pairs_mut()
         .append_pair("client_id", client_id)
         .append_pair("redirect_uri", redirect_uri)
@@ -342,21 +357,40 @@ fn build_authorization_uri(
         // skips the refresh_token in the response on subsequent grants
         // and our store ends up with no way to refresh.
         .append_pair("prompt", "consent");
-    url.into()
+    Ok(url.into())
 }
 
 fn tokens_from_response(
     response: &TokenResponse,
     identity: ChannelIdentity,
     fallback_refresh: Option<&str>,
-) -> YouTubeTokens {
-    YouTubeTokens {
+) -> Result<YouTubeTokens, AuthError> {
+    // Google sometimes omits `refresh_token` from refresh responses
+    // (it's only re-issued when the consent set changes), but it MUST
+    // be present on the initial code-for-token exchange when we sent
+    // `access_type=offline`. If neither the response nor the stored
+    // fallback carries one we'd save unusable credentials and trip
+    // refresh forever — fail closed instead.
+    let refresh_token = response
+        .refresh_token
+        .as_deref()
+        .filter(|t| !t.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            fallback_refresh
+                .filter(|t| !t.is_empty())
+                .map(str::to_string)
+        })
+        .ok_or_else(|| {
+            AuthError::OAuth(
+                "token response missing refresh_token and no stored token to fall back to"
+                    .to_string(),
+            )
+        })?;
+
+    Ok(YouTubeTokens {
         access_token: response.access_token.clone(),
-        refresh_token: response
-            .refresh_token
-            .clone()
-            .or_else(|| fallback_refresh.map(str::to_string))
-            .unwrap_or_default(),
+        refresh_token,
         expires_at_ms: compute_expires_at_ms(
             Utc::now().timestamp_millis(),
             Duration::from_secs(response.expires_in),
@@ -368,7 +402,7 @@ fn tokens_from_response(
             .unwrap_or_default(),
         channel_id: identity.channel_id,
         channel_title: identity.channel_title,
-    }
+    })
 }
 
 /// Overflow-safe absolute expiry timestamp. Same rationale as the
@@ -410,8 +444,8 @@ mod tests {
 
     #[test]
     fn build_authorization_uri_includes_required_params() {
-        let pkce = Pkce::generate();
-        let state = State::generate();
+        let pkce = Pkce::generate().unwrap();
+        let state = State::generate().unwrap();
         let uri = build_authorization_uri(
             "https://accounts.google.com/o/oauth2/v2/auth",
             "client123.apps.googleusercontent.com",
@@ -419,7 +453,8 @@ mod tests {
             &["a".into(), "b".into()],
             &pkce,
             &state,
-        );
+        )
+        .unwrap();
         assert!(uri.contains("client_id=client123.apps.googleusercontent.com"));
         assert!(uri.contains("redirect_uri=http%3A%2F%2F127.0.0.1%3A54321"));
         assert!(uri.contains("response_type=code"));
@@ -429,6 +464,22 @@ mod tests {
         assert!(uri.contains(&format!("state={}", state.as_str())));
         assert!(uri.contains("access_type=offline"));
         assert!(uri.contains("prompt=consent"));
+    }
+
+    #[test]
+    fn build_authorization_uri_returns_error_on_bad_endpoint() {
+        let pkce = Pkce::generate().unwrap();
+        let state = State::generate().unwrap();
+        let err = build_authorization_uri(
+            "not a url",
+            "client",
+            "http://127.0.0.1:1",
+            &[],
+            &pkce,
+            &state,
+        )
+        .unwrap_err();
+        assert!(matches!(err, AuthError::OAuth(_)));
     }
 
     #[test]
@@ -497,7 +548,8 @@ mod tests {
                 channel_title: "T".into(),
             },
             Some("rt-old"),
-        );
+        )
+        .unwrap();
         assert_eq!(got.refresh_token, "rt-new");
         assert_eq!(got.scopes, vec!["a", "b"]);
     }
@@ -519,11 +571,36 @@ mod tests {
                 channel_title: "T".into(),
             },
             Some("rt-stored"),
-        );
+        )
+        .unwrap();
         assert_eq!(
             got.refresh_token, "rt-stored",
             "must keep the previous refresh token when Google omits it"
         );
+    }
+
+    #[test]
+    fn tokens_from_response_errors_when_no_refresh_anywhere() {
+        // Initial code-for-token path with `access_type=offline` should
+        // always include refresh_token; if Google ever drops it we must
+        // fail closed rather than persist credentials we can't refresh.
+        let response = TokenResponse {
+            access_token: "at".into(),
+            refresh_token: None,
+            expires_in: 3600,
+            scope: None,
+            token_type: None,
+        };
+        let err = tokens_from_response(
+            &response,
+            ChannelIdentity {
+                channel_id: "UC1".into(),
+                channel_title: "T".into(),
+            },
+            None,
+        )
+        .unwrap_err();
+        assert!(matches!(err, AuthError::OAuth(msg) if msg.contains("refresh_token")));
     }
 
     #[tokio::test]
@@ -531,7 +608,8 @@ mod tests {
         let mgr = AuthManager::builder("c", "s").build(MemoryStore::default(), test_http_client());
         match mgr.load_or_refresh().await {
             Err(AuthError::NoTokens) => {}
-            other => panic!("expected NoTokens, got {other:?}"),
+            Ok(_) => panic!("expected NoTokens, got Ok"),
+            Err(_) => panic!("expected NoTokens variant"),
         }
     }
 

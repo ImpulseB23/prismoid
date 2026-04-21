@@ -30,7 +30,9 @@ export interface AuthCommandError {
     | "oauth"
     | "json"
     | "no_channel"
-    | "no_pending_flow";
+    | "no_pending_flow"
+    | "cancelled"
+    | "timeout";
   message: string;
 }
 

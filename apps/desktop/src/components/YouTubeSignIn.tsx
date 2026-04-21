@@ -59,7 +59,18 @@ const YouTubeSignIn: Component = () => {
     try {
       const view = await startLogin();
       if (gen !== generation) return;
-      void openAuthorizationUri(view.authorization_uri).catch(() => {});
+      try {
+        await openAuthorizationUri(view.authorization_uri);
+      } catch (e) {
+        // Browser launch failed (allowlist rejected, no opener, etc.).
+        // Tear down the pending backend flow so it doesn't sit on the
+        // loopback waiting for a redirect that will never arrive.
+        if (gen === generation) {
+          await cancelLogin().catch(() => {});
+        }
+        throw e;
+      }
+      if (gen !== generation) return;
 
       const next = await completeLogin();
       if (gen !== generation) return;
@@ -67,7 +78,9 @@ const YouTubeSignIn: Component = () => {
     } catch (e) {
       if (gen !== generation) return;
       if (isAuthError(e)) {
-        setError(authErrorMessage(e));
+        // A user-initiated cancel surfaces as a backend error; don't
+        // flash that as a red error message.
+        if (e.kind !== "cancelled") setError(authErrorMessage(e));
       } else {
         setError(e instanceof Error ? e.message : String(e));
       }
@@ -256,6 +269,10 @@ function authErrorMessage(e: AuthCommandError): string {
       return `Google rejected the request: ${e.message}`;
     case "no_pending_flow":
       return "Sign-in flow lost its state. Try again.";
+    case "timeout":
+      return "Sign-in took too long. Try again.";
+    case "cancelled":
+      return "Sign-in cancelled.";
     default:
       return e.message;
   }

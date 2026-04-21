@@ -204,6 +204,15 @@ fn parse_redirect(buf: &[u8]) -> Result<RedirectParams, PkceError> {
         ));
     }
 
+    // A `code` arriving without `state` cannot be the OAuth provider's
+    // redirect (RFC 6749 §4.1.2 mandates state echo when state was sent
+    // in the request). Treat it as a probe and keep waiting — otherwise
+    // a curl `?code=x` to the loopback would terminate the listener
+    // before the real browser redirect arrives.
+    if params.error.is_none() && params.code.is_some() && params.state.is_none() {
+        return Err(PkceError::BadRequest("code without state in query string"));
+    }
+
     Ok(params)
 }
 
@@ -348,6 +357,15 @@ mod tests {
     fn parse_redirect_rejects_query_without_code_or_error() {
         let raw = b"GET /?nonsense=1 HTTP/1.1\r\n\r\n";
         assert!(matches!(parse_redirect(raw), Err(PkceError::BadRequest(_))));
+    }
+
+    #[test]
+    fn parse_redirect_rejects_code_without_state() {
+        let raw = b"GET /?code=abc HTTP/1.1\r\n\r\n";
+        assert!(matches!(
+            parse_redirect(raw),
+            Err(PkceError::BadRequest("code without state in query string"))
+        ));
     }
 
     #[test]

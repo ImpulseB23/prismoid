@@ -15,6 +15,11 @@ pub struct AuthState {
     pub manager: Arc<AuthManager>,
     pub pending: Mutex<Option<PendingLogin>>,
     pub wakeup: Arc<Notify>,
+    /// Notify shared with an in-flight `complete_login` call so that
+    /// `cancel_login` can actually unblock the loopback wait. A fresh
+    /// `Notify` is installed at every `start_login` so a stale cancel
+    /// from a previous attempt can't poison the next one.
+    cancel: Mutex<Option<Arc<Notify>>>,
 }
 
 impl AuthState {
@@ -23,6 +28,7 @@ impl AuthState {
             manager,
             pending: Mutex::new(None),
             wakeup,
+            cancel: Mutex::new(None),
         }
     }
 
@@ -46,6 +52,7 @@ impl AuthState {
             authorization_uri: pending.authorization_uri().to_string(),
         };
         *self.pending.lock().await = Some(pending);
+        *self.cancel.lock().await = Some(Arc::new(Notify::new()));
         Ok(view)
     }
 
@@ -54,7 +61,28 @@ impl AuthState {
             kind: "no_pending_flow",
             message: "youtube_start_login has not been called".into(),
         })?;
-        let tokens = self.manager.complete_login(pending).await?;
+        let cancel = self.cancel.lock().await.clone();
+
+        let outcome = match cancel {
+            Some(cancel) => tokio::select! {
+                biased;
+                _ = cancel.notified() => Err(AuthCommandError {
+                    kind: "cancelled",
+                    message: "youtube sign-in cancelled".into(),
+                }),
+                result = self.manager.complete_login(pending) => result.map_err(Into::into),
+            },
+            None => self
+                .manager
+                .complete_login(pending)
+                .await
+                .map_err(Into::into),
+        };
+        // Clear cancel slot regardless of which branch won; the next
+        // login attempt installs a fresh Notify in start_login.
+        *self.cancel.lock().await = None;
+
+        let tokens = outcome?;
         self.wakeup.notify_one();
         Ok(AuthStatus {
             state: AuthStatusState::LoggedIn,
@@ -63,12 +91,19 @@ impl AuthState {
     }
 
     pub async fn cancel_login(&self) {
+        // Take the Arc out so a second cancel is a no-op, but notify
+        // first so an in-flight complete_login (which holds its own
+        // clone of the Arc) wakes up.
+        if let Some(cancel) = self.cancel.lock().await.take() {
+            cancel.notify_one();
+        }
         self.pending.lock().await.take();
     }
 
     pub async fn logout(&self) -> Result<(), AuthCommandError> {
         self.manager.logout()?;
         self.pending.lock().await.take();
+        *self.cancel.lock().await = None;
         self.wakeup.notify_one();
         Ok(())
     }
@@ -114,6 +149,7 @@ impl From<AuthError> for AuthCommandError {
             AuthError::OAuth(_) => "oauth",
             AuthError::Json(_) => "json",
             AuthError::NoChannel => "no_channel",
+            AuthError::Timeout => "timeout",
         };
         Self {
             kind,
@@ -187,6 +223,12 @@ mod tests {
     fn auth_command_error_maps_no_channel() {
         let mapped: AuthCommandError = AuthError::NoChannel.into();
         assert_eq!(mapped.kind, "no_channel");
+    }
+
+    #[test]
+    fn auth_command_error_maps_timeout() {
+        let mapped: AuthCommandError = AuthError::Timeout.into();
+        assert_eq!(mapped.kind, "timeout");
     }
 
     #[test]
@@ -287,5 +329,25 @@ mod tests {
         assert!(state.pending.lock().await.is_some());
         // Drop the loopback listener so the test doesn't leak the port.
         state.cancel_login().await;
+    }
+
+    #[tokio::test]
+    async fn cancel_login_unblocks_in_flight_complete_login() {
+        let state = Arc::new(build_state_with_store(MemoryStore::default()));
+        state.start_login().await.unwrap();
+
+        let s = state.clone();
+        let completion = tokio::spawn(async move { s.complete_login().await });
+
+        // Give the spawned task a tick to enter the select.
+        tokio::task::yield_now().await;
+        state.cancel_login().await;
+
+        let err = tokio::time::timeout(std::time::Duration::from_secs(2), completion)
+            .await
+            .expect("complete_login should unblock once cancelled")
+            .expect("task panicked")
+            .expect_err("cancelled completion must error");
+        assert_eq!(err.kind, "cancelled");
     }
 }

@@ -112,18 +112,27 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
             KeychainStore as YtKeychainStore, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
             SCOPE_YOUTUBE, SCOPE_YOUTUBE_READONLY,
         };
-        let yt_http_client = reqwest::Client::builder()
+        match reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .build()
-            .expect("reqwest client (YouTube)");
-        let yt_auth = Arc::new(
-            YtAuthManager::builder(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)
-                .scope(SCOPE_YOUTUBE_READONLY)
-                .scope(SCOPE_YOUTUBE)
-                .build(YtKeychainStore, yt_http_client),
-        );
-        let yt_wakeup = Arc::new(Notify::new());
-        app.manage(YtAuthState::new(yt_auth, yt_wakeup));
+        {
+            Ok(yt_http_client) => {
+                let yt_auth = Arc::new(
+                    YtAuthManager::builder(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)
+                        .scope(SCOPE_YOUTUBE_READONLY)
+                        .scope(SCOPE_YOUTUBE)
+                        .build(YtKeychainStore, yt_http_client),
+                );
+                let yt_wakeup = Arc::new(Notify::new());
+                app.manage(YtAuthState::new(yt_auth, yt_wakeup));
+            }
+            Err(err) => {
+                tracing::error!(
+                    error = %err,
+                    "failed to build reqwest client for YouTube; skipping YouTube auth wiring"
+                );
+            }
+        }
     }
 
     let sender = sidecar_commands::SidecarCommandSender::default();

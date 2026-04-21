@@ -58,6 +58,12 @@ pub enum AuthError {
     /// (rare for streamers, common for general Google users).
     #[error("Google account has no YouTube channel")]
     NoChannel,
+
+    /// `complete_login` waited longer than the configured ceiling for
+    /// the loopback redirect. Surfaces to the UI so the user can retry
+    /// instead of the command hanging until app exit.
+    #[error("timed out waiting for YouTube sign-in to complete")]
+    Timeout,
 }
 
 impl From<PkceError> for AuthError {
@@ -66,6 +72,7 @@ impl From<PkceError> for AuthError {
             PkceError::Authorization(s) if s == "access_denied" => AuthError::UserDenied,
             PkceError::StateMismatch => AuthError::StateMismatch,
             PkceError::Bind(e) => AuthError::LoopbackBind(e.to_string()),
+            PkceError::Rng(s) => AuthError::OAuth(format!("OS RNG unavailable: {s}")),
             // `invalid_grant` is Google's universal signal for a dead
             // refresh token on the refresh path. We classify it the
             // same way `twitch_auth` does — it triggers the re-auth UI.
@@ -122,6 +129,15 @@ mod tests {
         let err: AuthError = PkceError::Authorization("server_error".into()).into();
         match err {
             AuthError::OAuth(msg) => assert!(msg.contains("server_error")),
+            other => panic!("expected OAuth, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn pkce_rng_maps_to_oauth() {
+        let err: AuthError = PkceError::Rng("entropy source unavailable".into()).into();
+        match err {
+            AuthError::OAuth(msg) => assert!(msg.contains("OS RNG")),
             other => panic!("expected OAuth, got {other:?}"),
         }
     }

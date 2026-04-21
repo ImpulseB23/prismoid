@@ -20,6 +20,8 @@ use base64::Engine;
 use rand::TryRngCore;
 use sha2::{Digest, Sha256};
 
+use super::errors::PkceError;
+
 /// Number of random bytes for both verifier and state. 32 → 256 bits
 /// of entropy → 43 characters base64url-no-pad. Above the RFC 7636
 /// minimum (32 chars) and well below the maximum (128 chars).
@@ -42,18 +44,17 @@ impl Pkce {
     /// verifier being unguessable. Userspace PRNGs would not survive
     /// a timing analysis of the SHA-256 challenge round-tripping the
     /// network during the authorization phase.
-    #[must_use]
-    pub fn generate() -> Self {
+    pub fn generate() -> Result<Self, PkceError> {
         let mut bytes = [0u8; RANDOM_BYTES];
         rand::rngs::OsRng
             .try_fill_bytes(&mut bytes)
-            .expect("OS RNG unavailable");
+            .map_err(|e| PkceError::Rng(e.to_string()))?;
         let verifier = URL_SAFE_NO_PAD.encode(bytes);
         let challenge = challenge_for(&verifier);
-        Self {
+        Ok(Self {
             verifier,
             challenge,
-        }
+        })
     }
 }
 
@@ -63,13 +64,12 @@ impl Pkce {
 pub struct State(pub String);
 
 impl State {
-    #[must_use]
-    pub fn generate() -> Self {
+    pub fn generate() -> Result<Self, PkceError> {
         let mut bytes = [0u8; RANDOM_BYTES];
         rand::rngs::OsRng
             .try_fill_bytes(&mut bytes)
-            .expect("OS RNG unavailable");
-        Self(URL_SAFE_NO_PAD.encode(bytes))
+            .map_err(|e| PkceError::Rng(e.to_string()))?;
+        Ok(Self(URL_SAFE_NO_PAD.encode(bytes)))
     }
 
     #[must_use]
@@ -89,7 +89,7 @@ mod tests {
 
     #[test]
     fn verifier_is_43_chars_base64url_no_pad() {
-        let p = Pkce::generate();
+        let p = Pkce::generate().unwrap();
         assert_eq!(p.verifier.len(), 43);
         // base64url-no-pad alphabet: A-Z a-z 0-9 - _
         assert!(
@@ -103,7 +103,7 @@ mod tests {
 
     #[test]
     fn challenge_matches_s256_of_verifier() {
-        let p = Pkce::generate();
+        let p = Pkce::generate().unwrap();
         assert_eq!(p.challenge, challenge_for(&p.verifier));
     }
 
@@ -117,15 +117,15 @@ mod tests {
 
     #[test]
     fn two_generates_produce_distinct_pairs() {
-        let a = Pkce::generate();
-        let b = Pkce::generate();
+        let a = Pkce::generate().unwrap();
+        let b = Pkce::generate().unwrap();
         assert_ne!(a.verifier, b.verifier);
         assert_ne!(a.challenge, b.challenge);
     }
 
     #[test]
     fn state_is_43_chars_base64url_no_pad() {
-        let s = State::generate();
+        let s = State::generate().unwrap();
         assert_eq!(s.0.len(), 43);
         assert!(s
             .0
@@ -135,6 +135,6 @@ mod tests {
 
     #[test]
     fn two_states_are_distinct() {
-        assert_ne!(State::generate(), State::generate());
+        assert_ne!(State::generate().unwrap(), State::generate().unwrap());
     }
 }
