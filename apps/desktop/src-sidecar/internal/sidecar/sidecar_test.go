@@ -1427,7 +1427,52 @@ func TestHandleYouTubeSendMessage_APIError(t *testing.T) {
 		Cmd: "youtube_send_message", LiveChatID: "abc", Token: "t", Message: "hi", RequestID: 13,
 	}, notify, zerolog.Nop())
 
-	if got.Ok || got.ErrorMessage == "" || got.RequestID != 13 {
+	if got.Ok || got.DropMessage == "" || got.RequestID != 13 {
 		t.Fatalf("unexpected payload: %+v", got)
+	}
+	if got.DropCode != "youtube_api" {
+		t.Fatalf("drop_code = %q, want youtube_api", got.DropCode)
+	}
+}
+
+func TestHandleYouTubeSendMessage_UnauthorizedSurfacesStableCode(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = io.WriteString(w, `{"error":{"code":401,"message":"bad token","errors":[{"reason":"authError"}]}}`)
+	}))
+	defer srv.Close()
+	prev := youtubeSendAPIBase
+	youtubeSendAPIBase = srv.URL
+	defer func() { youtubeSendAPIBase = prev }()
+
+	var got SendChatResultPayload
+	notify := func(_ string, p any) { got = p.(SendChatResultPayload) }
+	HandleYouTubeSendMessage(context.Background(), control.Command{
+		Cmd: "youtube_send_message", LiveChatID: "abc", Token: "t", Message: "hi", RequestID: 21,
+	}, notify, zerolog.Nop())
+
+	if got.Ok || got.DropCode != "unauthorized" {
+		t.Fatalf("expected drop_code=unauthorized, got %+v", got)
+	}
+}
+
+func TestHandleYouTubeSendMessage_QuotaSurfacesStableCode(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, `{"error":{"code":403,"message":"out of quota","errors":[{"reason":"quotaExceeded"}]}}`)
+	}))
+	defer srv.Close()
+	prev := youtubeSendAPIBase
+	youtubeSendAPIBase = srv.URL
+	defer func() { youtubeSendAPIBase = prev }()
+
+	var got SendChatResultPayload
+	notify := func(_ string, p any) { got = p.(SendChatResultPayload) }
+	HandleYouTubeSendMessage(context.Background(), control.Command{
+		Cmd: "youtube_send_message", LiveChatID: "abc", Token: "t", Message: "hi", RequestID: 22,
+	}, notify, zerolog.Nop())
+
+	if got.Ok || got.DropCode != "quota_exceeded" {
+		t.Fatalf("expected drop_code=quota_exceeded, got %+v", got)
 	}
 }

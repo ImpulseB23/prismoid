@@ -504,13 +504,35 @@ func HandleYouTubeSendMessage(ctx context.Context, cmd control.Command, notify t
 	resp, err := client.SendChatMessage(ctx, cmd.LiveChatID, cmd.Message)
 	if err != nil {
 		logger.Warn().Err(err).Str("chat_id", cmd.LiveChatID).Msg("youtube_send_message failed")
-		reply(SendChatResultPayload{ErrorMessage: err.Error()})
+		reply(SendChatResultPayload{
+			DropCode:    youtubeErrorCode(err),
+			DropMessage: err.Error(),
+		})
 		return
 	}
 	reply(SendChatResultPayload{
 		Ok:        true,
 		MessageID: resp.ID,
 	})
+}
+
+// youtubeErrorCode maps a [youtube.APIClient] error onto a stable
+// machine-readable code the Rust host re-surfaces to the UI. Anything
+// the API client recognized as a known failure mode (auth/quota) gets a
+// dedicated code so the frontend can render a tailored message without
+// string-matching the human-readable text.
+func youtubeErrorCode(err error) string {
+	switch {
+	case errors.Is(err, youtube.ErrUnauthorized):
+		return "unauthorized"
+	case errors.Is(err, youtube.ErrQuotaExceeded):
+		return "quota_exceeded"
+	}
+	var apiErr *youtube.APIError
+	if errors.As(err, &apiErr) {
+		return "youtube_api"
+	}
+	return "youtube_send_failed"
 }
 
 // HandleTwitchConnect spawns a Twitch EventSub client for the broadcaster in

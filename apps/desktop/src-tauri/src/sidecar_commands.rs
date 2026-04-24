@@ -264,6 +264,14 @@ pub enum SendCommandError {
         code: String,
         message: String,
     },
+    /// YouTube Data API rejected the send. `code` is one of the stable
+    /// tags emitted by the sidecar (`unauthorized`, `quota_exceeded`,
+    /// `youtube_api`, `youtube_send_failed`) so the UI can render a
+    /// tailored message without parsing free-form text.
+    YouTube {
+        code: String,
+        message: String,
+    },
 }
 
 impl SendCommandError {
@@ -297,29 +305,39 @@ impl SendCommandError {
     }
 
     fn from_send_result(r: SendChatResult) -> Result<SendChatOk, Self> {
+        Self::from_send_result_with(r, |code, message| Self::Helix { code, message })
+    }
+
+    /// YouTube counterpart of [`from_send_result`]. Same envelope, but
+    /// failures land in [`SendCommandError::YouTube`] so the frontend
+    /// can format a YouTube-specific message instead of a Twitch one.
+    fn from_youtube_send_result(r: SendChatResult) -> Result<SendChatOk, Self> {
+        Self::from_send_result_with(r, |code, message| Self::YouTube { code, message })
+    }
+
+    fn from_send_result_with(
+        r: SendChatResult,
+        rejected: impl FnOnce(String, String) -> Self,
+    ) -> Result<SendChatOk, Self> {
         if r.ok {
             return Ok(SendChatOk {
                 message_id: r.message_id,
             });
         }
         if !r.drop_code.is_empty() || !r.drop_message.is_empty() {
-            return Err(Self::Helix {
-                code: r.drop_code,
-                message: if r.drop_message.is_empty() {
-                    "message rejected".to_string()
-                } else {
-                    r.drop_message
-                },
-            });
-        }
-        Err(Self::Helix {
-            code: String::new(),
-            message: if r.error_message.is_empty() {
-                "send failed".to_string()
+            let message = if r.drop_message.is_empty() {
+                "message rejected".to_string()
             } else {
-                r.error_message
-            },
-        })
+                r.drop_message
+            };
+            return Err(rejected(r.drop_code, message));
+        }
+        let message = if r.error_message.is_empty() {
+            "send failed".to_string()
+        } else {
+            r.error_message
+        };
+        Err(rejected(String::new(), message))
     }
 }
 
@@ -448,7 +466,7 @@ pub async fn youtube_send_message(
     })?;
 
     let result = rx.await.map_err(|_| SendCommandError::SidecarNotRunning)?;
-    SendCommandError::from_send_result(result)
+    SendCommandError::from_youtube_send_result(result)
 }
 
 #[cfg(test)]
@@ -567,6 +585,44 @@ mod tests {
                 assert_eq!(message, "401");
             }
             other => panic!("expected Helix, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn from_youtube_send_result_ok_returns_message_id() {
+        let ok = SendCommandError::from_youtube_send_result(make_result(true, "", "", ""))
+            .expect("ok result must succeed");
+        assert_eq!(ok.message_id, "abc");
+    }
+
+    #[test]
+    fn from_youtube_send_result_drop_maps_to_youtube_variant() {
+        match SendCommandError::from_youtube_send_result(make_result(
+            false,
+            "unauthorized",
+            "needs reauth",
+            "",
+        ))
+        .unwrap_err()
+        {
+            SendCommandError::YouTube { code, message } => {
+                assert_eq!(code, "unauthorized");
+                assert_eq!(message, "needs reauth");
+            }
+            other => panic!("expected YouTube, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn from_youtube_send_result_error_only_maps_to_youtube_variant() {
+        match SendCommandError::from_youtube_send_result(make_result(false, "", "", "transport"))
+            .unwrap_err()
+        {
+            SendCommandError::YouTube { code, message } => {
+                assert!(code.is_empty());
+                assert_eq!(message, "transport");
+            }
+            other => panic!("expected YouTube, got {other:?}"),
         }
     }
 
