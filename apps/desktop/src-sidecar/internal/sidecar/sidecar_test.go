@@ -1352,3 +1352,82 @@ func TestHandleSendChatMessage_HelixError(t *testing.T) {
 		t.Fatalf("unexpected payload: %+v", got)
 	}
 }
+
+func TestHandleYouTubeSendMessage_SuccessEchoesMessageID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/liveChat/messages" || r.Method != http.MethodPost {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer yt-tok" {
+			t.Fatalf("missing/incorrect bearer auth: %q", r.Header.Get("Authorization"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"id":"yt-msg-1"}`)
+	}))
+	defer srv.Close()
+	prev := youtubeSendAPIBase
+	youtubeSendAPIBase = srv.URL
+	defer func() { youtubeSendAPIBase = prev }()
+
+	var got SendChatResultPayload
+	notify := func(_ string, p any) { got = p.(SendChatResultPayload) }
+	HandleYouTubeSendMessage(context.Background(), control.Command{
+		Cmd:        "youtube_send_message",
+		LiveChatID: "abc",
+		Token:      "yt-tok",
+		Message:    "hi",
+		RequestID:  77,
+	}, notify, zerolog.Nop())
+
+	if !got.Ok || got.MessageID != "yt-msg-1" || got.RequestID != 77 {
+		t.Fatalf("unexpected payload: %+v", got)
+	}
+}
+
+func TestHandleYouTubeSendMessage_MissingFieldsReplies(t *testing.T) {
+	cases := []struct {
+		name string
+		cmd  control.Command
+	}{
+		{"missing chat id", control.Command{Cmd: "youtube_send_message", Token: "t", Message: "hi", RequestID: 1}},
+		{"missing token", control.Command{Cmd: "youtube_send_message", LiveChatID: "abc", Message: "hi", RequestID: 2}},
+		{"empty message", control.Command{Cmd: "youtube_send_message", LiveChatID: "abc", Token: "t", RequestID: 3}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var got SendChatResultPayload
+			notify := func(_ string, p any) { got = p.(SendChatResultPayload) }
+			HandleYouTubeSendMessage(context.Background(), tc.cmd, notify, zerolog.Nop())
+			if got.Ok {
+				t.Fatalf("expected ok=false, got %+v", got)
+			}
+			if got.ErrorMessage == "" {
+				t.Fatalf("expected error message, got %+v", got)
+			}
+			if got.RequestID != tc.cmd.RequestID {
+				t.Fatalf("request_id = %d, want %d", got.RequestID, tc.cmd.RequestID)
+			}
+		})
+	}
+}
+
+func TestHandleYouTubeSendMessage_APIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, `{"error":{"code":403,"message":"chat ended","errors":[{"reason":"liveChatEnded"}]}}`)
+	}))
+	defer srv.Close()
+	prev := youtubeSendAPIBase
+	youtubeSendAPIBase = srv.URL
+	defer func() { youtubeSendAPIBase = prev }()
+
+	var got SendChatResultPayload
+	notify := func(_ string, p any) { got = p.(SendChatResultPayload) }
+	HandleYouTubeSendMessage(context.Background(), control.Command{
+		Cmd: "youtube_send_message", LiveChatID: "abc", Token: "t", Message: "hi", RequestID: 13,
+	}, notify, zerolog.Nop())
+
+	if got.Ok || got.ErrorMessage == "" || got.RequestID != 13 {
+		t.Fatalf("unexpected payload: %+v", got)
+	}
+}

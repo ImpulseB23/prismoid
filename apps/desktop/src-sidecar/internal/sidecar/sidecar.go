@@ -293,6 +293,8 @@ func DispatchCommand(ctx context.Context, cmd control.Command, clients map[strin
 		HandleDeleteMessage(cmd, logger)
 	case "send_chat_message":
 		HandleSendChatMessage(ctx, cmd, notify, logger)
+	case "youtube_send_message":
+		HandleYouTubeSendMessage(ctx, cmd, notify, logger)
 	default:
 		logger.Info().Str("cmd", cmd.Cmd).Str("channel", cmd.Channel).Msg("received command")
 	}
@@ -466,6 +468,48 @@ func HandleSendChatMessage(ctx context.Context, cmd control.Command, notify twit
 	reply(SendChatResultPayload{
 		Ok:        true,
 		MessageID: first.MessageID,
+	})
+}
+
+// youtubeSendAPIBase overrides the YouTube Data API base URL used by
+// HandleYouTubeSendMessage in tests. Empty string falls through to the
+// production endpoint.
+var youtubeSendAPIBase = ""
+
+// HandleYouTubeSendMessage posts the user's message to the supplied
+// liveChatId via the YouTube Data API and emits a `send_chat_result`
+// notification. Reuses the Twitch result shape because the host-side
+// completer routing is keyed on `request_id` and the success/failure
+// payload (message_id vs error_message) is identical between platforms.
+func HandleYouTubeSendMessage(ctx context.Context, cmd control.Command, notify twitch.Notify, logger zerolog.Logger) {
+	reply := func(p SendChatResultPayload) {
+		p.RequestID = cmd.RequestID
+		notify("send_chat_result", p)
+	}
+	if cmd.LiveChatID == "" || cmd.Token == "" {
+		logger.Warn().
+			Str("chat_id", cmd.LiveChatID).
+			Msg("youtube_send_message missing required field; ignoring")
+		reply(SendChatResultPayload{ErrorMessage: "missing live_chat_id or token"})
+		return
+	}
+	if cmd.Message == "" {
+		reply(SendChatResultPayload{ErrorMessage: "empty message"})
+		return
+	}
+	client := &youtube.APIClient{
+		AccessToken: cmd.Token,
+		BaseURL:     youtubeSendAPIBase,
+	}
+	resp, err := client.SendChatMessage(ctx, cmd.LiveChatID, cmd.Message)
+	if err != nil {
+		logger.Warn().Err(err).Str("chat_id", cmd.LiveChatID).Msg("youtube_send_message failed")
+		reply(SendChatResultPayload{ErrorMessage: err.Error()})
+		return
+	}
+	reply(SendChatResultPayload{
+		Ok:        true,
+		MessageID: resp.ID,
 	})
 }
 
