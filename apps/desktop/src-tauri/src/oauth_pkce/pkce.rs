@@ -17,7 +17,6 @@
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
-use rand::TryRngCore;
 use sha2::{Digest, Sha256};
 
 use super::errors::PkceError;
@@ -39,16 +38,14 @@ pub struct Pkce {
 impl Pkce {
     /// Generate a fresh verifier+challenge pair using the OS RNG.
     ///
-    /// The OS RNG (`rand::rngs::OsRng`, a thin wrapper over `getrandom`)
+    /// The OS RNG (`getrandom::fill`, backed by the platform CSPRNG)
     /// is the only acceptable source: PKCE security relies on the
     /// verifier being unguessable. Userspace PRNGs would not survive
     /// a timing analysis of the SHA-256 challenge round-tripping the
     /// network during the authorization phase.
     pub fn generate() -> Result<Self, PkceError> {
         let mut bytes = [0u8; RANDOM_BYTES];
-        rand::rngs::OsRng
-            .try_fill_bytes(&mut bytes)
-            .map_err(|e| PkceError::Rng(e.to_string()))?;
+        getrandom::fill(&mut bytes).map_err(|e| PkceError::Rng(e.to_string()))?;
         let verifier = URL_SAFE_NO_PAD.encode(bytes);
         let challenge = challenge_for(&verifier);
         Ok(Self {
@@ -66,9 +63,7 @@ pub struct State(pub String);
 impl State {
     pub fn generate() -> Result<Self, PkceError> {
         let mut bytes = [0u8; RANDOM_BYTES];
-        rand::rngs::OsRng
-            .try_fill_bytes(&mut bytes)
-            .map_err(|e| PkceError::Rng(e.to_string()))?;
+        getrandom::fill(&mut bytes).map_err(|e| PkceError::Rng(e.to_string()))?;
         Ok(Self(URL_SAFE_NO_PAD.encode(bytes)))
     }
 
