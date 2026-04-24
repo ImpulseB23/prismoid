@@ -36,7 +36,7 @@ arc-swap = "1.7"
 rustc-hash = "2.1"
 sha2 = "0.10"
 base64 = "0.22"
-rand = "0.10"
+getrandom = "0.3"
 url = "2"
 
 [dev-dependencies]
