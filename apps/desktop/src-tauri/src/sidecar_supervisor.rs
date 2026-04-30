@@ -651,6 +651,7 @@ where
             SidecarEvent::Heartbeat => saw_heartbeat = true,
             SidecarEvent::EmoteBundle(bundle) => on_bundle(bundle),
             SidecarEvent::SendChatResult(r) => on_send_result(r),
+            SidecarEvent::ModActionResult(r) => on_send_result(r),
             SidecarEvent::Other(t) => {
                 tracing::debug!(msg_type = %t, "unhandled sidecar control message");
             }

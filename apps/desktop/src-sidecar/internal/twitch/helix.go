@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 )
@@ -271,6 +272,10 @@ func (e *AuthError) Error() string {
 // without consuming a Helix call.
 const MaxChatMessageBytes = 500
 
+// Helix enforces a 14-day maximum for timeout duration. Longer moderation
+// actions should be sent as permanent bans.
+const MaxTimeoutSeconds = 1209600
+
 // SendChatMessageRequest is the body Twitch's POST /chat/messages expects.
 // `BroadcasterID` is the channel; `SenderID` must match the authenticated
 // user on the access token. `ReplyParentMessageID` is omitted for top-level
@@ -316,4 +321,62 @@ func (c *HelixClient) SendChatMessage(ctx context.Context, broadcasterID, sender
 		return nil, err
 	}
 	return &resp, nil
+}
+
+type banUserRequest struct {
+	Data banUserData `json:"data"`
+}
+
+type banUserData struct {
+	UserID   string `json:"user_id"`
+	Duration int    `json:"duration,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+}
+
+func moderationBansPath(broadcasterID, moderatorID string) string {
+	q := url.Values{}
+	q.Set("broadcaster_id", broadcasterID)
+	q.Set("moderator_id", moderatorID)
+	return "/moderation/bans?" + q.Encode()
+}
+
+func (c *HelixClient) BanUser(ctx context.Context, broadcasterID, moderatorID, targetUserID, reason string) error {
+	if broadcasterID == "" || moderatorID == "" || targetUserID == "" {
+		return errors.New("twitch helix: missing broadcaster, moderator, or target user")
+	}
+	req := banUserRequest{Data: banUserData{UserID: targetUserID, Reason: reason}}
+	return c.Post(ctx, moderationBansPath(broadcasterID, moderatorID), req, nil)
+}
+
+func (c *HelixClient) TimeoutUser(ctx context.Context, broadcasterID, moderatorID, targetUserID string, durationSeconds int, reason string) error {
+	if broadcasterID == "" || moderatorID == "" || targetUserID == "" {
+		return errors.New("twitch helix: missing broadcaster, moderator, or target user")
+	}
+	if durationSeconds < 1 || durationSeconds > MaxTimeoutSeconds {
+		return fmt.Errorf("twitch helix: timeout duration out of range [1, %d]", MaxTimeoutSeconds)
+	}
+	req := banUserRequest{Data: banUserData{UserID: targetUserID, Duration: durationSeconds, Reason: reason}}
+	return c.Post(ctx, moderationBansPath(broadcasterID, moderatorID), req, nil)
+}
+
+func (c *HelixClient) UnbanUser(ctx context.Context, broadcasterID, moderatorID, targetUserID string) error {
+	if broadcasterID == "" || moderatorID == "" || targetUserID == "" {
+		return errors.New("twitch helix: missing broadcaster, moderator, or target user")
+	}
+	q := url.Values{}
+	q.Set("broadcaster_id", broadcasterID)
+	q.Set("moderator_id", moderatorID)
+	q.Set("user_id", targetUserID)
+	return c.Delete(ctx, "/moderation/bans?"+q.Encode(), nil)
+}
+
+func (c *HelixClient) DeleteChatMessage(ctx context.Context, broadcasterID, moderatorID, messageID string) error {
+	if broadcasterID == "" || moderatorID == "" || messageID == "" {
+		return errors.New("twitch helix: missing broadcaster, moderator, or message id")
+	}
+	q := url.Values{}
+	q.Set("broadcaster_id", broadcasterID)
+	q.Set("moderator_id", moderatorID)
+	q.Set("message_id", messageID)
+	return c.Delete(ctx, "/moderation/chat?"+q.Encode(), nil)
 }

@@ -11,7 +11,11 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 }));
 
 import {
+  banUser,
+  deleteMessage,
   sendMessage,
+  timeoutUser,
+  unbanUser,
   openVerificationUri,
   MAX_CHAT_MESSAGE_BYTES,
 } from "./twitchAuth";
@@ -37,6 +41,43 @@ describe("sendMessage", () => {
 
   it("exposes the byte cap matching the Rust constant", () => {
     expect(MAX_CHAT_MESSAGE_BYTES).toBe(500);
+  });
+});
+
+describe("moderation commands", () => {
+  it("invokes twitch_ban_user", async () => {
+    invokeMock.mockResolvedValueOnce(undefined);
+    await banUser("u1", "spam");
+    expect(invokeMock).toHaveBeenCalledWith("twitch_ban_user", {
+      targetUserId: "u1",
+      reason: "spam",
+    });
+  });
+
+  it("invokes twitch_unban_user", async () => {
+    invokeMock.mockResolvedValueOnce(undefined);
+    await unbanUser("u1");
+    expect(invokeMock).toHaveBeenCalledWith("twitch_unban_user", {
+      targetUserId: "u1",
+    });
+  });
+
+  it("invokes twitch_timeout_user", async () => {
+    invokeMock.mockResolvedValueOnce(undefined);
+    await timeoutUser("u1", 60, "caps");
+    expect(invokeMock).toHaveBeenCalledWith("twitch_timeout_user", {
+      targetUserId: "u1",
+      durationSeconds: 60,
+      reason: "caps",
+    });
+  });
+
+  it("invokes twitch_delete_message", async () => {
+    invokeMock.mockResolvedValueOnce(undefined);
+    await deleteMessage("m1");
+    expect(invokeMock).toHaveBeenCalledWith("twitch_delete_message", {
+      messageId: "m1",
+    });
   });
 });
 

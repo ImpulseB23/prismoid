@@ -168,3 +168,108 @@ func TestSendChatMessageUnauthorized(t *testing.T) {
 		t.Fatalf("expected ErrUnauthorized, got %v", err)
 	}
 }
+
+func TestBanUser(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("expected POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/moderation/bans" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		q := r.URL.Query()
+		if q.Get("broadcaster_id") != "b1" || q.Get("moderator_id") != "m1" {
+			t.Fatalf("unexpected query: %s", r.URL.RawQuery)
+		}
+		var req banUserRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if req.Data.UserID != "u1" || req.Data.Reason != "spam" || req.Data.Duration != 0 {
+			t.Fatalf("unexpected body: %+v", req)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := &HelixClient{BaseURL: srv.URL, ClientID: "cid", AccessToken: "tok"}
+	if err := c.BanUser(context.Background(), "b1", "m1", "u1", "spam"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestTimeoutUser(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("expected POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/moderation/bans" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		var req banUserRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if req.Data.UserID != "u1" || req.Data.Duration != 60 || req.Data.Reason != "caps" {
+			t.Fatalf("unexpected body: %+v", req)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := &HelixClient{BaseURL: srv.URL, ClientID: "cid", AccessToken: "tok"}
+	if err := c.TimeoutUser(context.Background(), "b1", "m1", "u1", 60, "caps"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestTimeoutUserRejectsOutOfRange(t *testing.T) {
+	c := &HelixClient{ClientID: "cid", AccessToken: "tok"}
+	if err := c.TimeoutUser(context.Background(), "b1", "m1", "u1", 0, ""); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestUnbanUser(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Fatalf("expected DELETE, got %s", r.Method)
+		}
+		if r.URL.Path != "/moderation/bans" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		q := r.URL.Query()
+		if q.Get("broadcaster_id") != "b1" || q.Get("moderator_id") != "m1" || q.Get("user_id") != "u1" {
+			t.Fatalf("unexpected query: %s", r.URL.RawQuery)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	c := &HelixClient{BaseURL: srv.URL, ClientID: "cid", AccessToken: "tok"}
+	if err := c.UnbanUser(context.Background(), "b1", "m1", "u1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestDeleteChatMessage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Fatalf("expected DELETE, got %s", r.Method)
+		}
+		if r.URL.Path != "/moderation/chat" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		q := r.URL.Query()
+		if q.Get("broadcaster_id") != "b1" || q.Get("moderator_id") != "m1" || q.Get("message_id") != "msg1" {
+			t.Fatalf("unexpected query: %s", r.URL.RawQuery)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	c := &HelixClient{BaseURL: srv.URL, ClientID: "cid", AccessToken: "tok"}
+	if err := c.DeleteChatMessage(context.Background(), "b1", "m1", "msg1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

@@ -100,3 +100,27 @@ export interface SendMessageOk {
 export function sendMessage(text: string): Promise<SendMessageOk> {
   return invoke("twitch_send_message", { text });
 }
+
+export function banUser(targetUserId: string, reason?: string): Promise<void> {
+  return invoke("twitch_ban_user", { targetUserId, reason });
+}
+
+export function unbanUser(targetUserId: string): Promise<void> {
+  return invoke("twitch_unban_user", { targetUserId });
+}
+
+export function timeoutUser(
+  targetUserId: string,
+  durationSeconds: number,
+  reason?: string,
+): Promise<void> {
+  return invoke("twitch_timeout_user", {
+    targetUserId,
+    durationSeconds,
+    reason,
+  });
+}
+
+export function deleteMessage(messageId: string): Promise<void> {
+  return invoke("twitch_delete_message", { messageId });
+}

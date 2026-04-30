@@ -61,6 +61,10 @@ pub fn run() {
             youtube_auth::commands::youtube_cancel_login,
             youtube_auth::commands::youtube_logout,
             sidecar_commands::twitch_send_message,
+            sidecar_commands::twitch_ban_user,
+            sidecar_commands::twitch_unban_user,
+            sidecar_commands::twitch_timeout_user,
+            sidecar_commands::twitch_delete_message,
             sidecar_commands::youtube_send_message,
         ])
         .setup(setup)

@@ -365,77 +365,52 @@ func TestDispatchCommand_IgnoresUnknown(t *testing.T) {
 }
 
 // bufLogger returns a zerolog logger that writes JSON lines to the returned
-// buffer, for assertions on log content in mod-action scaffolding tests.
+// buffer, for assertions on validation log content.
 func bufLogger() (zerolog.Logger, *bytes.Buffer) {
 	var buf bytes.Buffer
 	return zerolog.New(&buf), &buf
 }
 
-func TestDispatchCommand_RoutesModActions(t *testing.T) {
-	clients := make(map[string]context.CancelFunc)
-	twitchClients := make(map[string]*twitch.Client)
-	out := make(chan []byte, 1)
-
-	cases := []struct {
-		name string
-		cmd  control.Command
-		want string
-	}{
-		{
-			name: "ban_user",
-			cmd:  control.Command{Cmd: "ban_user", BroadcasterID: "b1", TargetUserID: "t1", Reason: "rule violation"},
-			want: "ban_user (scaffold",
-		},
-		{
-			name: "unban_user",
-			cmd:  control.Command{Cmd: "unban_user", BroadcasterID: "b1", TargetUserID: "t1"},
-			want: "unban_user (scaffold",
-		},
-		{
-			name: "timeout_user",
-			cmd:  control.Command{Cmd: "timeout_user", BroadcasterID: "b1", TargetUserID: "t1", DurationSeconds: 60},
-			want: "timeout_user (scaffold",
-		},
-		{
-			name: "delete_message",
-			cmd:  control.Command{Cmd: "delete_message", BroadcasterID: "b1", MessageID: "m1"},
-			want: "delete_message (scaffold",
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			logger, buf := bufLogger()
-			DispatchCommand(context.Background(), tc.cmd, clients, twitchClients, out, func(string, any) {}, logger)
-			if !strings.Contains(buf.String(), tc.want) {
-				t.Errorf("expected log to contain %q, got %s", tc.want, buf.String())
-			}
-		})
-	}
+func captureNotify() (twitch.Notify, *[]string, *[]SendChatResultPayload) {
+	types := make([]string, 0, 1)
+	payloads := make([]SendChatResultPayload, 0, 1)
+	return func(msgType string, payload any) {
+		types = append(types, msgType)
+		p, ok := payload.(SendChatResultPayload)
+		if ok {
+			payloads = append(payloads, p)
+		}
+	}, &types, &payloads
 }
 
 func TestHandleBanUser_MissingTargetIgnored(t *testing.T) {
 	logger, buf := bufLogger()
-	HandleBanUser(control.Command{Cmd: "ban_user", BroadcasterID: "b1"}, logger)
+	notify, msgTypes, payloads := captureNotify()
+	HandleBanUser(context.Background(), control.Command{Cmd: "ban_user", BroadcasterID: "b1", UserID: "u", ClientID: "c", Token: "t", RequestID: 7}, notify, logger)
 	if !strings.Contains(buf.String(), "missing required field") {
 		t.Errorf("expected warn about missing field, got %s", buf.String())
 	}
-	if strings.Contains(buf.String(), "scaffold") {
-		t.Errorf("scaffold-info line should NOT fire on validation failure, got %s", buf.String())
+	if len(*msgTypes) != 1 || (*msgTypes)[0] != "mod_action_result" {
+		t.Fatalf("expected mod_action_result, got %#v", *msgTypes)
+	}
+	if len(*payloads) != 1 || (*payloads)[0].Ok || (*payloads)[0].RequestID != 7 {
+		t.Fatalf("unexpected payloads: %#v", *payloads)
 	}
 }
 
 func TestHandleUnbanUser_MissingTargetIgnored(t *testing.T) {
 	logger, buf := bufLogger()
-	HandleUnbanUser(control.Command{Cmd: "unban_user", BroadcasterID: "b1"}, logger)
+	notify, _, payloads := captureNotify()
+	HandleUnbanUser(context.Background(), control.Command{Cmd: "unban_user", BroadcasterID: "b1", UserID: "u", ClientID: "c", Token: "t"}, notify, logger)
 	if !strings.Contains(buf.String(), "missing required field") {
 		t.Errorf("expected warn about missing field, got %s", buf.String())
+	}
+	if len(*payloads) != 1 || (*payloads)[0].Ok {
+		t.Fatalf("unexpected payloads: %#v", *payloads)
 	}
 }
 
 func TestHandleTimeoutUser_RejectsOutOfRangeDuration(t *testing.T) {
-	// Helix enforces 1..1209600 seconds. Values outside this range must be
-	// rejected by the scaffold to stay consistent with the real endpoint.
 	cases := []struct {
 		name     string
 		duration int
@@ -447,14 +422,21 @@ func TestHandleTimeoutUser_RejectsOutOfRangeDuration(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			logger, buf := bufLogger()
-			HandleTimeoutUser(control.Command{
+			notify, _, payloads := captureNotify()
+			HandleTimeoutUser(context.Background(), control.Command{
 				Cmd:             "timeout_user",
 				BroadcasterID:   "b1",
+				UserID:          "u",
+				ClientID:        "c",
+				Token:           "t",
 				TargetUserID:    "t1",
 				DurationSeconds: tc.duration,
-			}, logger)
+			}, notify, logger)
 			if !strings.Contains(buf.String(), "out of range") {
 				t.Errorf("expected out-of-range warn for duration=%d, got %s", tc.duration, buf.String())
+			}
+			if len(*payloads) != 1 || (*payloads)[0].Ok {
+				t.Fatalf("unexpected payloads: %#v", *payloads)
 			}
 		})
 	}
@@ -462,17 +444,61 @@ func TestHandleTimeoutUser_RejectsOutOfRangeDuration(t *testing.T) {
 
 func TestHandleTimeoutUser_MissingTargetIgnored(t *testing.T) {
 	logger, buf := bufLogger()
-	HandleTimeoutUser(control.Command{Cmd: "timeout_user", BroadcasterID: "b1", DurationSeconds: 60}, logger)
+	notify, _, payloads := captureNotify()
+	HandleTimeoutUser(context.Background(), control.Command{Cmd: "timeout_user", BroadcasterID: "b1", UserID: "u", ClientID: "c", Token: "t", DurationSeconds: 60}, notify, logger)
 	if !strings.Contains(buf.String(), "missing required field") {
 		t.Errorf("expected warn about missing field, got %s", buf.String())
+	}
+	if len(*payloads) != 1 || (*payloads)[0].Ok {
+		t.Fatalf("unexpected payloads: %#v", *payloads)
 	}
 }
 
 func TestHandleDeleteMessage_MissingMessageIDIgnored(t *testing.T) {
 	logger, buf := bufLogger()
-	HandleDeleteMessage(control.Command{Cmd: "delete_message", BroadcasterID: "b1"}, logger)
+	notify, _, payloads := captureNotify()
+	HandleDeleteMessage(context.Background(), control.Command{Cmd: "delete_message", BroadcasterID: "b1", UserID: "u", ClientID: "c", Token: "t"}, notify, logger)
 	if !strings.Contains(buf.String(), "missing required field") {
 		t.Errorf("expected warn about missing field, got %s", buf.String())
+	}
+	if len(*payloads) != 1 || (*payloads)[0].Ok {
+		t.Fatalf("unexpected payloads: %#v", *payloads)
+	}
+}
+
+func TestHandleDeleteMessage_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/moderation/chat" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.String())
+		}
+		q := r.URL.Query()
+		if q.Get("broadcaster_id") != "b1" || q.Get("moderator_id") != "u1" || q.Get("message_id") != "m1" {
+			t.Fatalf("unexpected query: %s", r.URL.RawQuery)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	prev := twitchHelixBase
+	twitchHelixBase = srv.URL
+	defer func() { twitchHelixBase = prev }()
+	notify, msgTypes, payloads := captureNotify()
+
+	HandleDeleteMessage(context.Background(), control.Command{
+		Cmd:           "delete_message",
+		BroadcasterID: "b1",
+		UserID:        "u1",
+		ClientID:      "cid",
+		Token:         "tok",
+		MessageID:     "m1",
+		RequestID:     99,
+	}, notify, zerolog.Nop())
+
+	if len(*msgTypes) != 1 || (*msgTypes)[0] != "mod_action_result" {
+		t.Fatalf("expected mod_action_result, got %#v", *msgTypes)
+	}
+	if len(*payloads) != 1 || !(*payloads)[0].Ok || (*payloads)[0].RequestID != 99 {
+		t.Fatalf("unexpected payloads: %#v", *payloads)
 	}
 }
 
@@ -1286,9 +1312,9 @@ func TestHandleSendChatMessage_SuccessEchoesMessageID(t *testing.T) {
 		_, _ = io.WriteString(w, `{"data":[{"message_id":"abc-123","is_sent":true}]}`)
 	}))
 	defer srv.Close()
-	prev := sendChatHelixBase
-	sendChatHelixBase = srv.URL
-	defer func() { sendChatHelixBase = prev }()
+	prev := twitchHelixBase
+	twitchHelixBase = srv.URL
+	defer func() { twitchHelixBase = prev }()
 
 	var got SendChatResultPayload
 	notify := func(_ string, p any) { got = p.(SendChatResultPayload) }
@@ -1313,9 +1339,9 @@ func TestHandleSendChatMessage_DropReason(t *testing.T) {
 		_, _ = io.WriteString(w, `{"data":[{"is_sent":false,"drop_reason":{"code":"msg_duplicate","message":"duplicate"}}]}`)
 	}))
 	defer srv.Close()
-	prev := sendChatHelixBase
-	sendChatHelixBase = srv.URL
-	defer func() { sendChatHelixBase = prev }()
+	prev := twitchHelixBase
+	twitchHelixBase = srv.URL
+	defer func() { twitchHelixBase = prev }()
 
 	var got SendChatResultPayload
 	notify := func(_ string, p any) { got = p.(SendChatResultPayload) }
@@ -1336,9 +1362,9 @@ func TestHandleSendChatMessage_HelixError(t *testing.T) {
 		_, _ = io.WriteString(w, `{"error":"Unauthorized","status":401,"message":"oops"}`)
 	}))
 	defer srv.Close()
-	prev := sendChatHelixBase
-	sendChatHelixBase = srv.URL
-	defer func() { sendChatHelixBase = prev }()
+	prev := twitchHelixBase
+	twitchHelixBase = srv.URL
+	defer func() { twitchHelixBase = prev }()
 
 	var got SendChatResultPayload
 	notify := func(_ string, p any) { got = p.(SendChatResultPayload) }

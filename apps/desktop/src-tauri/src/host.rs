@@ -234,6 +234,124 @@ pub fn build_send_chat_message_line(args: SendChatMessageArgs<'_>) -> serde_json
     Ok(bytes)
 }
 
+pub struct TwitchUserModActionArgs<'a> {
+    pub cmd: &'a str,
+    pub client_id: &'a str,
+    pub access_token: &'a str,
+    pub broadcaster_id: &'a str,
+    pub user_id: &'a str,
+    pub target_user_id: &'a str,
+    pub reason: &'a str,
+    pub request_id: u64,
+}
+
+pub fn build_twitch_user_mod_action_line(
+    args: TwitchUserModActionArgs<'_>,
+) -> serde_json::Result<Vec<u8>> {
+    #[derive(Serialize)]
+    struct ModCmd<'a> {
+        cmd: &'a str,
+        client_id: &'a str,
+        token: &'a str,
+        broadcaster_id: &'a str,
+        user_id: &'a str,
+        target_user_id: &'a str,
+        #[serde(skip_serializing_if = "str::is_empty")]
+        reason: &'a str,
+        request_id: u64,
+    }
+    let cmd = ModCmd {
+        cmd: args.cmd,
+        client_id: args.client_id,
+        token: args.access_token,
+        broadcaster_id: args.broadcaster_id,
+        user_id: args.user_id,
+        target_user_id: args.target_user_id,
+        reason: args.reason,
+        request_id: args.request_id,
+    };
+    let mut bytes = serde_json::to_vec(&cmd)?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
+pub struct TwitchTimeoutArgs<'a> {
+    pub client_id: &'a str,
+    pub access_token: &'a str,
+    pub broadcaster_id: &'a str,
+    pub user_id: &'a str,
+    pub target_user_id: &'a str,
+    pub duration_seconds: u32,
+    pub reason: &'a str,
+    pub request_id: u64,
+}
+
+pub fn build_twitch_timeout_line(args: TwitchTimeoutArgs<'_>) -> serde_json::Result<Vec<u8>> {
+    #[derive(Serialize)]
+    struct TimeoutCmd<'a> {
+        cmd: &'a str,
+        client_id: &'a str,
+        token: &'a str,
+        broadcaster_id: &'a str,
+        user_id: &'a str,
+        target_user_id: &'a str,
+        duration_seconds: u32,
+        #[serde(skip_serializing_if = "str::is_empty")]
+        reason: &'a str,
+        request_id: u64,
+    }
+    let cmd = TimeoutCmd {
+        cmd: "timeout_user",
+        client_id: args.client_id,
+        token: args.access_token,
+        broadcaster_id: args.broadcaster_id,
+        user_id: args.user_id,
+        target_user_id: args.target_user_id,
+        duration_seconds: args.duration_seconds,
+        reason: args.reason,
+        request_id: args.request_id,
+    };
+    let mut bytes = serde_json::to_vec(&cmd)?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
+pub struct TwitchDeleteMessageArgs<'a> {
+    pub client_id: &'a str,
+    pub access_token: &'a str,
+    pub broadcaster_id: &'a str,
+    pub user_id: &'a str,
+    pub message_id: &'a str,
+    pub request_id: u64,
+}
+
+pub fn build_twitch_delete_message_line(
+    args: TwitchDeleteMessageArgs<'_>,
+) -> serde_json::Result<Vec<u8>> {
+    #[derive(Serialize)]
+    struct DeleteCmd<'a> {
+        cmd: &'a str,
+        client_id: &'a str,
+        token: &'a str,
+        broadcaster_id: &'a str,
+        user_id: &'a str,
+        message_id: &'a str,
+        request_id: u64,
+    }
+    let cmd = DeleteCmd {
+        cmd: "delete_message",
+        client_id: args.client_id,
+        token: args.access_token,
+        broadcaster_id: args.broadcaster_id,
+        user_id: args.user_id,
+        message_id: args.message_id,
+        request_id: args.request_id,
+    };
+    let mut bytes = serde_json::to_vec(&cmd)?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
 /// Arguments for [`build_youtube_send_message_line`]. Mirrors the
 /// Twitch shape but trimmed to what the YouTube Data API needs (no
 /// client_id, no broadcaster/sender split — the access token's owner
@@ -357,6 +475,10 @@ pub enum SidecarEvent {
     /// back to the awaiting `twitch_send_message` invocation via its
     /// `request_id` correlation field.
     SendChatResult(SendChatResult),
+    /// `{"type":"mod_action_result","payload":SendChatResult}`. Uses the
+    /// same result envelope as send-chat: `ok` for success, drop/error fields
+    /// for API failures, and `request_id` for correlation.
+    ModActionResult(SendChatResult),
     /// A well-formed `{type, payload}` message the host does not yet
     /// recognize. The inner string is the type tag.
     Other(String),
@@ -429,6 +551,16 @@ pub fn parse_sidecar_event(bytes: &[u8]) -> SidecarEvent {
                 Ok(r) => SidecarEvent::SendChatResult(r),
                 Err(e) => {
                     tracing::warn!(error = %e, "send_chat_result payload decode failed");
+                    SidecarEvent::Invalid
+                }
+            }
+        }
+        "mod_action_result" => {
+            let payload = env.payload.unwrap_or(serde_json::Value::Null);
+            match serde_json::from_value::<SendChatResult>(payload) {
+                Ok(r) => SidecarEvent::ModActionResult(r),
+                Err(e) => {
+                    tracing::warn!(error = %e, "mod_action_result payload decode failed");
                     SidecarEvent::Invalid
                 }
             }
@@ -821,6 +953,19 @@ mod tests {
     }
 
     #[test]
+    fn parse_sidecar_event_decodes_mod_action_result() {
+        let line = br#"{"type":"mod_action_result","payload":{"request_id":9,"ok":false,"drop_code":"unauthorized","drop_message":"missing scope"}}"#;
+        match parse_sidecar_event(line) {
+            SidecarEvent::ModActionResult(r) => {
+                assert_eq!(r.request_id, 9);
+                assert!(!r.ok);
+                assert_eq!(r.drop_code, "unauthorized");
+            }
+            _ => panic!("expected ModActionResult"),
+        }
+    }
+
+    #[test]
     fn build_send_chat_message_line_includes_request_id() {
         let line = build_send_chat_message_line(SendChatMessageArgs {
             client_id: "cid",
@@ -839,6 +984,60 @@ mod tests {
         assert_eq!(parsed["broadcaster_id"], "b");
         assert_eq!(parsed["message"], "hi");
         assert_eq!(parsed["token"], "tok");
+    }
+
+    #[test]
+    fn build_twitch_user_mod_action_line_serializes_required_fields() {
+        let line = build_twitch_user_mod_action_line(TwitchUserModActionArgs {
+            cmd: "ban_user",
+            client_id: "cid",
+            access_token: "tok",
+            broadcaster_id: "b",
+            user_id: "u",
+            target_user_id: "target",
+            reason: "spam",
+            request_id: 3,
+        })
+        .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&line[..line.len() - 1]).unwrap();
+        assert_eq!(parsed["cmd"], "ban_user");
+        assert_eq!(parsed["target_user_id"], "target");
+        assert_eq!(parsed["reason"], "spam");
+        assert_eq!(parsed["request_id"], 3_u64);
+    }
+
+    #[test]
+    fn build_twitch_timeout_line_serializes_duration() {
+        let line = build_twitch_timeout_line(TwitchTimeoutArgs {
+            client_id: "cid",
+            access_token: "tok",
+            broadcaster_id: "b",
+            user_id: "u",
+            target_user_id: "target",
+            duration_seconds: 60,
+            reason: "caps",
+            request_id: 4,
+        })
+        .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&line[..line.len() - 1]).unwrap();
+        assert_eq!(parsed["cmd"], "timeout_user");
+        assert_eq!(parsed["duration_seconds"], 60_u64);
+    }
+
+    #[test]
+    fn build_twitch_delete_message_line_serializes_message_id() {
+        let line = build_twitch_delete_message_line(TwitchDeleteMessageArgs {
+            client_id: "cid",
+            access_token: "tok",
+            broadcaster_id: "b",
+            user_id: "u",
+            message_id: "m1",
+            request_id: 5,
+        })
+        .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&line[..line.len() - 1]).unwrap();
+        assert_eq!(parsed["cmd"], "delete_message");
+        assert_eq!(parsed["message_id"], "m1");
     }
 
     #[test]
