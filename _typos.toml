@@ -1,5 +1,6 @@
 [files]
 extend-exclude = [
+  "apps/desktop/CHANGELOG.md",
   "apps/desktop/bun.lock",
   "apps/desktop/src-tauri/Cargo.lock",
   "apps/desktop/src-sidecar/go.sum",
