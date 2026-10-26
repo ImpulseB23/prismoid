@@ -21,6 +21,9 @@ use twitch_oauth2::{ClientId, Scope, UserToken};
 use super::errors::{error_chain, AuthError};
 
 /// Redirect ports registered on the Twitch application, tried in order.
+/// Twitch matches the redirect character for character and the URL type
+/// always carries the trailing slash, so the registered entries are
+/// `http://localhost:21337/` and `http://localhost:21338/`.
 pub const LOGIN_PORTS: [u16; 2] = [21337, 21338];
 /// How long the browser gets before the pending login gives up.
 pub const LOGIN_TIMEOUT: Duration = Duration::from_secs(10 * 60);
