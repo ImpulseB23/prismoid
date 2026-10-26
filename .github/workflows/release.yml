@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - "v*"
+  # Dispatched by release-please.yml on the tag it created.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -13,28 +15,8 @@ env:
 
 jobs:
   build:
-    name: Build (${{ matrix.platform }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: windows-latest
-            args: ""
-            sidecar_target: x86_64-pc-windows-msvc
-            sidecar_ext: .exe
-          - platform: macos-latest
-            args: "--target aarch64-apple-darwin"
-            sidecar_target: aarch64-apple-darwin
-            sidecar_ext: ""
-          - platform: macos-latest
-            args: "--target x86_64-apple-darwin"
-            sidecar_target: x86_64-apple-darwin
-            sidecar_ext: ""
-          - platform: ubuntu-latest
-            args: ""
-            sidecar_target: x86_64-unknown-linux-gnu
-            sidecar_ext: ""
-    runs-on: ${{ matrix.platform }}
+    name: Build (windows)
+    runs-on: windows-latest
     defaults:
       run:
         shell: bash
@@ -76,15 +58,9 @@ jobs:
         working-directory: apps/desktop
         run: bun install --frozen-lockfile
 
-      - name: Install Tauri system dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-
       - name: Build Go sidecar
         working-directory: apps/desktop/src-sidecar
-        run: go build -o "../src-tauri/binaries/sidecar-${{ matrix.sidecar_target }}${{ matrix.sidecar_ext }}" ./cmd/sidecar
+        run: go build -o ../src-tauri/binaries/sidecar-x86_64-pc-windows-msvc.exe ./cmd/sidecar
 
       - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
@@ -103,13 +79,11 @@ jobs:
           releaseBody: "See the [changelog](https://github.com/ImpulseB23/Prismoid/blob/main/CHANGELOG.md) for details."
           releaseDraft: true
           prerelease: false
-          args: ${{ matrix.args }}
 
       # prismoid.org/download/windows points at a fixed file name under
       # releases/latest/download, so the versioned installer is uploaded a
       # second time under that name.
       - name: Upload fixed-name Windows installer
-        if: matrix.platform == 'windows-latest'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

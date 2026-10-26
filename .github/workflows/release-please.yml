@@ -7,6 +7,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 jobs:
   release:
@@ -14,6 +15,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
         with:
           manifest-file: .release-please-manifest.json
           config-file: release-please-config.json
+
+      # Tags pushed with the workflow token never start tag-triggered runs,
+      # so release.yml is dispatched on the new tag instead. Dispatch is the
+      # one event GitHub always runs regardless of which token caused it.
+      - name: Start the release build
+        if: steps.release.outputs['apps/desktop--release_created'] == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs['apps/desktop--tag_name'] }}
+        run: gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
