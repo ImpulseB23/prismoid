@@ -12,7 +12,6 @@ export function findLinks(text: string): { start: number; end: number }[] {
   const out: { start: number; end: number }[] = [];
   for (const m of text.matchAll(URL_RE)) {
     const raw = m[0].replace(TRAILING_RE, "");
-    if (raw.length === 0) continue;
     out.push({ start: m.index, end: m.index + raw.length });
   }
   return out;

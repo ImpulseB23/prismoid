@@ -7,7 +7,6 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   currentSidecarStatus,
-  indicatorFor,
   type SidecarState,
   type SidecarStatus,
 } from "../lib/sidecarStatus";
@@ -188,7 +187,7 @@ const Header: Component<HeaderProps> = (props) => {
   };
 
   return (
-    <header class="header" data-state={state() ?? "initial"}>
+    <header class="header">
       <img class="header__logo" src={logo} alt="" />
 
       <span class="header__spacer" />
@@ -246,15 +245,6 @@ const Header: Component<HeaderProps> = (props) => {
           </svg>
         </button>
       </Show>
-
-      <StatusIndicator
-        state={state()}
-        onOpen={() => {
-          setPickerOpen(false);
-          setModesOpen(false);
-          setSettingsOpen(true);
-        }}
-      />
 
       <button
         type="button"
@@ -358,35 +348,6 @@ const Header: Component<HeaderProps> = (props) => {
         }}
       />
     </header>
-  );
-};
-
-// Chat connection state. Quiet when connected, otherwise it says what is
-// happening and opens Settings where the fix lives.
-const StatusIndicator: Component<{
-  state: SidecarState | null;
-  onOpen: () => void;
-}> = (props) => {
-  const info = () => indicatorFor(props.state);
-  const tooltip = () =>
-    props.state === "running"
-      ? "Connected to Twitch chat"
-      : `Twitch chat: ${info().label.toLowerCase()}`;
-  return (
-    <button
-      type="button"
-      class="status"
-      data-testid="connection-dot"
-      data-state={props.state ?? "initial"}
-      aria-label={tooltip()}
-      title={`${tooltip()}. Open settings`}
-      onClick={props.onOpen}
-    >
-      <span class="status__dot" style={{ "--dot": info().color }} />
-      <Show when={props.state !== "running"}>
-        <span class="status__label">{info().label}</span>
-      </Show>
-    </button>
   );
 };
 

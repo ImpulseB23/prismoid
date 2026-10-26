@@ -54,3 +54,21 @@ describe("linkify", () => {
     ]);
   });
 });
+
+describe("linkify edge cases", () => {
+  it("handles links at both ends and several in one piece", () => {
+    const out = linkify([
+      { kind: "text", text: "https://a.com mid www.b.com" },
+    ]);
+    expect(out).toEqual([
+      { kind: "link", text: "https://a.com", href: "https://a.com" },
+      { kind: "text", text: " mid " },
+      { kind: "link", text: "www.b.com", href: "https://www.b.com" },
+    ]);
+  });
+
+  it("leaves text without links untouched", () => {
+    const piece = { kind: "text" as const, text: "nothing here" };
+    expect(linkify([piece])).toEqual([piece]);
+  });
+});

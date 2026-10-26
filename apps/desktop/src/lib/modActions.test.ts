@@ -122,3 +122,119 @@ describe("describeModAction", () => {
     expect(row.message_text).toBe("");
   });
 });
+
+describe("describeModAction covers every action Twitch sends", () => {
+  const plain: [string, string][] = [
+    ["untimeout", "ModGuy lifted the timeout on Spammer"],
+    ["shared_chat_untimeout", "ModGuy lifted the timeout on Spammer"],
+    ["unban", "ModGuy unbanned Spammer"],
+    ["shared_chat_unban", "ModGuy unbanned Spammer"],
+    ["clear", "ModGuy cleared chat"],
+    ["slowoff", "ModGuy turned off slow mode"],
+    ["followersoff", "ModGuy turned off followers-only"],
+    ["emoteonly", "ModGuy turned on emote-only"],
+    ["emoteonlyoff", "ModGuy turned off emote-only"],
+    ["subscribers", "ModGuy turned on subscribers-only"],
+    ["subscribersoff", "ModGuy turned off subscribers-only"],
+    ["uniquechat", "ModGuy turned on unique-chat"],
+    ["uniquechatoff", "ModGuy turned off unique-chat"],
+    ["unraid", "ModGuy cancelled the raid"],
+    ["mod", "ModGuy made Spammer a moderator"],
+    ["unmod", "ModGuy removed Spammer as moderator"],
+    ["vip", "ModGuy made Spammer a VIP"],
+    ["unvip", "ModGuy removed Spammer as VIP"],
+  ];
+
+  it.each(plain)("%s", (action, text) => {
+    expect(describeModAction({ ...base, action })).toBe(text);
+  });
+
+  it("describes timeouts, bans and deletes without their optional parts", () => {
+    expect(describeModAction(base)).toBe("ModGuy timed out Spammer");
+    expect(
+      describeModAction({
+        ...base,
+        action: "shared_chat_timeout",
+        duration_seconds: 60,
+      }),
+    ).toBe("ModGuy timed out Spammer for 1m");
+    expect(
+      describeModAction({ ...base, action: "shared_chat_ban", reason: "r" }),
+    ).toBe("ModGuy banned Spammer: r");
+    expect(describeModAction({ ...base, action: "delete" })).toBe(
+      "ModGuy deleted a message from Spammer",
+    );
+    expect(describeModAction({ ...base, action: "shared_chat_delete" })).toBe(
+      "ModGuy deleted a message from Spammer",
+    );
+    expect(
+      describeModAction({ ...base, action: "warn", reason: "be nice" }),
+    ).toBe("ModGuy warned Spammer: be nice");
+  });
+
+  it("describes modes without a value and raids with and without viewers", () => {
+    expect(describeModAction({ ...base, action: "slow" })).toBe(
+      "ModGuy turned on slow mode",
+    );
+    expect(describeModAction({ ...base, action: "followers" })).toBe(
+      "ModGuy turned on followers-only",
+    );
+    expect(
+      describeModAction({ ...base, action: "raid", viewer_count: 1200 }),
+    ).toBe("ModGuy started a raid to Spammer with 1.2K viewers");
+    expect(describeModAction({ ...base, action: "raid" })).toBe(
+      "ModGuy started a raid to Spammer",
+    );
+  });
+
+  it("describes term lists and unban requests", () => {
+    expect(
+      describeModAction({
+        ...base,
+        action: "remove_blocked_term",
+        terms: ["a", "b"],
+      }),
+    ).toBe('ModGuy unblocked "a", "b"');
+    expect(describeModAction({ ...base, action: "add_permitted_term" })).toBe(
+      "ModGuy permitted a term",
+    );
+    expect(
+      describeModAction({
+        ...base,
+        action: "remove_permitted_term",
+        terms: ["x"],
+      }),
+    ).toBe('ModGuy removed permitted "x"');
+    expect(
+      describeModAction({
+        ...base,
+        action: "approve_unban_request",
+        moderator_message: "ok",
+      }),
+    ).toBe("ModGuy approved an unban request from Spammer: ok");
+    expect(describeModAction({ ...base, action: "deny_unban_request" })).toBe(
+      "ModGuy denied an unban request from Spammer",
+    );
+  });
+
+  it("falls back to logins and generic names when Twitch omits them", () => {
+    expect(
+      describeModAction({
+        ...base,
+        action: "ban",
+        moderator_name: "",
+        target_user_name: "",
+      }),
+    ).toBe("modguy banned spammer");
+    expect(
+      describeModAction({
+        ...base,
+        action: "ban",
+        moderator_name: "",
+        moderator_login: "",
+        target_user_name: "",
+        target_user_login: "",
+      }),
+    ).toBe("A moderator banned a user");
+  });
+});

@@ -1,5 +1,16 @@
-import { describe, expect, it, vi } from "vitest";
-import { createHistoryGate } from "./chatHistory";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const invokeMock = vi.fn();
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: (...args: unknown[]) => invokeMock(...args),
+}));
+
+import { HISTORY_TAIL, createHistoryGate, loadHistory } from "./chatHistory";
+
+afterEach(() => {
+  invokeMock.mockReset();
+});
 import type { ChatMessage } from "../stores/chatStore";
 
 function msg(id: string): ChatMessage {
@@ -101,5 +112,16 @@ describe("createHistoryGate", () => {
     load.resolve([msg("old")]);
     await flush();
     expect(added).toEqual([]);
+  });
+});
+
+describe("loadHistory", () => {
+  it("asks the host for the channel's tail with the default limit", async () => {
+    invokeMock.mockResolvedValueOnce([]);
+    await loadHistory("c1");
+    expect(invokeMock).toHaveBeenCalledWith("chat_history", {
+      channelId: "c1",
+      limit: HISTORY_TAIL,
+    });
   });
 });

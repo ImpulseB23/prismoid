@@ -266,38 +266,6 @@ img {
   border-color: var(--border-strong);
 }
 
-.status {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 30px;
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.status:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-raised);
-}
-
-.status__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--dot, var(--color-base-500));
-}
-
-.status__label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
 .icon-btn__badge {
   position: absolute;
   top: 5px;
