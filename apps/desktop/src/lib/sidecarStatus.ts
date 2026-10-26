@@ -1,6 +1,6 @@
-// Pure state→indicator mapping shared with the header component.
-// Split out so unit tests don't need to resolve the Solid/Tauri
-// component module graph.
+// Sidecar state as the host reports it, and the indicator it maps to.
+
+import { invoke } from "@tauri-apps/api/core";
 
 export type SidecarState =
   | "spawning"
@@ -14,6 +14,11 @@ export interface SidecarStatus {
   state: SidecarState;
   attempt: number;
   backoff_ms?: number;
+}
+
+/** The host's latest status, for a window that mounted after it was sent. */
+export function currentSidecarStatus(): Promise<SidecarStatus | null> {
+  return invoke("current_sidecar_status");
 }
 
 export interface Indicator {

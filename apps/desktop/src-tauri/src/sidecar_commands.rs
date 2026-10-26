@@ -31,7 +31,7 @@ use crate::host::{
     SendChatResult, TwitchDeleteMessageArgs, TwitchTimeoutArgs, TwitchUserModActionArgs,
     YouTubeSendMessageArgs,
 };
-use crate::twitch_auth::{AuthError, AuthState, TWITCH_CLIENT_ID};
+use crate::twitch_auth::{AuthError, AuthState, TwitchTokens, TWITCH_CLIENT_ID};
 use crate::youtube_auth::{AuthError as YouTubeAuthError, AuthState as YouTubeAuthState};
 
 /// Pure registry of in-flight `send_chat_message` requests. Carved out
@@ -420,28 +420,65 @@ fn validate_timeout_seconds(duration_seconds: u32) -> Result<u32, SendCommandErr
     Ok(duration_seconds)
 }
 
-async fn send_twitch_mod_command(
-    auth: State<'_, AuthState>,
-    sender: State<'_, SidecarCommandSender>,
-    build: impl FnOnce(&str, &str, &str, u64) -> Result<Vec<u8>, serde_json::Error>,
-) -> Result<(), SendCommandError> {
+/// One request/response exchange with the sidecar using `tokens`.
+async fn round_trip(
+    sender: &SidecarCommandSender,
+    tokens: &TwitchTokens,
+    build: &mut impl FnMut(&TwitchTokens, u64) -> Result<Vec<u8>, serde_json::Error>,
+) -> Result<SendChatResult, SendCommandError> {
+    let (tx, rx) = oneshot::channel();
+    sender.send_with_pending(tx, |request_id| build(tokens, request_id))?;
+    // Sender dropped (sidecar terminated, completer cleared): treat as
+    // not-running rather than leaking the await.
+    rx.await.map_err(|_| SendCommandError::SidecarNotRunning)
+}
+
+/// Sends a Helix-backed command through the sidecar with the stored
+/// tokens. A 401 means Twitch no longer honours an access token we still
+/// considered valid, so the token is refreshed once and the request
+/// repeated; a second 401 is returned to the caller as-is.
+async fn with_twitch_tokens(
+    auth: &AuthState,
+    sender: &SidecarCommandSender,
+    mut build: impl FnMut(&TwitchTokens, u64) -> Result<Vec<u8>, serde_json::Error>,
+) -> Result<SendChatResult, SendCommandError> {
     let tokens = auth
         .manager
         .load_or_refresh()
         .await
         .map_err(SendCommandError::auth)?;
+    let result = round_trip(sender, &tokens, &mut build).await?;
+    if result.http_status != 401 {
+        return Ok(result);
+    }
+    tracing::info!("helix answered 401 with a fresh-looking token; refreshing and retrying");
+    let tokens = auth
+        .manager
+        .force_refresh()
+        .await
+        .map_err(SendCommandError::auth)?;
+    round_trip(sender, &tokens, &mut build).await
+}
 
-    let (tx, rx) = oneshot::channel();
-    sender.send_with_pending(tx, |request_id| {
+/// Runs one moderation command in `channel_id`. The frontend names the
+/// channel the message or user belongs to, so a tab switch mid-flight can
+/// never redirect the action.
+async fn send_twitch_mod_command(
+    auth: State<'_, AuthState>,
+    sender: State<'_, SidecarCommandSender>,
+    channel_id: String,
+    mut build: impl FnMut(&str, &str, &str, u64) -> Result<Vec<u8>, serde_json::Error>,
+) -> Result<(), SendCommandError> {
+    let channel_id = validate_required_id(&channel_id, "channel_id")?.to_owned();
+    let result = with_twitch_tokens(&auth, &sender, |tokens, request_id| {
         build(
             &tokens.access_token,
-            &tokens.user_id,
+            &channel_id,
             &tokens.user_id,
             request_id,
         )
-    })?;
-
-    let result = rx.await.map_err(|_| SendCommandError::SidecarNotRunning)?;
+    })
+    .await?;
     SendCommandError::from_mod_result(result)
 }
 
@@ -459,31 +496,24 @@ fn advance_request_id(current: u64) -> u64 {
 pub async fn twitch_send_message(
     auth: State<'_, AuthState>,
     sender: State<'_, SidecarCommandSender>,
+    channel_id: String,
     text: String,
+    reply_to: Option<String>,
 ) -> Result<SendChatOk, SendCommandError> {
+    let channel_id = validate_required_id(&channel_id, "channel_id")?.to_owned();
     let trimmed = validate_message(&text)?;
-
-    let tokens = auth
-        .manager
-        .load_or_refresh()
-        .await
-        .map_err(SendCommandError::auth)?;
-
-    let (tx, rx) = oneshot::channel();
-    sender.send_with_pending(tx, |request_id| {
+    let result = with_twitch_tokens(&auth, &sender, |tokens, request_id| {
         build_send_chat_message_line(SendChatMessageArgs {
             client_id: TWITCH_CLIENT_ID,
             access_token: &tokens.access_token,
-            broadcaster_id: &tokens.user_id,
+            broadcaster_id: &channel_id,
             user_id: &tokens.user_id,
             message: trimmed,
+            reply_parent_message_id: reply_to.as_deref(),
             request_id,
         })
-    })?;
-
-    // Sender dropped (sidecar terminated, completer cleared) → treat as
-    // not-running rather than leaking the await.
-    let result = rx.await.map_err(|_| SendCommandError::SidecarNotRunning)?;
+    })
+    .await?;
     SendCommandError::from_send_result(result)
 }
 
@@ -491,6 +521,7 @@ pub async fn twitch_send_message(
 pub async fn twitch_ban_user(
     auth: State<'_, AuthState>,
     sender: State<'_, SidecarCommandSender>,
+    channel_id: String,
     target_user_id: String,
     reason: Option<String>,
 ) -> Result<(), SendCommandError> {
@@ -500,6 +531,7 @@ pub async fn twitch_ban_user(
     send_twitch_mod_command(
         auth,
         sender,
+        channel_id,
         |access_token, broadcaster_id, user_id, request_id| {
             build_twitch_user_mod_action_line(TwitchUserModActionArgs {
                 cmd: "ban_user",
@@ -520,12 +552,14 @@ pub async fn twitch_ban_user(
 pub async fn twitch_unban_user(
     auth: State<'_, AuthState>,
     sender: State<'_, SidecarCommandSender>,
+    channel_id: String,
     target_user_id: String,
 ) -> Result<(), SendCommandError> {
     let target_user_id = validate_required_id(&target_user_id, "target_user_id")?.to_owned();
     send_twitch_mod_command(
         auth,
         sender,
+        channel_id,
         |access_token, broadcaster_id, user_id, request_id| {
             build_twitch_user_mod_action_line(TwitchUserModActionArgs {
                 cmd: "unban_user",
@@ -546,6 +580,7 @@ pub async fn twitch_unban_user(
 pub async fn twitch_timeout_user(
     auth: State<'_, AuthState>,
     sender: State<'_, SidecarCommandSender>,
+    channel_id: String,
     target_user_id: String,
     duration_seconds: u32,
     reason: Option<String>,
@@ -557,6 +592,7 @@ pub async fn twitch_timeout_user(
     send_twitch_mod_command(
         auth,
         sender,
+        channel_id,
         |access_token, broadcaster_id, user_id, request_id| {
             build_twitch_timeout_line(TwitchTimeoutArgs {
                 client_id: TWITCH_CLIENT_ID,
@@ -577,12 +613,14 @@ pub async fn twitch_timeout_user(
 pub async fn twitch_delete_message(
     auth: State<'_, AuthState>,
     sender: State<'_, SidecarCommandSender>,
+    channel_id: String,
     message_id: String,
 ) -> Result<(), SendCommandError> {
     let message_id = validate_required_id(&message_id, "message_id")?.to_owned();
     send_twitch_mod_command(
         auth,
         sender,
+        channel_id,
         |access_token, broadcaster_id, user_id, request_id| {
             build_twitch_delete_message_line(TwitchDeleteMessageArgs {
                 client_id: TWITCH_CLIENT_ID,
@@ -712,6 +750,7 @@ mod tests {
             drop_code: drop_code.into(),
             drop_message: drop_message.into(),
             error_message: error.into(),
+            http_status: 0,
         }
     }
 
@@ -976,6 +1015,7 @@ mod tests {
             drop_code: String::new(),
             drop_message: String::new(),
             error_message: String::new(),
+            http_status: 0,
         };
         r.request_id = id;
         p.complete(r);
@@ -993,6 +1033,7 @@ mod tests {
             drop_code: String::new(),
             drop_message: String::new(),
             error_message: String::new(),
+            http_status: 0,
         });
     }
 

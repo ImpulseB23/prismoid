@@ -13,7 +13,9 @@ No Redis. No external cache. Everything local.
 
 ## Chat Messages
 
-Memory-only. Chat messages are never persisted to disk. When the stream ends (or the app closes fully), messages are gone. This is intentional for privacy and simplicity.
+The host logs every message to `%APPDATA%/org.prismoid.app/chat.sqlite3` (WAL, one table keyed by channel and message id, message body as JSON). Moderation events mark rows deleted. Retention is the newest 10,000 rows per channel and 30 days; count pruning runs every 256 inserts per channel, age pruning at startup. Opening a channel loads the newest 1,000 stored rows ahead of live messages (ADR 40).
+
+Channels the app has not logged yet get a backlog from the recent-messages service on join when "Load earlier messages" is on (ADR 41). The import lands in the same table, so loads see one ordered set.
 
 The frontend message buffer is a plain TypeScript ring buffer. Fixed capacity. When full, oldest messages are overwritten. Scroll-back is limited to buffer capacity.
 

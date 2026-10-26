@@ -16,6 +16,7 @@ function makeMsg(id: string, text = `msg ${id}`): ChatMessage {
     username: "u",
     display_name: "U",
     platform_user_id: "1",
+    channel_id: "chan",
     message_text: text,
     badges: [],
     is_mod: false,
@@ -23,6 +24,8 @@ function makeMsg(id: string, text = `msg ${id}`): ChatMessage {
     is_broadcaster: false,
     color: null,
     reply_to: null,
+    reply_parent: null,
+    notice: null,
     emote_spans: [],
   };
 }
@@ -187,6 +190,7 @@ describe("chatStore optimistic send", () => {
       platform: "Twitch",
       login: "alice",
       text: "hi",
+      channelId: "chan",
     });
     expect(msg.status).toBe("pending");
     expect(msg.local_id).toBeTruthy();
@@ -203,6 +207,7 @@ describe("chatStore optimistic send", () => {
       platform: "Twitch",
       login: "alice",
       text: "hi",
+      channelId: "chan",
     });
     store.insertPending(pending);
     vi.runAllTimers();
@@ -216,6 +221,7 @@ describe("chatStore optimistic send", () => {
       platform: "Twitch",
       login: "alice",
       text: "hi",
+      channelId: "chan",
     });
     store.insertPending(pending);
     vi.runAllTimers();
@@ -240,6 +246,7 @@ describe("chatStore optimistic send", () => {
       platform: "Twitch",
       login: "alice",
       text: "hello",
+      channelId: "chan",
     });
     store.insertPending(pending);
     store.confirmPendingId(pending.local_id!, "helix-xyz");
@@ -265,6 +272,7 @@ describe("chatStore optimistic send", () => {
       platform: "Twitch",
       login: "alice",
       text: "hi",
+      channelId: "chan",
     });
     pending.arrival_time = 0;
     store.insertPending(pending);
@@ -286,6 +294,7 @@ describe("chatStore optimistic send", () => {
       platform: "Twitch",
       login: "alice",
       text: "hi",
+      channelId: "chan",
     });
     store.insertPending(pending);
 
@@ -305,6 +314,7 @@ describe("chatStore optimistic send", () => {
       platform: "Twitch",
       login: "alice",
       text: "hi",
+      channelId: "chan",
     });
     store.insertPending(pending);
     vi.runAllTimers();
@@ -324,6 +334,7 @@ describe("chatStore optimistic send", () => {
       platform: "Twitch",
       login: "alice",
       text: "retry me",
+      channelId: "chan",
     });
     store.insertPending(pending);
 
@@ -349,6 +360,7 @@ describe("chatStore optimistic send", () => {
       platform: "Twitch",
       login: "alice",
       text: "old one",
+      channelId: "chan",
     });
     store.insertPending(oldPending);
 
@@ -373,11 +385,13 @@ describe("chatStore optimistic send", () => {
       platform: "Twitch",
       login: "alice",
       text: "first",
+      channelId: "chan",
     });
     const b = buildOptimisticMessage({
       platform: "Twitch",
       login: "alice",
       text: "second",
+      channelId: "chan",
     });
     store.insertPending(a);
     store.insertPending(b);
@@ -400,6 +414,7 @@ describe("chatStore optimistic send", () => {
       platform: "Twitch",
       login: "alice",
       text: "hi",
+      channelId: "chan",
     });
     store.insertPending(pending);
     store.failPending(pending.local_id!, "ambiguous timeout");
@@ -422,6 +437,7 @@ describe("chatStore optimistic send", () => {
       platform: "Twitch",
       login: "alice",
       text: "hi",
+      channelId: "chan",
     });
     store.insertPending(pending);
     store.addMessages([
@@ -434,5 +450,111 @@ describe("chatStore optimistic send", () => {
     expect(merged.display_name).toBe("AliceCool");
     // After clearing local_id, retryPending must not find the entry.
     expect(store.retryPending(pending.local_id!)).toBeUndefined();
+  });
+
+  it("clear hides existing messages and keeps indices monotonic", () => {
+    const store = createChatStore(10);
+    store.addMessages([makeMsg("1"), makeMsg("2")]);
+    vi.runAllTimers();
+
+    store.clear();
+    expect(store.viewport()).toEqual({ start: 2, count: 0 });
+    expect(store.getMessage(0)).toBeUndefined();
+    expect(store.getMessage(1)).toBeUndefined();
+
+    store.addMessages([makeMsg("3")]);
+    vi.runAllTimers();
+    expect(store.viewport()).toEqual({ start: 2, count: 1 });
+    expect(store.getMessage(2)?.id).toBe("3");
+  });
+
+  it("clear drops pending entries so stale echoes append instead of reconciling", () => {
+    const store = createChatStore(10);
+    const pending = buildOptimisticMessage({
+      platform: "Twitch",
+      login: "alice",
+      text: "hi",
+      channelId: "chan",
+    });
+    store.insertPending(pending);
+    store.clear();
+    expect(store.getMessage(0)).toBeUndefined();
+    store.failPending(pending.local_id!, "late failure");
+    expect(store.retryPending(pending.local_id!)).toBeUndefined();
+
+    store.addMessages([makeAuthoritative(pending)]);
+    vi.runAllTimers();
+    expect(store.viewport()).toEqual({ start: 1, count: 1 });
+    expect(store.getMessage(1)?.id).toBe("from-platform");
+  });
+
+  it("recentByUser returns that author's confirmed messages oldest first", () => {
+    const store = createChatStore(10);
+    const mine = (id: string) => ({ ...makeMsg(id), platform_user_id: "me" });
+    store.addMessages([mine("1"), makeMsg("2"), mine("3"), mine("4")]);
+    const pending = buildOptimisticMessage({
+      platform: "Twitch",
+      login: "alice",
+      text: "hi",
+      channelId: "chan",
+    });
+    pending.platform_user_id = "me";
+    store.insertPending(pending);
+
+    expect(store.recentByUser("me", 10).map((m) => m.id)).toEqual([
+      "1",
+      "3",
+      "4",
+    ]);
+    expect(store.recentByUser("me", 2).map((m) => m.id)).toEqual(["3", "4"]);
+    store.clear();
+    expect(store.recentByUser("me", 10)).toEqual([]);
+  });
+
+  it("clear after wraparound respects the ring bound", () => {
+    const store = createChatStore(3);
+    store.addMessages([makeMsg("1"), makeMsg("2"), makeMsg("3"), makeMsg("4")]);
+    store.clear();
+    store.addMessages([makeMsg("5"), makeMsg("6"), makeMsg("7"), makeMsg("8")]);
+    vi.runAllTimers();
+    expect(store.viewport()).toEqual({ start: 5, count: 3 });
+    expect(store.getMessage(4)).toBeUndefined();
+    expect(store.getMessage(5)?.id).toBe("6");
+  });
+});
+
+describe("chatStore moderation marks", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("marks by id, by author and everything, bumping the revision once", () => {
+    const store = createChatStore(10);
+    const other = { ...makeMsg("3"), platform_user_id: "2" };
+    store.addMessages([makeMsg("1"), makeMsg("2"), other]);
+    vi.runAllTimers();
+    const rev = store.messageRevision();
+
+    store.markDeleted("1");
+    vi.runAllTimers();
+    expect(store.getMessage(0)?.deleted).toBe(true);
+    expect(store.getMessage(1)?.deleted).toBeUndefined();
+    expect(store.messageRevision()).toBe(rev + 1);
+
+    store.markDeleted("missing");
+    vi.runAllTimers();
+    expect(store.messageRevision()).toBe(rev + 1);
+
+    store.markUserCleared("1");
+    vi.runAllTimers();
+    expect(store.getMessage(1)?.deleted).toBe(true);
+    expect(store.getMessage(2)?.deleted).toBeUndefined();
+
+    store.markAllDeleted();
+    vi.runAllTimers();
+    expect(store.getMessage(2)?.deleted).toBe(true);
   });
 });

@@ -41,14 +41,16 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Verify YouTube OAuth secrets are present
+      - name: Verify release secrets are present
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
           missing=()
           [ -z "$GOOGLE_CLIENT_ID" ] && missing+=(GOOGLE_CLIENT_ID)
           [ -z "$GOOGLE_CLIENT_SECRET" ] && missing+=(GOOGLE_CLIENT_SECRET)
+          [ -z "$TAURI_SIGNING_PRIVATE_KEY" ] && missing+=(TAURI_SIGNING_PRIVATE_KEY)
           if [ ${#missing[@]} -ne 0 ]; then
             echo "::error::Missing required repo secret(s): ${missing[*]}. Set them under Settings → Secrets and variables → Actions."
             exit 1
@@ -89,11 +91,30 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          # Signs the update bundles; the matching public key sits in
+          # tauri.conf.json and the app refuses unsigned updates.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
+          updaterJsonPreferNsis: true
           tagName: ${{ github.ref_name }}
           releaseName: "Prismoid ${{ github.ref_name }}"
           releaseBody: "See the [changelog](https://github.com/ImpulseB23/Prismoid/blob/main/CHANGELOG.md) for details."
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      # prismoid.org/download/windows points at a fixed file name under
+      # releases/latest/download, so the versioned installer is uploaded a
+      # second time under that name.
+      - name: Upload fixed-name Windows installer
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $setup = Get-ChildItem -Path apps/desktop/src-tauri/target/release/bundle/nsis -Filter "*-setup.exe" | Select-Object -First 1
+          if (-not $setup) { throw "no NSIS installer found" }
+          Copy-Item $setup.FullName Prismoid-Setup-x64.exe
+          gh release upload "${{ github.ref_name }}" Prismoid-Setup-x64.exe --clobber

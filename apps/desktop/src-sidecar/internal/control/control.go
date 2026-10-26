@@ -6,6 +6,9 @@ const (
 	TagTwitch  byte = 0x01
 	TagKick    byte = 0x02
 	TagYouTube byte = 0x03
+	// TagTwitchIRC marks a raw Twitch IRC line from the read-only fallback
+	// connection used where EventSub refuses the chat.
+	TagTwitchIRC byte = 0x04
 )
 
 // Bootstrap is the first message the Rust host writes to the sidecar's stdin
@@ -39,6 +42,9 @@ type Command struct {
 	// twitch_connect (subscribe to this channel's chat) and by mod actions
 	// (the channel the mod action happens in).
 	BroadcasterID string `json:"broadcaster_id,omitempty"`
+	// ChannelLogin is the channel's login name, used by twitch_connect to
+	// join the IRC fallback when EventSub refuses the chat.
+	ChannelLogin string `json:"channel_login,omitempty"`
 	// UserID is the acting user's ID — the self ID for twitch_connect, the
 	// moderator's ID for mod actions. Twitch Helix's moderation endpoints
 	// require the moderator_id to match the token's authenticated user.
@@ -59,6 +65,8 @@ type Command struct {
 	// Helix POST /chat/messages endpoint; the sidecar enforces the limit
 	// before issuing the request.
 	Message string `json:"message,omitempty"`
+	// ReplyParentMessageID makes send_chat_message a reply to that message.
+	ReplyParentMessageID string `json:"reply_parent_message_id,omitempty"`
 
 	// RequestID correlates a command with its response notification (e.g.
 	// `send_chat_result`). Opaque to the sidecar; the host sets it and

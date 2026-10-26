@@ -23,6 +23,21 @@ type WelcomeSession struct {
 	KeepaliveTimeoutSeconds int    `json:"keepalive_timeout_seconds"`
 }
 
+// RevocationPayload is the body of a `revocation` envelope. Twitch puts the
+// reason in the subscription's status; `chat_user_banned` is the one that
+// means the user was banned or timed out in the channel.
+type RevocationPayload struct {
+	Subscription struct {
+		Type      string `json:"type"`
+		Status    string `json:"status"`
+		Condition struct {
+			BroadcasterUserID string `json:"broadcaster_user_id"`
+		} `json:"condition"`
+	} `json:"subscription"`
+}
+
+const revokedChatUserBanned = "chat_user_banned"
+
 type ReconnectPayload struct {
 	Session ReconnectSession `json:"session"`
 }

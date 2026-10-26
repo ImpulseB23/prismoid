@@ -1,0 +1,518 @@
+// Settings dialog: accounts, appearance, chat, window. Every control
+// writes straight through the settings store so there is no save step.
+
+import {
+  Component,
+  Show,
+  createEffect,
+  createSignal,
+  onCleanup,
+  onMount,
+} from "solid-js";
+import {
+  cancelLogin,
+  completeLogin,
+  openVerificationUri,
+  startLogin,
+  type DeviceCodeView,
+} from "../lib/twitchAuth";
+import { missingScopes, setAuthStatus } from "../stores/authStore";
+import {
+  parseDurations,
+  parseList,
+  settings,
+  updateSettings,
+  zoomIn,
+  zoomOut,
+  zoomReset,
+} from "../stores/settingsStore";
+import { formatSeconds } from "../lib/slashCommands";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { getVersion } from "@tauri-apps/api/app";
+import {
+  checkForUpdates,
+  installUpdate,
+  updateState,
+} from "../stores/updateStore";
+import { authErrorMessage, isAuthError } from "./SignIn";
+
+export interface SettingsProps {
+  open: boolean;
+  login: string;
+  onClose: () => void;
+  onSignOut: () => void;
+}
+
+const RECENT_MESSAGES_URL = "https://recent-messages.robotty.de/";
+
+// Current version, the result of the last check, and the one button that
+// does whatever comes next: check, install, or try again.
+const UpdateRow: Component = () => {
+  const [version, setVersion] = createSignal("");
+  onMount(() => {
+    getVersion()
+      .then(setVersion)
+      .catch((err: unknown) => console.error("app version", err));
+  });
+
+  const status = () => {
+    const s = updateState();
+    switch (s.kind) {
+      case "idle":
+        return "Checks on launch and every six hours";
+      case "checking":
+        return "Looking for updates";
+      case "none":
+        return "You're on the latest version";
+      case "available":
+        return `Version ${s.version} is available`;
+      case "downloading":
+        return s.total
+          ? `Downloading ${Math.round((s.received / s.total) * 100)}%`
+          : "Downloading";
+      case "ready":
+        return "Restarting to finish the update";
+      case "error":
+        return s.message;
+    }
+  };
+
+  const action = () => {
+    const kind = updateState().kind;
+    if (kind === "available") return "Install and restart";
+    if (kind === "checking" || kind === "downloading" || kind === "ready")
+      return null;
+    return "Check for updates";
+  };
+
+  return (
+    <div class="settings__row">
+      <div class="settings__text">
+        <span class="settings__name">
+          Prismoid {version() ? `v${version()}` : ""}
+        </span>
+        <span class="settings__hint">{status()}</span>
+      </div>
+      <Show when={action()}>
+        {(label) => (
+          <button
+            type="button"
+            class="btn btn--outline"
+            onClick={() =>
+              void (updateState().kind === "available"
+                ? installUpdate()
+                : checkForUpdates(true))
+            }
+          >
+            {label()}
+          </button>
+        )}
+      </Show>
+    </div>
+  );
+};
+
+const Settings: Component<SettingsProps> = (props) => {
+  const [error, setError] = createSignal<string | null>(null);
+  let dialogRef: HTMLDivElement | undefined;
+
+  // Focus the dialog itself so Escape works before any control is tabbed to.
+  createEffect(() => {
+    if (props.open) queueMicrotask(() => dialogRef?.focus());
+  });
+
+  const run = (p: Promise<void>) => {
+    setError(null);
+    p.catch((e: unknown) =>
+      setError(e instanceof Error ? e.message : String(e)),
+    );
+  };
+
+  return (
+    <Show when={props.open}>
+      <div class="dialog-backdrop" onMouseDown={props.onClose}>
+        <div
+          ref={(el) => (dialogRef = el)}
+          tabIndex={-1}
+          class="dialog settings"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Settings"
+          onMouseDown={(e) => e.stopPropagation()}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") props.onClose();
+          }}
+        >
+          <div class="dialog__title">
+            Settings
+            <button
+              type="button"
+              class="icon-btn"
+              aria-label="Close settings"
+              onClick={props.onClose}
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                aria-hidden="true"
+              >
+                <path
+                  d="M2 2l8 8M10 2l-8 8"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <div class="dialog__label">Accounts</div>
+          <div class="settings__row">
+            <div class="settings__text">
+              <span class="settings__name">Twitch</span>
+              <span class="settings__hint">Signed in as {props.login}</span>
+            </div>
+            <button
+              type="button"
+              class="btn btn--outline btn--danger"
+              onClick={props.onSignOut}
+            >
+              Sign out
+            </button>
+          </div>
+          <Show when={missingScopes().length > 0}>
+            <TwitchReconnect />
+          </Show>
+
+          <div class="dialog__label">Appearance</div>
+          <div class="settings__row">
+            <div class="settings__text">
+              <span class="settings__name">Zoom</span>
+              <span class="settings__hint">
+                Ctrl + scroll, or Ctrl with + − 0
+              </span>
+            </div>
+            <div class="settings__zoom">
+              <button
+                type="button"
+                class="icon-btn"
+                aria-label="Zoom out"
+                onClick={() => run(zoomOut())}
+              >
+                −
+              </button>
+              <button
+                type="button"
+                class="settings__zoom-value"
+                title="Reset zoom"
+                onClick={() => run(zoomReset())}
+              >
+                {Math.round(settings().zoom * 100)}%
+              </button>
+              <button
+                type="button"
+                class="icon-btn"
+                aria-label="Zoom in"
+                onClick={() => run(zoomIn())}
+              >
+                +
+              </button>
+            </div>
+          </div>
+          <label class="settings__row settings__row--toggle">
+            <div class="settings__text">
+              <span class="settings__name">Timestamps</span>
+              <span class="settings__hint">
+                Show the time next to each message
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              class="switch"
+              checked={settings().showTimestamps}
+              onChange={(e) =>
+                run(updateSettings({ showTimestamps: e.currentTarget.checked }))
+              }
+            />
+          </label>
+          <label class="settings__row settings__row--toggle">
+            <div class="settings__text">
+              <span class="settings__name">Load earlier messages</span>
+              <span class="settings__hint">
+                When you open a channel, fetch what was said before you joined
+                from{" "}
+                <button
+                  type="button"
+                  class="settings__link"
+                  onClick={() =>
+                    void openUrl(RECENT_MESSAGES_URL).catch((err: unknown) =>
+                      console.error("failed to open link:", err),
+                    )
+                  }
+                >
+                  recent-messages.robotty.de
+                </button>
+                , a community service that logs Twitch chat
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              class="switch"
+              checked={settings().chatBacklog}
+              onChange={(e) =>
+                run(updateSettings({ chatBacklog: e.currentTarget.checked }))
+              }
+            />
+          </label>
+
+          <div class="dialog__label">Chat</div>
+          <label class="settings__row settings__row--stack">
+            <div class="settings__text">
+              <span class="settings__name">Highlight phrases</span>
+              <span class="settings__hint">
+                Comma separated. Messages containing one light up like a
+                mention.
+              </span>
+            </div>
+            <input
+              type="text"
+              class="settings__input"
+              placeholder="prismoid, gg"
+              value={settings().highlightPhrases.join(", ")}
+              onChange={(e) =>
+                run(
+                  updateSettings({
+                    highlightPhrases: parseList(e.currentTarget.value),
+                  }),
+                )
+              }
+            />
+          </label>
+          <label class="settings__row settings__row--stack">
+            <div class="settings__text">
+              <span class="settings__name">Ignored users</span>
+              <span class="settings__hint">
+                Comma separated logins. Their messages never show.
+              </span>
+            </div>
+            <input
+              type="text"
+              class="settings__input"
+              placeholder="somebot, spammer"
+              value={settings().ignoredLogins.join(", ")}
+              onChange={(e) =>
+                run(
+                  updateSettings({
+                    ignoredLogins: parseList(e.currentTarget.value, true),
+                  }),
+                )
+              }
+            />
+          </label>
+          <label class="settings__row settings__row--stack">
+            <div class="settings__text">
+              <span class="settings__name">Timeout buttons</span>
+              <span class="settings__hint">
+                Comma separated lengths shown on messages, menus and user cards.
+                The first one is the hover button.
+              </span>
+            </div>
+            <input
+              type="text"
+              class="settings__input"
+              placeholder="1m, 10m, 1h, 1d"
+              value={settings().timeoutPresets.map(formatSeconds).join(", ")}
+              onChange={(e) => {
+                const presets = parseDurations(e.currentTarget.value);
+                if (presets) run(updateSettings({ timeoutPresets: presets }));
+                else
+                  e.currentTarget.value = settings()
+                    .timeoutPresets.map(formatSeconds)
+                    .join(", ");
+              }}
+            />
+          </label>
+          <label class="settings__row settings__row--toggle">
+            <div class="settings__text">
+              <span class="settings__name">Moderator actions in chat</span>
+              <span class="settings__hint">
+                Show timeouts, bans and deletions as they happen. In channels
+                you moderate this includes who did it and why
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              class="switch"
+              checked={settings().showModActions}
+              onChange={(e) =>
+                run(updateSettings({ showModActions: e.currentTarget.checked }))
+              }
+            />
+          </label>
+          <label class="settings__row settings__row--toggle">
+            <div class="settings__text">
+              <span class="settings__name">Flag new accounts</span>
+              <span class="settings__hint">
+                Mark messages from accounts created in the last week
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              class="switch"
+              checked={settings().flagNewAccounts}
+              onChange={(e) =>
+                run(
+                  updateSettings({ flagNewAccounts: e.currentTarget.checked }),
+                )
+              }
+            />
+          </label>
+
+          <div class="dialog__label">Window</div>
+          <label class="settings__row settings__row--toggle">
+            <div class="settings__text">
+              <span class="settings__name">Keep on top</span>
+              <span class="settings__hint">
+                Stay above games and other windows
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              class="switch"
+              checked={settings().alwaysOnTop}
+              onChange={(e) =>
+                run(updateSettings({ alwaysOnTop: e.currentTarget.checked }))
+              }
+            />
+          </label>
+          <label class="settings__row settings__row--toggle">
+            <div class="settings__text">
+              <span class="settings__name">Follow my browser</span>
+              <span class="settings__hint">
+                Open the Twitch channel showing in the front browser window
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              class="switch"
+              checked={settings().followBrowser}
+              onChange={(e) =>
+                run(updateSettings({ followBrowser: e.currentTarget.checked }))
+              }
+            />
+          </label>
+
+          <div class="dialog__label">Updates</div>
+          <UpdateRow />
+
+          <Show when={error()}>
+            {(e) => (
+              <div class="dialog__error" role="alert">
+                {e()}
+              </div>
+            )}
+          </Show>
+        </div>
+      </div>
+    </Show>
+  );
+};
+
+/**
+ * Runs the device flow again from inside Settings when the stored grant
+ * predates a scope the app now needs. The existing tokens stay in place
+ * until Twitch hands back the new ones, so cancelling costs nothing.
+ */
+const TwitchReconnect: Component = () => {
+  const [pending, setPending] = createSignal<DeviceCodeView | null>(null);
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
+  let generation = 0;
+
+  const begin = async () => {
+    const gen = ++generation;
+    setError(null);
+    setBusy(true);
+    try {
+      const details = await startLogin();
+      if (gen !== generation) return;
+      setPending(details);
+      void openVerificationUri(details.verification_uri).catch(() => {});
+      const status = await completeLogin();
+      if (gen !== generation) return;
+      setAuthStatus(status);
+    } catch (e) {
+      if (gen !== generation) return;
+      setError(
+        isAuthError(e)
+          ? authErrorMessage(e)
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      );
+    } finally {
+      if (gen === generation) {
+        setBusy(false);
+        setPending(null);
+      }
+    }
+  };
+
+  const cancel = () => {
+    generation++;
+    setPending(null);
+    setBusy(false);
+    void cancelLogin().catch(() => {});
+  };
+
+  onCleanup(() => {
+    if (busy()) cancel();
+  });
+
+  return (
+    <div class="settings__row settings__row--stack settings__reconnect">
+      <div class="settings__text">
+        <span class="settings__name">Twitch needs new permissions</span>
+        <span class="settings__hint">
+          Features added since you signed in (moderation, your follow list) need
+          extra access. Reconnect once to grant it.
+        </span>
+      </div>
+      <Show
+        when={pending()}
+        fallback={
+          <button
+            type="button"
+            class="btn btn--primary"
+            disabled={busy()}
+            onClick={() => void begin()}
+          >
+            Reconnect Twitch
+          </button>
+        }
+      >
+        {(p) => (
+          <div class="settings__reconnect-code">
+            <span class="settings__hint">
+              Check the browser shows this code, then choose Authorize.
+            </span>
+            <code>{p().user_code}</code>
+            <button type="button" class="btn btn--outline" onClick={cancel}>
+              Cancel
+            </button>
+          </div>
+        )}
+      </Show>
+      <Show when={error()}>
+        {(e) => (
+          <div class="dialog__error" role="alert">
+            {e()}
+          </div>
+        )}
+      </Show>
+    </div>
+  );
+};
+
+export default Settings;

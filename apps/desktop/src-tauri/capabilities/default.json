@@ -5,12 +5,15 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:window:allow-set-always-on-top",
+    "core:webview:allow-set-webview-zoom",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen",
+    "updater:default",
+    "process:allow-restart",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [
-        { "url": "https://www.twitch.tv/*" },
-        { "url": "https://id.twitch.tv/*" }
-      ]
+      "allow": [{ "url": "https://*" }, { "url": "http://*" }]
     },
     {
       "identifier": "shell:allow-spawn",

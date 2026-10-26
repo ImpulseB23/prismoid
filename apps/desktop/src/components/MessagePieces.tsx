@@ -1,0 +1,98 @@
+// Renders the text, link and emote pieces of one message. Shared by the
+// chat feed and the user card so emotes look identical in both.
+
+import { Component, For } from "solid-js";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import type { MessagePiece } from "../lib/emoteSpans";
+import { inspectEmote } from "../stores/emoteCardStore";
+
+const Piece: Component<{ piece: MessagePiece }> = (props) => {
+  const p = props.piece;
+  if (p.kind === "text") {
+    return <span>{p.text}</span>;
+  }
+  if (p.kind === "link") {
+    return (
+      <a
+        class="msg__link"
+        href={p.href}
+        title={p.href}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          void openUrl(p.href).catch((err: unknown) =>
+            console.error("open link", err),
+          );
+        }}
+      >
+        {p.text}
+      </a>
+    );
+  }
+  const { primary, overlays } = p;
+  const title = [primary, ...overlays].map((r) => r.emote.code).join(" + ");
+  return (
+    <span
+      class="msg__emote"
+      role="button"
+      tabIndex={0}
+      title={title}
+      aria-label={`${title} emote`}
+      style={{
+        display: "inline-block",
+        position: "relative",
+        width: `${primary.width}px`,
+        height: `${primary.height}px`,
+        "vertical-align": "middle",
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+        inspectEmote(primary.emote);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.stopPropagation();
+          inspectEmote(primary.emote);
+        }
+      }}
+    >
+      <img
+        src={primary.emote.url_1x}
+        srcset={
+          primary.emote.url_2x
+            ? `${primary.emote.url_1x} 1x, ${primary.emote.url_2x} 2x`
+            : undefined
+        }
+        alt={primary.emote.code}
+        width={primary.width}
+        height={primary.height}
+        draggable={false}
+        style={{ display: "block" }}
+      />
+      <For each={overlays}>
+        {(overlay) => (
+          <img
+            src={overlay.emote.url_1x}
+            alt={overlay.emote.code}
+            width={overlay.width}
+            height={overlay.height}
+            draggable={false}
+            style={{
+              position: "absolute",
+              left: `${(primary.width - overlay.width) / 2}px`,
+              top: `${(primary.height - overlay.height) / 2}px`,
+              "pointer-events": "none",
+            }}
+          />
+        )}
+      </For>
+    </span>
+  );
+};
+
+const MessagePieces: Component<{ pieces: MessagePiece[] }> = (props) => (
+  <For each={props.pieces}>{(piece) => <Piece piece={piece} />}</For>
+);
+
+export default MessagePieces;

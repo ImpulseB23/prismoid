@@ -215,43 +215,119 @@ func waitUntil(ctx context.Context, deadline time.Time) error {
 	}
 }
 
-// Subscribe creates an EventSub subscription for channel.chat.message via
-// the Helix API. `helixBase` can be overridden for testing; pass "" to use
-// the default. The signature is kept for the existing caller in eventsub.go;
-// internally it now goes through [HelixClient].
-func Subscribe(ctx context.Context, helixBase, sessionID, broadcasterID, userID, accessToken, clientID string) error {
-	client := &HelixClient{
-		BaseURL:     helixBase,
-		ClientID:    clientID,
-		AccessToken: accessToken,
+// chatSubscriptions lists every EventSub type the client needs for a chat
+// view. All share the same condition and the user:read:chat scope.
+var chatSubscriptions = []string{
+	"channel.chat.message",
+	"channel.chat.notification",
+	"channel.chat.message_delete",
+	"channel.chat.clear_user_messages",
+	"channel.chat.clear",
+}
+
+// Subscribe creates the EventSub subscriptions in chatSubscriptions for one
+// channel on a WebSocket session and returns their ids, so a later leave
+// can delete exactly them. A failure part-way leaves the earlier ones in
+// place; they die with the session either way.
+func Subscribe(ctx context.Context, client *HelixClient, sessionID, broadcasterID, userID string) ([]string, error) {
+	ids := make([]string, 0, len(chatSubscriptions))
+	for _, subType := range chatSubscriptions {
+		req := SubscriptionRequest{
+			Type:    subType,
+			Version: "1",
+			Condition: map[string]string{
+				"broadcaster_user_id": broadcasterID,
+				"user_id":             userID,
+			},
+			Transport: Transport{
+				Method:    "websocket",
+				SessionID: sessionID,
+			},
+		}
+		var resp SubscriptionResponse
+		if err := client.Post(ctx, "/eventsub/subscriptions", req, &resp); err != nil {
+			return ids, mapSubscribeError(err)
+		}
+		for _, d := range resp.Data {
+			ids = append(ids, d.ID)
+		}
 	}
+	return ids, nil
+}
+
+// DeleteSubscription removes one EventSub subscription by id.
+func DeleteSubscription(ctx context.Context, client *HelixClient, id string) error {
+	q := url.Values{}
+	q.Set("id", id)
+	return client.Delete(ctx, "/eventsub/subscriptions?"+q.Encode(), nil)
+}
+
+// SubscribeModeration creates the channel.moderate v2 subscription, which
+// reports every moderator action in the channel with who did it and why.
+// Twitch only grants it to the broadcaster and their moderators and only
+// with the full set of moderator:read scopes, so callers treat failure as
+// "no moderation feed here" rather than a connection error.
+func SubscribeModeration(ctx context.Context, client *HelixClient, sessionID, broadcasterID, moderatorID string) (string, error) {
 	req := SubscriptionRequest{
-		Type:    "channel.chat.message",
-		Version: "1",
+		Type:    "channel.moderate",
+		Version: "2",
 		Condition: map[string]string{
 			"broadcaster_user_id": broadcasterID,
-			"user_id":             userID,
+			"moderator_user_id":   moderatorID,
 		},
 		Transport: Transport{
 			Method:    "websocket",
 			SessionID: sessionID,
 		},
 	}
-
-	err := client.Post(ctx, "/eventsub/subscriptions", req, nil)
-	if err == nil {
-		return nil
+	var resp SubscriptionResponse
+	if err := client.Post(ctx, "/eventsub/subscriptions", req, &resp); err != nil {
+		return "", err
 	}
-	// Preserve the existing callers' error surface: EventSub code uses
-	// errors.As against *AuthError to decide whether to surface an
-	// `auth_error` notification to the host. Map 401 onto that shape.
-	if errors.Is(err, ErrUnauthorized) {
-		var he *HelixError
-		if errors.As(err, &he) {
-			return &AuthError{Status: he.Status, Body: he.Error()}
-		}
+	if len(resp.Data) == 0 {
+		return "", errors.New("twitch helix: subscription response carried no data")
+	}
+	return resp.Data[0].ID, nil
+}
+
+// mapSubscribeError preserves the existing callers' error surface: EventSub
+// code uses errors.As against *AuthError to decide whether to surface an
+// `auth_error` notification to the host. 401 maps onto that shape; 403 on
+// a chat subscription means the user is banned or timed out in the channel
+// (see the IRC migration guide), which gets its own type so the client can
+// stop instead of reconnecting into the same answer.
+func mapSubscribeError(err error) error {
+	var he *HelixError
+	if !errors.As(err, &he) {
+		return err
+	}
+	switch he.Status {
+	case http.StatusUnauthorized:
+		return &AuthError{Status: he.Status, Body: he.Error()}
+	case http.StatusForbidden:
+		return &ChatAccessError{Status: he.Status, Body: he.Error()}
 	}
 	return err
+}
+
+// ErrChatBanned matches every error that means Twitch will not deliver a
+// channel's chat to the signed-in user: the 403 at subscribe time and the
+// `chat_user_banned` revocation mid-session.
+var ErrChatBanned = errors.New("twitch chat: user banned or timed out")
+
+// ChatAccessError is the 403 Helix answers when the user is banned or
+// timed out in the channel they try to subscribe to.
+type ChatAccessError struct {
+	Status int
+	Body   string
+}
+
+func (e *ChatAccessError) Error() string {
+	return fmt.Sprintf("twitch chat access denied (%d): %s", e.Status, e.Body)
+}
+
+func (e *ChatAccessError) Is(target error) bool {
+	return target == ErrChatBanned
 }
 
 // AuthError is the legacy 401 error type for EventSub callers that predate
@@ -279,11 +355,12 @@ const MaxTimeoutSeconds = 1209600
 // SendChatMessageRequest is the body Twitch's POST /chat/messages expects.
 // `BroadcasterID` is the channel; `SenderID` must match the authenticated
 // user on the access token. `ReplyParentMessageID` is omitted for top-level
-// sends — reply support lives behind a follow-up control field.
+// sends.
 type SendChatMessageRequest struct {
-	BroadcasterID string `json:"broadcaster_id"`
-	SenderID      string `json:"sender_id"`
-	Message       string `json:"message"`
+	BroadcasterID        string `json:"broadcaster_id"`
+	SenderID             string `json:"sender_id"`
+	Message              string `json:"message"`
+	ReplyParentMessageID string `json:"reply_parent_message_id,omitempty"`
 }
 
 // SendChatMessageResponse is the envelope Twitch returns on 200. We surface
@@ -304,7 +381,7 @@ type SendChatMessageResponse struct {
 // response. Caller is responsible for passing a non-empty message that fits
 // in [MaxChatMessageBytes]; this method validates length up front to avoid
 // a wasted round-trip.
-func (c *HelixClient) SendChatMessage(ctx context.Context, broadcasterID, senderID, message string) (*SendChatMessageResponse, error) {
+func (c *HelixClient) SendChatMessage(ctx context.Context, broadcasterID, senderID, message, replyParentMessageID string) (*SendChatMessageResponse, error) {
 	if message == "" {
 		return nil, errors.New("twitch helix: empty chat message")
 	}
@@ -312,9 +389,10 @@ func (c *HelixClient) SendChatMessage(ctx context.Context, broadcasterID, sender
 		return nil, fmt.Errorf("twitch helix: chat message exceeds %d bytes", MaxChatMessageBytes)
 	}
 	req := SendChatMessageRequest{
-		BroadcasterID: broadcasterID,
-		SenderID:      senderID,
-		Message:       message,
+		BroadcasterID:        broadcasterID,
+		SenderID:             senderID,
+		Message:              message,
+		ReplyParentMessageID: replyParentMessageID,
 	}
 	var resp SendChatMessageResponse
 	if err := c.Post(ctx, "/chat/messages", req, &resp); err != nil {

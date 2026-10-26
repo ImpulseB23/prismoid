@@ -30,6 +30,8 @@ export interface BadgeSet {
 }
 
 export interface EmoteBundle {
+  /** Channel the bundle was fetched for. */
+  broadcaster_id?: string;
   twitch_global_badges?: BadgeSet;
   twitch_channel_badges?: BadgeSet;
   youtube_badges?: BadgeSet;

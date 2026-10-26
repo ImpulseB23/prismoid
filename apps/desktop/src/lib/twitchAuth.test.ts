@@ -27,16 +27,25 @@ afterEach(() => {
 describe("sendMessage", () => {
   it("invokes twitch_send_message with the text payload", async () => {
     invokeMock.mockResolvedValueOnce(undefined);
-    await sendMessage("hello world");
+    await sendMessage("c1", "hello world");
     expect(invokeMock).toHaveBeenCalledWith("twitch_send_message", {
+      channelId: "c1",
       text: "hello world",
+      replyTo: null,
+    });
+    invokeMock.mockResolvedValueOnce(undefined);
+    await sendMessage("c1", "yes", "parent-1");
+    expect(invokeMock).toHaveBeenLastCalledWith("twitch_send_message", {
+      channelId: "c1",
+      text: "yes",
+      replyTo: "parent-1",
     });
   });
 
   it("propagates the structured error from the backend", async () => {
     const err = { kind: "helix", code: "msg_duplicate", message: "dup" };
     invokeMock.mockRejectedValueOnce(err);
-    await expect(sendMessage("x")).rejects.toEqual(err);
+    await expect(sendMessage("c1", "x")).rejects.toEqual(err);
   });
 
   it("exposes the byte cap matching the Rust constant", () => {
@@ -47,8 +56,9 @@ describe("sendMessage", () => {
 describe("moderation commands", () => {
   it("invokes twitch_ban_user", async () => {
     invokeMock.mockResolvedValueOnce(undefined);
-    await banUser("u1", "spam");
+    await banUser("c1", "u1", "spam");
     expect(invokeMock).toHaveBeenCalledWith("twitch_ban_user", {
+      channelId: "c1",
       targetUserId: "u1",
       reason: "spam",
     });
@@ -56,16 +66,18 @@ describe("moderation commands", () => {
 
   it("invokes twitch_unban_user", async () => {
     invokeMock.mockResolvedValueOnce(undefined);
-    await unbanUser("u1");
+    await unbanUser("c1", "u1");
     expect(invokeMock).toHaveBeenCalledWith("twitch_unban_user", {
+      channelId: "c1",
       targetUserId: "u1",
     });
   });
 
   it("invokes twitch_timeout_user", async () => {
     invokeMock.mockResolvedValueOnce(undefined);
-    await timeoutUser("u1", 60, "caps");
+    await timeoutUser("c1", "u1", 60, "caps");
     expect(invokeMock).toHaveBeenCalledWith("twitch_timeout_user", {
+      channelId: "c1",
       targetUserId: "u1",
       durationSeconds: 60,
       reason: "caps",
@@ -74,8 +86,9 @@ describe("moderation commands", () => {
 
   it("invokes twitch_delete_message", async () => {
     invokeMock.mockResolvedValueOnce(undefined);
-    await deleteMessage("m1");
+    await deleteMessage("c1", "m1");
     expect(invokeMock).toHaveBeenCalledWith("twitch_delete_message", {
+      channelId: "c1",
       messageId: "m1",
     });
   });

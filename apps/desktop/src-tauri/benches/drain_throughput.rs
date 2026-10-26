@@ -20,11 +20,11 @@ compile_error!(
      implemented on windows first (ADR 18)"
 );
 
-use criterion::{
-    black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput,
-};
+use std::hint::black_box;
 
-use prismoid_lib::emote_index::{EmoteBundle, EmoteIndex, EmoteMeta, EmoteSet, Provider};
+use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
+
+use prismoid_lib::emote_index::{EmoteBundle, EmoteIndexes, EmoteMeta, EmoteSet, Provider};
 use prismoid_lib::ringbuf::RingBufReader;
 use prismoid_lib::{parse_batch, UnifiedMessage};
 
@@ -118,7 +118,7 @@ fn drain_only(c: &mut Criterion) {
 
 fn parse_only(c: &mut Criterion) {
     let mut group = c.benchmark_group("parse_only");
-    let empty = EmoteIndex::new();
+    let empty = EmoteIndexes::new();
     let populated = populated_index();
     for &n in SWEEP_SIZES {
         let raw: Vec<Vec<u8>> = (0..n).map(|_| TWITCH_MESSAGE.to_vec()).collect();
@@ -131,7 +131,7 @@ fn parse_only(c: &mut Criterion) {
                 |b, (raw, idx)| {
                     b.iter(|| {
                         batch.clear();
-                        parse_batch(raw, &mut batch, idx);
+                        parse_batch(raw, &mut batch, &mut Vec::new(), idx);
                         black_box(&batch);
                     });
                 },
@@ -143,7 +143,7 @@ fn parse_only(c: &mut Criterion) {
 
 fn drain_and_parse(c: &mut Criterion) {
     let mut group = c.benchmark_group("drain_and_parse");
-    let empty = EmoteIndex::new();
+    let empty = EmoteIndexes::new();
     let populated = populated_index();
     for &n in SWEEP_SIZES {
         let mut batch: Vec<UnifiedMessage> = Vec::with_capacity(n as usize);
@@ -161,7 +161,7 @@ fn drain_and_parse(c: &mut Criterion) {
                     |reader| {
                         batch.clear();
                         let raw = reader.drain();
-                        parse_batch(&raw, &mut batch, idx);
+                        parse_batch(&raw, &mut batch, &mut Vec::new(), idx);
                         black_box(&batch);
                     },
                     BatchSize::SmallInput,
@@ -177,7 +177,7 @@ fn drain_and_parse(c: &mut Criterion) {
 /// A handful of codes deliberately match tokens inside `TWITCH_MESSAGE`
 /// ("this", "chat", "message", "stream") so aho-corasick iteration
 /// produces both hits and misses instead of a purely cold walk.
-fn populated_index() -> EmoteIndex {
+fn populated_index() -> EmoteIndexes {
     fn meta(code: &str, provider: Provider) -> EmoteMeta {
         EmoteMeta {
             id: code.into(),
@@ -236,6 +236,7 @@ fn populated_index() -> EmoteIndex {
         .collect();
 
     let bundle = EmoteBundle {
+        broadcaster_id: "570722168".into(),
         twitch_global_emotes: EmoteSet {
             emotes: twitch_global,
         },
@@ -248,7 +249,7 @@ fn populated_index() -> EmoteIndex {
         ffz_global: EmoteSet { emotes: ffz_global },
         ..Default::default()
     };
-    let idx = EmoteIndex::new();
+    let idx = EmoteIndexes::new();
     idx.load_bundle(bundle);
     idx
 }

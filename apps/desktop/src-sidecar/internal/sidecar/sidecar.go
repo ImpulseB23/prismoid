@@ -211,9 +211,11 @@ func RunCommandLoop(ctx context.Context, scanner *bufio.Scanner, encoder *json.E
 	defer heartbeat.Stop()
 
 	clients := make(map[string]context.CancelFunc)
-	twitchClients := make(map[string]*twitch.Client)
 	var encoderMu sync.Mutex
 	notify := makeNotify(encoder, &encoderMu, logger)
+	// One EventSub socket carries every joined Twitch channel; Twitch caps
+	// sockets at three per user, so a socket per channel would cap tabs.
+	session := twitch.NewSession(ctx, out, logger.With().Str("component", "eventsub").Logger(), notify)
 
 	// Heartbeat counter is scoped to this loop's lifetime. Monotonic gaps let
 	// the host watchdog detect missed ticks even if the underlying clock is
@@ -239,7 +241,7 @@ func RunCommandLoop(ctx context.Context, scanner *bufio.Scanner, encoder *json.E
 				return err
 			}
 		case cmd := <-cmdCh:
-			DispatchCommand(ctx, cmd, clients, twitchClients, out, notify, logger)
+			DispatchCommand(ctx, cmd, clients, session, out, notify, logger)
 		}
 	}
 }
@@ -267,14 +269,14 @@ func makeNotify(encoder *json.Encoder, encoderMu *sync.Mutex, logger zerolog.Log
 }
 
 // DispatchCommand routes a control.Command to its handler.
-func DispatchCommand(ctx context.Context, cmd control.Command, clients map[string]context.CancelFunc, twitchClients map[string]*twitch.Client, out chan<- []byte, notify twitch.Notify, logger zerolog.Logger) {
+func DispatchCommand(ctx context.Context, cmd control.Command, clients map[string]context.CancelFunc, session *twitch.Session, out chan<- []byte, notify twitch.Notify, logger zerolog.Logger) {
 	switch cmd.Cmd {
 	case "twitch_connect":
-		HandleTwitchConnect(ctx, cmd, clients, twitchClients, out, notify, logger)
+		HandleTwitchConnect(ctx, cmd, clients, session, out, notify, logger)
 	case "twitch_disconnect":
-		HandleTwitchDisconnect(cmd, clients, twitchClients, logger)
+		HandleTwitchDisconnect(cmd, clients, session, logger)
 	case "token_refresh":
-		HandleTokenRefresh(cmd, twitchClients, logger)
+		HandleTokenRefresh(cmd, session, logger)
 	case "youtube_connect":
 		HandleYouTubeConnect(ctx, cmd, clients, out, notify, logger)
 	case "youtube_disconnect":
@@ -318,6 +320,7 @@ func modReply(cmd control.Command, notify twitch.Notify) func(error) {
 		if err != nil {
 			p.DropCode = helixErrorCode(err)
 			p.DropMessage = err.Error()
+			p.HTTPStatus = helixStatus(err)
 		}
 		notify("mod_action_result", p)
 	}
@@ -451,6 +454,61 @@ type SendChatResultPayload struct {
 	DropCode     string `json:"drop_code,omitempty"`
 	DropMessage  string `json:"drop_message,omitempty"`
 	ErrorMessage string `json:"error_message,omitempty"`
+	// HTTPStatus is the Helix response status when the failure was an HTTP
+	// error, so the host can act on a 401 without parsing error text.
+	HTTPStatus int `json:"http_status,omitempty"`
+}
+
+// Attempts made per send before giving up on a transport error or 5xx.
+const sendAttempts = 3
+
+// sendRetryBase is the first backoff; each further attempt doubles it.
+// A variable so tests can shrink it.
+var sendRetryBase = 300 * time.Millisecond
+
+// helixStatus returns the HTTP status carried by a Helix error, or 0 for
+// transport-level failures and non-Helix errors.
+func helixStatus(err error) int {
+	var he *twitch.HelixError
+	if errors.As(err, &he) {
+		return he.Status
+	}
+	return 0
+}
+
+// retryableSend reports whether a failed send is worth repeating: the
+// request never produced a response (dial, reset, timeout) or Twitch
+// answered 5xx. Client errors and a consumed 429 retry are final, and a
+// cancelled context means the caller has moved on.
+func retryableSend(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	status := helixStatus(err)
+	return status == 0 || status >= 500
+}
+
+// sendWithRetry runs the Helix send, repeating on retryable failures with
+// exponential backoff. Twitch drops an identical message repeated within
+// thirty seconds (msg_duplicate), which bounds the damage if a retried
+// request had in fact reached Twitch.
+func sendWithRetry(ctx context.Context, client *twitch.HelixClient, cmd control.Command, logger zerolog.Logger) (*twitch.SendChatMessageResponse, error) {
+	backoff := sendRetryBase
+	for attempt := 1; ; attempt++ {
+		resp, err := client.SendChatMessage(ctx, cmd.BroadcasterID, cmd.UserID, cmd.Message, cmd.ReplyParentMessageID)
+		if err == nil || attempt == sendAttempts || !retryableSend(err) {
+			return resp, err
+		}
+		logger.Warn().Err(err).Int("attempt", attempt).Msg("send_chat_message failed; retrying")
+		timer := time.NewTimer(backoff)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+		backoff *= 2
+	}
 }
 
 // HandleSendChatMessage posts the user's message to Twitch via Helix and
@@ -488,10 +546,10 @@ func HandleSendChatMessage(ctx context.Context, cmd control.Command, notify twit
 		AccessToken: cmd.Token,
 		BaseURL:     twitchHelixBase,
 	}
-	resp, err := client.SendChatMessage(ctx, cmd.BroadcasterID, cmd.UserID, cmd.Message)
+	resp, err := sendWithRetry(ctx, client, cmd, logger)
 	if err != nil {
 		logger.Warn().Err(err).Str("broadcaster", cmd.BroadcasterID).Msg("send_chat_message failed")
-		reply(SendChatResultPayload{ErrorMessage: err.Error()})
+		reply(SendChatResultPayload{ErrorMessage: err.Error(), HTTPStatus: helixStatus(err)})
 		return
 	}
 	if len(resp.Data) == 0 {
@@ -576,48 +634,47 @@ func youtubeErrorCode(err error) string {
 	return "youtube_send_failed"
 }
 
-// HandleTwitchConnect spawns a Twitch EventSub client for the broadcaster in
-// cmd if there isn't already one running. The client writes envelope bytes to
-// `out`, which the writer goroutine drains into the ring buffer.
+// HandleTwitchConnect joins a channel on the shared EventSub session if it
+// is not joined already. The session writes envelope bytes to `out`, which
+// the writer goroutine drains into the ring buffer.
 //
-// A parallel goroutine fetches the channel's emote and badge bundle (Helix +
+// A parallel goroutine fetches the channel\x27s emote and badge bundle (Helix +
 // 7TV + BTTV + FFZ) and emits it as a single `emote_bundle` control message.
-// Fetches share the client's cancel context, so twitch_disconnect also
-// cancels an in-flight bundle fetch. Failures per provider are captured in
-// [emotes.Bundle.Errors] rather than blocking the chat connection.
-func HandleTwitchConnect(ctx context.Context, cmd control.Command, clients map[string]context.CancelFunc, twitchClients map[string]*twitch.Client, out chan<- []byte, notify twitch.Notify, logger zerolog.Logger) {
+// Each channel gets its own cancel context: twitch_disconnect ends an
+// in-flight bundle fetch and the IRC fallback reader, if one is up.
+func HandleTwitchConnect(ctx context.Context, cmd control.Command, clients map[string]context.CancelFunc, session *twitch.Session, out chan<- []byte, notify twitch.Notify, logger zerolog.Logger) {
 	if _, exists := clients[cmd.BroadcasterID]; exists {
 		logger.Warn().Str("broadcaster", cmd.BroadcasterID).Msg("already connected, ignoring")
 		return
 	}
 
 	clientCtx, clientCancel := context.WithCancel(ctx)
-
-	client := twitch.NewClient(
-		cmd.BroadcasterID,
-		cmd.UserID,
-		cmd.Token,
-		cmd.ClientID,
-		out,
-		logger.With().Str("broadcaster", cmd.BroadcasterID).Logger(),
-		notify,
-	)
-
 	clients[cmd.BroadcasterID] = clientCancel
-	twitchClients[cmd.BroadcasterID] = client
 
-	go func() {
-		// errors.Is handles both parent shutdown and per-client disconnect:
-		// in either case the inner Read returns context.Canceled, which we
-		// want to treat as a normal exit, not an error.
-		if err := client.Run(clientCtx); err != nil && !errors.Is(err, context.Canceled) {
-			logger.Error().Err(err).Str("broadcaster", cmd.BroadcasterID).Msg("twitch client exited")
+	session.Configure(cmd.UserID, cmd.Token, cmd.ClientID)
+	session.Join(cmd.BroadcasterID, func(string) {
+		// Twitch still delivers the channel over IRC, so reading moves
+		// there until the host asks for the channel again.
+		if cmd.ChannelLogin == "" {
+			logger.Info().Str("broadcaster", cmd.BroadcasterID).Msg("chat closed: banned or timed out in channel")
+			return
 		}
-	}()
+		logger.Info().Str("broadcaster", cmd.BroadcasterID).Msg("eventsub refused the chat: banned or timed out; reading over irc")
+		reader := &twitch.Reader{
+			ChannelLogin: cmd.ChannelLogin,
+			Out:          out,
+			Log:          logger.With().Str("broadcaster", cmd.BroadcasterID).Logger(),
+		}
+		go func() {
+			if err := reader.Run(clientCtx); err != nil && !errors.Is(err, context.Canceled) {
+				logger.Error().Err(err).Str("broadcaster", cmd.BroadcasterID).Msg("irc reader exited")
+			}
+		}()
+	})
 
 	go emoteFetchFn(clientCtx, cmd, notify, logger)
 
-	logger.Info().Str("broadcaster", cmd.BroadcasterID).Msg("twitch client started")
+	logger.Info().Str("broadcaster", cmd.BroadcasterID).Msg("twitch channel joined")
 }
 
 // emoteFetchFn is the goroutine entry point for fetching an emote bundle on
@@ -647,6 +704,7 @@ func fetchAndEmit(ctx context.Context, f *emotes.Fetcher, broadcasterID string, 
 	if ctx.Err() != nil {
 		return
 	}
+	bundle.BroadcasterID = broadcasterID
 	for _, pe := range bundle.Errors {
 		logger.Warn().
 			Str("broadcaster", broadcasterID).
@@ -689,8 +747,8 @@ func buildFetcher(cmd control.Command) *emotes.Fetcher {
 	return f
 }
 
-// HandleTwitchDisconnect cancels and removes a previously-connected client.
-func HandleTwitchDisconnect(cmd control.Command, clients map[string]context.CancelFunc, twitchClients map[string]*twitch.Client, logger zerolog.Logger) {
+// HandleTwitchDisconnect leaves a joined channel and cancels its work.
+func HandleTwitchDisconnect(cmd control.Command, clients map[string]context.CancelFunc, session *twitch.Session, logger zerolog.Logger) {
 	cancelFn, exists := clients[cmd.BroadcasterID]
 	if !exists {
 		logger.Warn().Str("broadcaster", cmd.BroadcasterID).Msg("no active connection to disconnect")
@@ -698,25 +756,20 @@ func HandleTwitchDisconnect(cmd control.Command, clients map[string]context.Canc
 	}
 	cancelFn()
 	delete(clients, cmd.BroadcasterID)
-	delete(twitchClients, cmd.BroadcasterID)
-	logger.Info().Str("broadcaster", cmd.BroadcasterID).Msg("twitch client disconnected")
+	session.Leave(cmd.BroadcasterID)
+	logger.Info().Str("broadcaster", cmd.BroadcasterID).Msg("twitch channel left")
 }
 
-// HandleTokenRefresh updates the access token on all running Twitch clients.
+// HandleTokenRefresh rotates the access token the EventSub session uses.
 // The Rust supervisor sends this when it proactively refreshes the token
 // before expiry, so EventSub reconnects pick up the new credential.
-func HandleTokenRefresh(cmd control.Command, twitchClients map[string]*twitch.Client, logger zerolog.Logger) {
+func HandleTokenRefresh(cmd control.Command, session *twitch.Session, logger zerolog.Logger) {
 	if cmd.Token == "" {
 		logger.Warn().Msg("token_refresh missing token; ignoring")
 		return
 	}
-	n := 0
-	for id, c := range twitchClients {
-		c.SetAccessToken(cmd.Token)
-		logger.Debug().Str("broadcaster", id).Msg("token rotated")
-		n++
-	}
-	logger.Info().Int("clients", n).Msg("token refresh applied")
+	session.SetAccessToken(cmd.Token)
+	logger.Info().Msg("token refresh applied")
 }
 
 // HandleYouTubeConnect spawns a YouTube gRPC streamList client for the given
