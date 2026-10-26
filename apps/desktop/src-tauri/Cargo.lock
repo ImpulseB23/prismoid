@@ -3389,7 +3389,7 @@ dependencies = [
 
 [[package]]
 name = "prismoid"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "aho-corasick",
  "arc-swap",
