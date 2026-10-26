@@ -1,0 +1,3 @@
+# rewritten by release-please in its own formatting on every release
+apps/desktop/CHANGELOG.md
+apps/desktop/src-tauri/tauri.conf.json
