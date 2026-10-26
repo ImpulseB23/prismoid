@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/ImpulseB23/prismoid/compare/v0.1.0...v0.1.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* refresh an expired twitch token instead of backing off forever ([#166](https://github.com/ImpulseB23/prismoid/issues/166)) ([e1f8841](https://github.com/ImpulseB23/prismoid/commit/e1f8841f4e63633cc62d2c5230df3d3b0993c9dc))
+
 ## [0.1.0](https://github.com/ImpulseB23/prismoid/compare/v0.0.1...v0.1.0) (2026-10-26)
 
 
