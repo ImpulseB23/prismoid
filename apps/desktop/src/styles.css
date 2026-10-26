@@ -875,7 +875,7 @@ img {
   font-size: 15px;
 }
 
-.code-card {
+.waiting-card {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -886,33 +886,25 @@ img {
   max-width: 340px;
 }
 
-.code-card p {
+.waiting-card p {
   color: var(--text-muted);
   font-weight: 300;
   line-height: 1.5;
 }
 
-.code-card code {
-  font-family: var(--font-mono);
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  padding: 8px 16px;
-  background: var(--bg);
-  border-radius: var(--radius-md);
-}
-
-.code-card a {
+.waiting-card a,
+.settings__reconnect-wait a {
   color: var(--color-purple-light);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-.code-card a:hover {
+.waiting-card a:hover,
+.settings__reconnect-wait a:hover {
   color: var(--text);
 }
 
-.code-card small {
+.waiting-card small {
   color: var(--text-faint);
   font-size: 12px;
 }
@@ -1691,21 +1683,11 @@ img {
   background: var(--bg-raised);
 }
 
-.settings__reconnect-code {
+.settings__reconnect-wait {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-}
-
-.settings__reconnect-code code {
-  font-family: var(--font-mono);
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  padding: 4px 10px;
-  background: var(--bg);
-  border-radius: var(--radius-md);
 }
 
 /* Account insight and private notes */

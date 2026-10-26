@@ -10,7 +10,8 @@ use tokio::sync::{Mutex, Notify};
 use twitch_oauth2::Scope;
 
 use super::errors::AuthError;
-use super::manager::{AuthManager, PendingDeviceFlow};
+use super::implicit::PendingLogin;
+use super::manager::AuthManager;
 use super::tokens::TwitchTokens;
 
 /// Shared auth state held in Tauri's managed-state map. The supervisor
@@ -20,7 +21,11 @@ use super::tokens::TwitchTokens;
 /// to wait up to 30 s for the next poll tick.
 pub struct AuthState {
     pub manager: Arc<AuthManager>,
-    pub pending: Mutex<Option<PendingDeviceFlow>>,
+    pub pending: Mutex<Option<PendingLogin>>,
+    /// Fired by `cancel_login` so a waiting `complete_login` returns and
+    /// releases its port. `notify_waiters` leaves no permit behind, so a
+    /// cancel never leaks into the next attempt.
+    cancel: Notify,
     /// Notifier the supervisor awaits while idle in `waiting_for_auth`.
     /// Successful login + logout both fire it: login so a fresh sidecar
     /// spins up immediately; logout so any in-progress sidecar tears
@@ -33,6 +38,7 @@ impl AuthState {
         Self {
             manager,
             pending: Mutex::new(None),
+            cancel: Notify::new(),
             wakeup,
         }
     }
@@ -58,15 +64,14 @@ impl AuthState {
         }
     }
 
-    pub async fn start_login(&self) -> Result<DeviceCodeView, AuthCommandError> {
-        let pending = self.manager.start_device_flow().await?;
-        let view = DeviceCodeView {
-            verification_uri: pending.details().verification_uri.clone(),
-            user_code: pending.details().user_code.clone(),
-            expires_in_secs: pending.details().expires_in,
-        };
+    pub async fn start_login(&self) -> Result<LoginView, AuthCommandError> {
+        // A previous attempt still waiting would hold the port.
+        self.cancel.notify_waiters();
+        let (pending, authorize_url) = self.manager.start_login().await?;
         *self.pending.lock().await = Some(pending);
-        Ok(view)
+        Ok(LoginView {
+            authorize_url: authorize_url.into(),
+        })
     }
 
     pub async fn complete_login(&self) -> Result<AuthStatus, AuthCommandError> {
@@ -74,7 +79,7 @@ impl AuthState {
             kind: "no_pending_flow",
             message: "twitch_start_login has not been called".into(),
         })?;
-        let tokens = self.manager.complete_device_flow(pending).await?;
+        let tokens = self.manager.complete_login(pending, &self.cancel).await?;
         // notify_one stores a permit if the supervisor isn't currently
         // parked on notified(), so the wake can't be lost between login
         // completing and the supervisor reaching its await.
@@ -83,11 +88,13 @@ impl AuthState {
     }
 
     pub async fn cancel_login(&self) {
+        self.cancel.notify_waiters();
         self.pending.lock().await.take();
     }
 
     pub async fn logout(&self) -> Result<(), AuthCommandError> {
         self.manager.logout()?;
+        self.cancel.notify_waiters();
         self.pending.lock().await.take();
         self.wakeup.notify_one();
         Ok(())
@@ -125,15 +132,11 @@ pub enum AuthStatusState {
     LoggedIn,
 }
 
-/// Shape of the device-code details surfaced to the frontend. We
-/// deliberately don't expose `device_code` (it's an exchange-only
-/// secret) or `interval` (the manager handles polling cadence
-/// internally via `wait_for_code`).
+/// What the frontend needs to send the user to Twitch: the authorize URL
+/// with the loopback redirect and CSRF state already in it.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct DeviceCodeView {
-    pub verification_uri: String,
-    pub user_code: String,
-    pub expires_in_secs: u64,
+pub struct LoginView {
+    pub authorize_url: String,
 }
 
 /// Frontend-facing error. `AuthError` itself isn't `Serialize` (it
@@ -150,7 +153,10 @@ impl From<AuthError> for AuthCommandError {
         let kind = match &err {
             AuthError::NoTokens => "no_tokens",
             AuthError::RefreshTokenInvalid => "refresh_invalid",
-            AuthError::DeviceCodeExpired => "device_code_expired",
+            AuthError::LoginTimedOut => "login_timed_out",
+            AuthError::LoginCancelled => "login_cancelled",
+            AuthError::LoginPortsBusy => "login_ports_busy",
+            AuthError::Loopback(_) => "loopback",
             AuthError::UserDenied => "user_denied",
             AuthError::Keychain(_) => "keychain",
             AuthError::OAuth(_) => "oauth",
@@ -208,9 +214,20 @@ mod tests {
     }
 
     #[test]
-    fn auth_command_error_maps_device_code_expired() {
-        let mapped: AuthCommandError = AuthError::DeviceCodeExpired.into();
-        assert_eq!(mapped.kind, "device_code_expired");
+    fn auth_command_error_maps_login_outcomes() {
+        let cases: [(AuthError, &str); 4] = [
+            (AuthError::LoginTimedOut, "login_timed_out"),
+            (AuthError::LoginCancelled, "login_cancelled"),
+            (AuthError::LoginPortsBusy, "login_ports_busy"),
+            (
+                AuthError::Loopback(std::io::Error::other("boom")),
+                "loopback",
+            ),
+        ];
+        for (err, kind) in cases {
+            let mapped: AuthCommandError = err.into();
+            assert_eq!(mapped.kind, kind);
+        }
     }
 
     #[test]

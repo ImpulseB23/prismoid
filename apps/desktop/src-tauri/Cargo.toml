@@ -2,9 +2,6 @@
 name = "prismoid"
 version = "0.2.1"
 edition = "2021"
-# Disambiguate for `cargo run` / Tauri dev command — the `prismoid_dcf`
-# dev tool is a separate bin invoked via `cargo run --bin prismoid_dcf`.
-default-run = "prismoid"
 
 [lib]
 name = "prismoid_lib"

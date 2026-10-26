@@ -3,7 +3,7 @@
 //! Mirrors the variants of `twitch_auth::AuthError` so the frontend's
 //! error mapping (and the supervisor's branching) can stay symmetric
 //! across providers — only the wire-format details and the underlying
-//! flow change between Twitch DCF and YouTube Auth Code + PKCE.
+//! flow change between the Twitch implicit grant and YouTube Auth Code + PKCE.
 
 use thiserror::Error;
 

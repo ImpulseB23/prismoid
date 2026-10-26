@@ -19,13 +19,26 @@ pub enum AuthError {
     #[error("refresh token rejected; user must re-authenticate")]
     RefreshTokenInvalid,
 
-    /// Device authorization flow ran past its deadline before the user
-    /// completed authorization. The caller should start a new flow.
-    #[error("device code expired before user authorized")]
-    DeviceCodeExpired,
+    /// The browser never answered within the login window. The caller
+    /// should start a new flow.
+    #[error("no answer from the browser within ten minutes")]
+    LoginTimedOut,
 
-    /// User explicitly denied the authorization request.
-    #[error("user denied the device authorization")]
+    /// `twitch_cancel_login` ran while a login was waiting.
+    #[error("sign-in cancelled")]
+    LoginCancelled,
+
+    /// Both redirect ports registered on the Twitch application are held
+    /// by other programs, so Twitch has nowhere to send the token.
+    #[error("ports 21337 and 21338 are both in use")]
+    LoginPortsBusy,
+
+    /// The loopback relay failed to accept or read the browser's request.
+    #[error("sign-in relay failed: {0}")]
+    Loopback(std::io::Error),
+
+    /// User declined the authorization request on Twitch.
+    #[error("the Twitch authorization was declined")]
     UserDenied,
 
     /// Keyring / OS credential store error. Typically means the user
@@ -47,4 +60,17 @@ pub enum AuthError {
     /// URL, empty client id, etc.). Bug, not a runtime condition.
     #[error("configuration error: {0}")]
     Config(String),
+}
+
+// The twitch_oauth2 Displays stop at the outer variant ("creation of
+// token failed"); the useful part sits in the source chain.
+pub(super) fn error_chain(err: &dyn std::error::Error) -> String {
+    let mut out = err.to_string();
+    let mut cur = err.source();
+    while let Some(e) = cur {
+        out.push_str(": ");
+        out.push_str(&e.to_string());
+        cur = e.source();
+    }
+    out
 }

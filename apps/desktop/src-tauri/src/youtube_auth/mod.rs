@@ -48,7 +48,7 @@ pub use tokens::YouTubeTokens;
 /// Per RFC 8252 §8.4 and Google's own docs, this `client_id` is a
 /// public identifier — it appears in browser URLs during the
 /// authorization flow and is bundled in source the same way the
-/// Twitch DCF flow handles `TWITCH_CLIENT_ID` (see ADR 37).
+/// Twitch sign-in handles `TWITCH_CLIENT_ID` (see ADR 43).
 pub const GOOGLE_CLIENT_ID: &str = or_placeholder(
     option_env!("GOOGLE_CLIENT_ID"),
     "REPLACE_ME.apps.googleusercontent.com",

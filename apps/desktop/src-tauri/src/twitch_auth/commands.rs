@@ -9,11 +9,11 @@
 //! Frontend flow:
 //! 1. App boot → `twitch_auth_status` to render either the chat view
 //!    (logged in) or the SignIn overlay (logged out).
-//! 2. User clicks "Sign in with Twitch" → `twitch_start_login` returns
-//!    the device-code details. The frontend renders the user_code,
-//!    opens `verification_uri` in the system browser, and immediately
-//!    calls `twitch_complete_login` which blocks until the user clicks
-//!    Authorize (or the device code expires).
+//! 2. User clicks "Sign in with Twitch" → `twitch_start_login` binds the
+//!    loopback relay and returns the authorize URL. The frontend opens it
+//!    in the system browser and immediately calls `twitch_complete_login`,
+//!    which blocks until Twitch redirects back, the user cancels, or the
+//!    ten minute window runs out.
 //! 3. On success, the supervisor's wakeup notifier fires so it picks
 //!    up the new tokens without waiting out its 30 s `waiting_for_auth`
 //!    sleep.
@@ -22,7 +22,7 @@
 
 use tauri::State;
 
-use super::auth_state::{AuthCommandError, AuthState, AuthStatus, DeviceCodeView};
+use super::auth_state::{AuthCommandError, AuthState, AuthStatus, LoginView};
 
 #[tauri::command]
 pub async fn twitch_auth_status(
@@ -34,7 +34,7 @@ pub async fn twitch_auth_status(
 #[tauri::command]
 pub async fn twitch_start_login(
     state: State<'_, AuthState>,
-) -> Result<DeviceCodeView, AuthCommandError> {
+) -> Result<LoginView, AuthCommandError> {
     state.start_login().await
 }
 

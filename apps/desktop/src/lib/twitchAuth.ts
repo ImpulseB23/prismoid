@@ -20,17 +20,19 @@ export type AuthStatus =
       missing_scopes: string[];
     };
 
-export interface DeviceCodeView {
-  verification_uri: string;
-  user_code: string;
-  expires_in_secs: number;
+export interface LoginView {
+  /** Twitch authorize URL with the loopback redirect and CSRF state. */
+  authorize_url: string;
 }
 
 export interface AuthCommandError {
   kind:
     | "no_tokens"
     | "refresh_invalid"
-    | "device_code_expired"
+    | "login_timed_out"
+    | "login_cancelled"
+    | "login_ports_busy"
+    | "loopback"
     | "user_denied"
     | "keychain"
     | "oauth"
@@ -44,7 +46,7 @@ export function getAuthStatus(): Promise<AuthStatus> {
   return invoke("twitch_auth_status");
 }
 
-export function startLogin(): Promise<DeviceCodeView> {
+export function startLogin(): Promise<LoginView> {
   return invoke("twitch_start_login");
 }
 
@@ -62,18 +64,18 @@ export function logout(): Promise<void> {
 
 const ALLOWED_HOSTS = ["www.twitch.tv", "id.twitch.tv"];
 
-export function openVerificationUri(uri: string): Promise<void> {
+export function openTwitchUrl(uri: string): Promise<void> {
   let parsed: URL;
   try {
     parsed = new URL(uri);
   } catch {
-    return Promise.reject(new Error("invalid verification URL"));
+    return Promise.reject(new Error("invalid URL"));
   }
   if (
     parsed.protocol !== "https:" ||
     !ALLOWED_HOSTS.includes(parsed.hostname)
   ) {
-    return Promise.reject(new Error("verification URL not on a Twitch domain"));
+    return Promise.reject(new Error("URL not on a Twitch domain"));
   }
   return openUrl(uri);
 }

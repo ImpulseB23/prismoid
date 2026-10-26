@@ -12,9 +12,9 @@ import {
 import {
   cancelLogin,
   completeLogin,
-  openVerificationUri,
+  openTwitchUrl,
   startLogin,
-  type DeviceCodeView,
+  type LoginView,
 } from "../lib/twitchAuth";
 import { missingScopes, setAuthStatus } from "../stores/authStore";
 import {
@@ -439,12 +439,12 @@ const Settings: Component<SettingsProps> = (props) => {
 };
 
 /**
- * Runs the device flow again from inside Settings when the stored grant
+ * Runs the sign-in again from inside Settings when the stored grant
  * predates a scope the app now needs. The existing tokens stay in place
  * until Twitch hands back the new ones, so cancelling costs nothing.
  */
 const TwitchReconnect: Component = () => {
-  const [pending, setPending] = createSignal<DeviceCodeView | null>(null);
+  const [pending, setPending] = createSignal<LoginView | null>(null);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   let generation = 0;
@@ -454,10 +454,10 @@ const TwitchReconnect: Component = () => {
     setError(null);
     setBusy(true);
     try {
-      const details = await startLogin();
+      const view = await startLogin();
       if (gen !== generation) return;
-      setPending(details);
-      void openVerificationUri(details.verification_uri).catch(() => {});
+      setPending(view);
+      void openTwitchUrl(view.authorize_url).catch(() => {});
       const status = await completeLogin();
       if (gen !== generation) return;
       setAuthStatus(status);
@@ -512,11 +512,19 @@ const TwitchReconnect: Component = () => {
         }
       >
         {(p) => (
-          <div class="settings__reconnect-code">
+          <div class="settings__reconnect-wait">
             <span class="settings__hint">
-              Check the browser shows this code, then choose Authorize.
+              Choose Authorize in the browser tab that opened.{" "}
+              <a
+                href={p().authorize_url}
+                onClick={(e) => {
+                  e.preventDefault();
+                  void openTwitchUrl(p().authorize_url).catch(() => {});
+                }}
+              >
+                Open it again
+              </a>
             </span>
-            <code>{p().user_code}</code>
             <button type="button" class="btn btn--outline" onClick={cancel}>
               Cancel
             </button>
