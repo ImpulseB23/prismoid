@@ -117,7 +117,7 @@ pub fn parse_batch(
                 tracing::warn!(error = %e, "parse failed, dropping message");
                 tracing::debug!(
                     payload = %String::from_utf8_lossy(&data[..data.len().min(PARSE_FAILURE_SNIPPET)]),
-                    "unparseable payload"
+                    "unparsable payload"
                 );
             }
             Err(_) => {
