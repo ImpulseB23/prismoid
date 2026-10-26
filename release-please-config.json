@@ -4,6 +4,8 @@
       "release-type": "node",
       "initial-version": "0.0.1",
       "include-component-in-tag": false,
+      "draft": true,
+      "force-tag-creation": true,
       "extra-files": [
         {
           "type": "json",
