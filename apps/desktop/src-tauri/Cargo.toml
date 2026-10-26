@@ -69,7 +69,7 @@ keyring = { version = "3", default-features = false, features = ["apple-native"]
 keyring = { version = "3", default-features = false, features = ["sync-secret-service", "crypto-rust"] }
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
-tauri-plugin-updater = "2.14"
+tauri-plugin-updater = { version = "2.14", default-features = false, features = ["rustls-tls", "system-proxy"] }
 
 [features]
 # Opt-in feature that exposes internal write + parse helpers to the
