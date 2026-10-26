@@ -31,8 +31,6 @@ export interface AuthCommandError {
     | "refresh_invalid"
     | "login_timed_out"
     | "login_cancelled"
-    | "login_ports_busy"
-    | "loopback"
     | "user_denied"
     | "keychain"
     | "oauth"

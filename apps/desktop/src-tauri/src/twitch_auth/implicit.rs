@@ -1,243 +1,53 @@
-//! Twitch sign-in through the implicit grant on a loopback relay (ADR 43).
+//! Twitch sign-in through the implicit grant (ADR 43).
 //!
-//! Twitch returns the token in the URL fragment of the registered
-//! redirect. Fragments never reach a server, so the loopback server first
-//! answers with a page whose script posts the fragment back, then replies
-//! with the done page while the pending login resolves. The ports are
-//! fixed because Twitch only redirects to URLs registered on the
-//! application.
+//! Twitch redirects to the hosted page at prismoid.org, which opens the
+//! `prismoid://auth/twitch` deep link carrying Twitch's answer. The OS
+//! hands that link to the running instance (the single-instance plugin
+//! forwards it when Windows spawns a second process), the state is checked
+//! against the login that is waiting, and the token is validated before it
+//! is stored.
 
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::Notify;
+use tokio::sync::{mpsc, Notify};
 use twitch_oauth2::tokens::errors::ImplicitUserTokenExchangeError;
 use twitch_oauth2::tokens::ImplicitUserTokenBuilder;
-use twitch_oauth2::url::{form_urlencoded, Url};
+use twitch_oauth2::url::Url;
 use twitch_oauth2::{ClientId, Scope, UserToken};
 
 use super::errors::{error_chain, AuthError};
 
-/// Redirect ports registered on the Twitch application, tried in order.
-/// Twitch matches the redirect character for character and the URL type
-/// always carries the trailing slash, so the registered entries are
-/// `http://localhost:21337/` and `http://localhost:21338/`.
-pub const LOGIN_PORTS: [u16; 2] = [21337, 21338];
+/// Registered on the Twitch application; the page there forwards to the
+/// deep link.
+pub const TWITCH_REDIRECT_URL: &str = "https://prismoid.org/auth/twitch";
+/// Scheme the installer registers for the app; the hosted page opens
+/// `prismoid://auth/twitch?...`.
+pub const DEEP_LINK_SCHEME: &str = "prismoid";
+const DEEP_LINK_HOST: &str = "auth";
+const DEEP_LINK_PATH: &str = "/twitch";
 /// How long the browser gets before the pending login gives up.
 pub const LOGIN_TIMEOUT: Duration = Duration::from_secs(10 * 60);
-const MAX_REQUEST_BYTES: usize = 16 * 1024;
 
-const RELAY_PAGE: &str = include_str!("relay_page.html");
-// Same page the YouTube loopback shows; it says nothing provider specific.
-const DONE_PAGE: &str = include_str!("../oauth_pkce/success_page.html");
-
-/// A sign-in that has opened the browser and is waiting for Twitch's
-/// redirect. Consumed by [`PendingLogin::wait`]; dropping it closes the
-/// listeners so the port is free for the next attempt.
-pub struct PendingLogin {
-    v4: TcpListener,
-    v6: Option<TcpListener>,
-    builder: ImplicitUserTokenBuilder,
-}
-
-impl PendingLogin {
-    pub async fn start(client_id: ClientId, scopes: Vec<Scope>) -> Result<(Self, Url), AuthError> {
-        Self::start_on(&LOGIN_PORTS, client_id, scopes).await
-    }
-
-    async fn start_on(
-        ports: &[u16],
-        client_id: ClientId,
-        scopes: Vec<Scope>,
-    ) -> Result<(Self, Url), AuthError> {
-        let (v4, v6) = bind_loopback(ports).await?;
-        let port = v4.local_addr().map_err(AuthError::Loopback)?.port();
-        let redirect =
-            Url::parse(&format!("http://localhost:{port}")).expect("loopback url is well formed");
-        let mut builder = ImplicitUserTokenBuilder::new(client_id, redirect).set_scopes(scopes);
-        let (authorize_url, _csrf) = builder.generate_url();
-        Ok((Self { v4, v6, builder }, authorize_url))
-    }
-
-    /// Serves the relay until Twitch's answer arrives, the browser stays
-    /// silent past [`LOGIN_TIMEOUT`], or `cancel` fires.
-    pub async fn wait(
-        self,
-        http: &reqwest::Client,
-        cancel: &Notify,
-    ) -> Result<UserToken, AuthError> {
-        tokio::select! {
-            served = tokio::time::timeout(LOGIN_TIMEOUT, self.serve(http)) => {
-                served.unwrap_or(Err(AuthError::LoginTimedOut))
-            }
-            () = cancel.notified() => Err(AuthError::LoginCancelled),
-        }
-    }
-
-    async fn serve(self, http: &reqwest::Client) -> Result<UserToken, AuthError> {
-        let Self {
-            v4, v6, builder, ..
-        } = self;
-        loop {
-            let mut stream = accept_any(&v4, v6.as_ref())
-                .await
-                .map_err(AuthError::Loopback)?;
-            let Some(request) = read_request(&mut stream)
-                .await
-                .map_err(AuthError::Loopback)?
-            else {
-                respond(&mut stream, 400, "text/plain", "bad request").await;
-                continue;
-            };
-            let params = match route(&request) {
-                Route::Relay => {
-                    respond(&mut stream, 200, "text/html; charset=utf-8", RELAY_PAGE).await;
-                    continue;
-                }
-                Route::NotFound => {
-                    respond(&mut stream, 404, "text/plain", "not found").await;
-                    continue;
-                }
-                Route::Callback(params) => params,
-            };
-            // A request carrying someone else's state is not Twitch's
-            // answer to this login; keep waiting for the real one.
-            if !params
-                .state
-                .as_deref()
-                .is_some_and(|s| builder.csrf_is_valid(s))
-            {
-                respond(&mut stream, 400, "text/plain", "state mismatch").await;
-                continue;
-            }
-            let exchanged = builder
-                .get_user_token(
-                    http,
-                    params.state.as_deref(),
-                    params.access_token.as_deref(),
-                    params.error.as_deref(),
-                    params.error_description.as_deref(),
-                )
-                .await;
-            return match exchanged {
-                Ok(token) => {
-                    respond(&mut stream, 200, "text/html; charset=utf-8", DONE_PAGE).await;
-                    Ok(token)
-                }
-                Err(e) => {
-                    let err = classify_exchange_error(e);
-                    respond(&mut stream, 400, "text/plain", &err.to_string()).await;
-                    Err(err)
-                }
-            };
-        }
-    }
-}
-
-// Browsers resolve localhost to both loopback addresses, so a port only
-// counts as ours when nobody else holds its IPv6 side either. Hosts
-// without IPv6 simply get the IPv4 listener.
-async fn bind_loopback(ports: &[u16]) -> Result<(TcpListener, Option<TcpListener>), AuthError> {
-    for &port in ports {
-        let Ok(v4) =
-            TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port)).await
-        else {
-            continue;
-        };
-        let bound = v4.local_addr().map_err(AuthError::Loopback)?.port();
-        match TcpListener::bind(SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), bound)).await {
-            Ok(v6) => return Ok((v4, Some(v6))),
-            Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => continue,
-            Err(_) => return Ok((v4, None)),
-        }
-    }
-    Err(AuthError::LoginPortsBusy)
-}
-
-async fn accept_any(v4: &TcpListener, v6: Option<&TcpListener>) -> std::io::Result<TcpStream> {
-    match v6 {
-        Some(v6) => tokio::select! {
-            accepted = v4.accept() => accepted.map(|(s, _)| s),
-            accepted = v6.accept() => accepted.map(|(s, _)| s),
-        },
-        None => v4.accept().await.map(|(s, _)| s),
-    }
-}
-
-struct Request {
-    method: String,
-    target: String,
-    body: Vec<u8>,
-}
-
-// Reads one HTTP/1.1 request: head up to the blank line, then as many
-// body bytes as Content-Length announces, capped. Malformed input gives
-// `None` so the caller can answer 400 and keep serving.
-async fn read_request(stream: &mut TcpStream) -> std::io::Result<Option<Request>> {
-    let mut buf = Vec::with_capacity(2048);
-    let mut chunk = [0u8; 2048];
-    let head_end = loop {
-        if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
-            break i;
-        }
-        if buf.len() >= MAX_REQUEST_BYTES {
-            return Ok(None);
-        }
-        let n = stream.read(&mut chunk).await?;
-        if n == 0 {
-            return Ok(None);
-        }
-        buf.extend_from_slice(&chunk[..n]);
-    };
-
-    let Ok(head) = std::str::from_utf8(&buf[..head_end]) else {
-        return Ok(None);
-    };
-    let mut lines = head.split("\r\n");
-    let mut request_line = lines.next().unwrap_or_default().split(' ');
-    let (Some(method), Some(target)) = (request_line.next(), request_line.next()) else {
-        return Ok(None);
-    };
-    let content_length = lines
-        .filter_map(|l| l.split_once(':'))
-        .find(|(k, _)| k.eq_ignore_ascii_case("content-length"))
-        .and_then(|(_, v)| v.trim().parse::<usize>().ok())
-        .unwrap_or(0);
-    if content_length > MAX_REQUEST_BYTES {
-        return Ok(None);
-    }
-
-    let mut body = buf[head_end + 4..].to_vec();
-    while body.len() < content_length {
-        let n = stream.read(&mut chunk).await?;
-        if n == 0 {
-            break;
-        }
-        body.extend_from_slice(&chunk[..n]);
-    }
-    body.truncate(content_length);
-
-    Ok(Some(Request {
-        method: method.to_owned(),
-        target: target.to_owned(),
-        body,
-    }))
-}
-
-#[derive(Debug, Default, PartialEq, Eq)]
-struct CallbackParams {
-    access_token: Option<String>,
-    state: Option<String>,
-    error: Option<String>,
-    error_description: Option<String>,
+/// What Twitch sent back, lifted off the deep link.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CallbackParams {
+    pub access_token: Option<String>,
+    pub state: Option<String>,
+    pub error: Option<String>,
+    pub error_description: Option<String>,
 }
 
 impl CallbackParams {
-    fn parse(encoded: &[u8]) -> Self {
+    /// Reads `prismoid://auth/twitch?...`; any other link is not ours.
+    pub fn from_deep_link(url: &Url) -> Option<Self> {
+        if url.scheme() != DEEP_LINK_SCHEME
+            || url.host_str() != Some(DEEP_LINK_HOST)
+            || url.path() != DEEP_LINK_PATH
+        {
+            return None;
+        }
         let mut params = Self::default();
-        for (k, v) in form_urlencoded::parse(encoded) {
+        for (k, v) in url.query_pairs() {
             let v = v.into_owned();
             match &*k {
                 "access_token" => params.access_token = Some(v),
@@ -247,54 +57,77 @@ impl CallbackParams {
                 _ => {}
             }
         }
-        params
+        Some(params)
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-enum Route {
-    Relay,
-    Callback(CallbackParams),
-    NotFound,
+/// A sign-in that has opened the browser and is waiting for Twitch's
+/// answer to arrive over the deep link.
+pub struct PendingLogin {
+    builder: ImplicitUserTokenBuilder,
 }
 
-// Twitch sends a granted token in the fragment, which the relay page posts
-// to /callback, but a declined authorization comes back in the query of
-// the redirect itself.
-fn route(request: &Request) -> Route {
-    let (path, query) = match request.target.split_once('?') {
-        Some((p, q)) => (p, Some(q)),
-        None => (request.target.as_str(), None),
-    };
-    match (request.method.as_str(), path, query) {
-        ("GET", "/", Some(q)) => {
-            let params = CallbackParams::parse(q.as_bytes());
-            if params.error.is_some() {
-                Route::Callback(params)
-            } else {
-                Route::Relay
+impl PendingLogin {
+    pub fn start(client_id: ClientId, scopes: Vec<Scope>) -> (Self, Url) {
+        let redirect = Url::parse(TWITCH_REDIRECT_URL).expect("redirect url is well formed");
+        let mut builder = ImplicitUserTokenBuilder::new(client_id, redirect).set_scopes(scopes);
+        let (authorize_url, _csrf) = builder.generate_url();
+        (Self { builder }, authorize_url)
+    }
+
+    /// Waits for Twitch's answer on `incoming`, ignoring links that carry
+    /// another login's state, until it arrives, `cancel` fires, or
+    /// [`LOGIN_TIMEOUT`] passes.
+    pub async fn wait(
+        self,
+        http: &reqwest::Client,
+        incoming: &mut mpsc::UnboundedReceiver<CallbackParams>,
+        cancel: &Notify,
+    ) -> Result<UserToken, AuthError> {
+        self.wait_for(LOGIN_TIMEOUT, http, incoming, cancel).await
+    }
+
+    async fn wait_for(
+        self,
+        timeout: Duration,
+        http: &reqwest::Client,
+        incoming: &mut mpsc::UnboundedReceiver<CallbackParams>,
+        cancel: &Notify,
+    ) -> Result<UserToken, AuthError> {
+        // Created once so a cancel between two loop turns is not missed.
+        let cancelled = cancel.notified();
+        tokio::pin!(cancelled);
+        let deadline = tokio::time::sleep(timeout);
+        tokio::pin!(deadline);
+        loop {
+            let params = tokio::select! {
+                received = incoming.recv() => match received {
+                    Some(params) => params,
+                    None => return Err(AuthError::LoginCancelled),
+                },
+                () = &mut cancelled => return Err(AuthError::LoginCancelled),
+                () = &mut deadline => return Err(AuthError::LoginTimedOut),
+            };
+            if !params
+                .state
+                .as_deref()
+                .is_some_and(|s| self.builder.csrf_is_valid(s))
+            {
+                continue;
             }
+            return self
+                .builder
+                .get_user_token(
+                    http,
+                    params.state.as_deref(),
+                    params.access_token.as_deref(),
+                    params.error.as_deref(),
+                    params.error_description.as_deref(),
+                )
+                .await
+                .map_err(classify_exchange_error);
         }
-        ("GET", "/", None) => Route::Relay,
-        ("POST", "/callback", _) => Route::Callback(CallbackParams::parse(&request.body)),
-        _ => Route::NotFound,
     }
-}
-
-async fn respond(stream: &mut TcpStream, status: u16, content_type: &str, body: &str) {
-    let reason = match status {
-        200 => "OK",
-        400 => "Bad Request",
-        _ => "Not Found",
-    };
-    let head = format!(
-        "HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
-        body.len()
-    );
-    // The browser closing early is not worth failing the login over.
-    let _ = stream.write_all(head.as_bytes()).await;
-    let _ = stream.write_all(body.as_bytes()).await;
-    let _ = stream.shutdown().await;
 }
 
 fn classify_exchange_error<RE>(err: ImplicitUserTokenExchangeError<RE>) -> AuthError
@@ -327,60 +160,59 @@ mod tests {
             .expect("reqwest client")
     }
 
-    async fn start() -> (PendingLogin, Url) {
-        PendingLogin::start_on(
-            &[0],
-            ClientId::new("client".into()),
-            vec![Scope::UserReadChat],
-        )
-        .await
-        .expect("ephemeral port binds")
+    fn start() -> (PendingLogin, Url) {
+        PendingLogin::start(ClientId::new("client".into()), vec![Scope::UserReadChat])
     }
 
-    async fn roundtrip(addr: SocketAddr, request: &str) -> String {
-        let mut stream = TcpStream::connect(addr).await.expect("connect");
-        stream.write_all(request.as_bytes()).await.expect("write");
-        let mut out = Vec::new();
-        stream.read_to_end(&mut out).await.expect("read");
-        String::from_utf8(out).expect("utf8 response")
+    fn state_of(url: &Url) -> String {
+        url.query_pairs()
+            .find(|(k, _)| k == "state")
+            .map(|(_, v)| v.into_owned())
+            .expect("authorize url carries the state")
     }
 
     #[test]
-    fn route_tells_relay_callback_and_errors_apart() {
-        let get = |target: &str| Request {
-            method: "GET".into(),
-            target: target.into(),
-            body: Vec::new(),
-        };
-        assert_eq!(route(&get("/")), Route::Relay);
-        assert_eq!(route(&get("/?foo=bar")), Route::Relay);
-        assert_eq!(route(&get("/favicon.ico")), Route::NotFound);
-        match route(&get(
-            "/?error=access_denied&error_description=The+user+denied+you+access&state=abc",
-        )) {
-            Route::Callback(p) => {
-                assert_eq!(p.error.as_deref(), Some("access_denied"));
-                assert_eq!(
-                    p.error_description.as_deref(),
-                    Some("The user denied you access")
-                );
-                assert_eq!(p.state.as_deref(), Some("abc"));
-            }
-            other => panic!("expected callback, got {other:?}"),
-        }
-        let post = Request {
-            method: "POST".into(),
-            target: "/callback".into(),
-            body: b"access_token=tok%2B1&scope=user%3Aread%3Achat&state=xyz&token_type=bearer"
-                .to_vec(),
-        };
-        match route(&post) {
-            Route::Callback(p) => {
-                assert_eq!(p.access_token.as_deref(), Some("tok+1"));
-                assert_eq!(p.state.as_deref(), Some("xyz"));
-                assert!(p.error.is_none());
-            }
-            other => panic!("expected callback, got {other:?}"),
+    fn authorize_url_targets_twitch_with_the_hosted_redirect() {
+        let (pending, url) = start();
+        assert_eq!(url.host_str(), Some("id.twitch.tv"));
+        let pairs: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+        assert_eq!(pairs["response_type"], "token");
+        assert_eq!(pairs["redirect_uri"], TWITCH_REDIRECT_URL);
+        assert_eq!(pairs["scope"], "user:read:chat");
+        assert!(pending.builder.csrf_is_valid(&pairs["state"]));
+    }
+
+    #[test]
+    fn callback_params_only_read_our_deep_link() {
+        let granted = Url::parse(
+            "prismoid://auth/twitch?access_token=tok%2B1&scope=user%3Aread%3Achat&state=xyz&token_type=bearer",
+        )
+        .unwrap();
+        let params = CallbackParams::from_deep_link(&granted).expect("ours");
+        assert_eq!(params.access_token.as_deref(), Some("tok+1"));
+        assert_eq!(params.state.as_deref(), Some("xyz"));
+        assert!(params.error.is_none());
+
+        let declined = Url::parse(
+            "prismoid://auth/twitch?error=access_denied&error_description=The+user+denied+you+access&state=abc",
+        )
+        .unwrap();
+        let params = CallbackParams::from_deep_link(&declined).expect("ours");
+        assert_eq!(params.error.as_deref(), Some("access_denied"));
+        assert_eq!(
+            params.error_description.as_deref(),
+            Some("The user denied you access")
+        );
+
+        for other in [
+            "prismoid://auth/youtube?state=x",
+            "prismoid://settings",
+            "https://auth/twitch?state=x",
+        ] {
+            assert!(
+                CallbackParams::from_deep_link(&Url::parse(other).unwrap()).is_none(),
+                "{other}"
+            );
         }
     }
 
@@ -411,92 +243,55 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn authorize_url_targets_twitch_with_the_loopback_redirect() {
-        let (pending, url) = start().await;
-        let port = pending.v4.local_addr().unwrap().port();
-        assert_eq!(url.host_str(), Some("id.twitch.tv"));
-        let pairs: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
-        assert_eq!(pairs["response_type"], "token");
-        assert_eq!(pairs["redirect_uri"], format!("http://localhost:{port}/"));
-        assert_eq!(pairs["scope"], "user:read:chat");
-        assert!(pending.builder.csrf_is_valid(&pairs["state"]));
+    async fn foreign_state_is_ignored_and_a_declined_grant_ends_the_login() {
+        let (pending, url) = start();
+        let state = state_of(&url);
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        tx.send(CallbackParams {
+            access_token: Some("abc".into()),
+            state: Some("not-ours".into()),
+            ..Default::default()
+        })
+        .unwrap();
+        tx.send(CallbackParams {
+            error: Some("access_denied".into()),
+            error_description: Some("The user denied you access".into()),
+            state: Some(state),
+            ..Default::default()
+        })
+        .unwrap();
+        let result = pending.wait(&http(), &mut rx, &Notify::new()).await;
+        assert!(matches!(result, Err(AuthError::UserDenied)), "{result:?}");
     }
 
     #[tokio::test]
-    async fn relay_is_served_bad_state_is_ignored_and_cancel_ends_the_wait() {
-        let (pending, _) = start().await;
-        let addr = pending.v4.local_addr().unwrap();
+    async fn cancel_ends_the_wait() {
+        let (pending, _) = start();
+        let (_tx, mut rx) = mpsc::unbounded_channel();
         let cancel = std::sync::Arc::new(Notify::new());
         let waiter = {
             let cancel = cancel.clone();
-            tokio::spawn(async move { pending.wait(&http(), &cancel).await })
+            tokio::spawn(async move { pending.wait(&http(), &mut rx, &cancel).await })
         };
-
-        let relay = roundtrip(addr, "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n").await;
-        assert!(relay.starts_with("HTTP/1.1 200 OK"));
-        assert!(relay.contains("/callback"), "relay page posts the fragment");
-
-        let body = "access_token=abc&state=not-ours";
-        let forged = roundtrip(
-            addr,
-            &format!(
-                "POST /callback HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\n\r\n{body}",
-                body.len()
-            ),
-        )
-        .await;
-        assert!(forged.starts_with("HTTP/1.1 400"), "{forged}");
-
-        let missing = roundtrip(addr, "GET /favicon.ico HTTP/1.1\r\nHost: localhost\r\n\r\n").await;
-        assert!(missing.starts_with("HTTP/1.1 404"));
-
+        tokio::task::yield_now().await;
         cancel.notify_waiters();
         let result = waiter.await.expect("task");
         assert!(
             matches!(result, Err(AuthError::LoginCancelled)),
             "{result:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn silence_times_out() {
+        let (pending, _) = start();
+        let (_tx, mut rx) = mpsc::unbounded_channel();
+        let result = pending
+            .wait_for(Duration::from_millis(20), &http(), &mut rx, &Notify::new())
+            .await;
         assert!(
-            TcpStream::connect(addr).await.is_err(),
-            "listener closes with the login"
+            matches!(result, Err(AuthError::LoginTimedOut)),
+            "{result:?}"
         );
-    }
-
-    #[tokio::test]
-    async fn declined_authorization_ends_the_login() {
-        let (pending, url) = start().await;
-        let addr = pending.v4.local_addr().unwrap();
-        let state = url
-            .query_pairs()
-            .find(|(k, _)| k == "state")
-            .map(|(_, v)| v.into_owned())
-            .expect("authorize url carries the state");
-        let cancel = Notify::new();
-        let waiter = tokio::spawn(async move { pending.wait(&http(), &cancel).await });
-
-        // Encoded the way Twitch builds the redirect, since the state can
-        // hold characters a bare query would mangle.
-        let query = form_urlencoded::Serializer::new(String::new())
-            .append_pair("error", "access_denied")
-            .append_pair("error_description", "The user denied you access")
-            .append_pair("state", &state)
-            .finish();
-        let response = roundtrip(
-            addr,
-            &format!("GET /?{query} HTTP/1.1\r\nHost: localhost\r\n\r\n"),
-        )
-        .await;
-        assert!(response.starts_with("HTTP/1.1 400"), "{response}");
-        let result = waiter.await.expect("task");
-        assert!(matches!(result, Err(AuthError::UserDenied)), "{result:?}");
-    }
-
-    #[tokio::test]
-    async fn busy_ports_are_reported() {
-        let holder = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
-        let port = holder.local_addr().unwrap().port();
-        let result =
-            PendingLogin::start_on(&[port], ClientId::new("client".into()), Vec::new()).await;
-        assert!(matches!(result, Err(AuthError::LoginPortsBusy)));
     }
 }

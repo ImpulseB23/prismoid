@@ -103,8 +103,8 @@ const SignIn: Component<SignInProps> = (props) => {
         {(p) => (
           <div class="waiting-card">
             <p>
-              A browser tab opened. Choose Authorize there and this window
-              carries on by itself.
+              A browser tab opened. Choose Authorize there, let the browser open
+              prismoid, and this window carries on by itself.
             </p>
             <small>
               Nothing opened?{" "}
@@ -143,10 +143,6 @@ export function authErrorMessage(e: AuthCommandError): string {
       return "Twitch did not answer within ten minutes. Try again.";
     case "login_cancelled":
       return "Sign-in was cancelled.";
-    case "login_ports_busy":
-      return "Another program is using the ports prismoid needs for sign-in (21337 and 21338). Close it and try again.";
-    case "loopback":
-      return `The browser could not reach prismoid: ${e.message}`;
     case "keychain":
       return `Could not access the OS credential store: ${e.message}`;
     case "oauth":

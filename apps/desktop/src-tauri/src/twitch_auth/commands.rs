@@ -9,11 +9,11 @@
 //! Frontend flow:
 //! 1. App boot → `twitch_auth_status` to render either the chat view
 //!    (logged in) or the SignIn overlay (logged out).
-//! 2. User clicks "Sign in with Twitch" → `twitch_start_login` binds the
-//!    loopback relay and returns the authorize URL. The frontend opens it
-//!    in the system browser and immediately calls `twitch_complete_login`,
-//!    which blocks until Twitch redirects back, the user cancels, or the
-//!    ten minute window runs out.
+//! 2. User clicks "Sign in with Twitch" → `twitch_start_login` returns the
+//!    authorize URL. The frontend opens it in the system browser and
+//!    immediately calls `twitch_complete_login`, which blocks until Twitch's
+//!    answer arrives over the prismoid:// deep link, the user cancels, or
+//!    the ten minute window runs out.
 //! 3. On success, the supervisor's wakeup notifier fires so it picks
 //!    up the new tokens without waiting out its 30 s `waiting_for_auth`
 //!    sleep.

@@ -514,7 +514,8 @@ const TwitchReconnect: Component = () => {
         {(p) => (
           <div class="settings__reconnect-wait">
             <span class="settings__hint">
-              Choose Authorize in the browser tab that opened.{" "}
+              Choose Authorize in the browser tab that opened, then let it open
+              prismoid.{" "}
               <a
                 href={p().authorize_url}
                 onClick={(e) => {

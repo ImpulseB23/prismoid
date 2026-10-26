@@ -58,6 +58,8 @@ pub fn run() {
             let _ = window.set_focus();
         }
     }));
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_deep_link::init());
     builder
         .plugin(logging::plugin())
         .plugin(tauri_plugin_opener::init())
@@ -159,6 +161,23 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
     );
     let wakeup = Arc::new(Notify::new());
     app.manage(AuthState::new(auth.clone(), wakeup.clone()));
+
+    // Twitch's answer comes back as a prismoid:// link (ADR 43). The
+    // installer registers the scheme for Windows releases; dev builds and
+    // Linux register it at runtime.
+    #[cfg(desktop)]
+    {
+        use tauri_plugin_deep_link::DeepLinkExt;
+        #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+        app.deep_link().register_all()?;
+        let handle = app.handle().clone();
+        app.deep_link().on_open_url(move |event| {
+            let auth = handle.state::<AuthState>();
+            for url in event.urls() {
+                auth.deliver_deep_link(&url);
+            }
+        });
+    }
 
     // YouTube auth manager + state. Sidecar wiring lands separately —
     // this PR only stands up the OAuth + keychain stack and the

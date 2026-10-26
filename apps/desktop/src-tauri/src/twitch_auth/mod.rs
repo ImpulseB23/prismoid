@@ -1,7 +1,8 @@
 //! Twitch OAuth + keychain integration.
 //!
-//! Implements ADR 43 (Twitch implicit grant on a loopback relay, tokens
-//! via `keyring-rs`), ADR 29 (proactive refresh 5 min before expiry), and
+//! Implements ADR 43 (Twitch implicit grant over a hosted redirect and a
+//! deep link, tokens via `keyring-rs`), ADR 29 (proactive refresh 5 min
+//! before expiry), and
 //! ADR 31 (re-auth path on refresh failure). The flow:
 //!
 //! 1. At startup the supervisor calls [`AuthManager::load_or_refresh`]
@@ -30,7 +31,7 @@ pub use commands::{
     twitch_start_login,
 };
 pub use errors::AuthError;
-pub use implicit::{PendingLogin, LOGIN_PORTS};
+pub use implicit::{CallbackParams, PendingLogin, DEEP_LINK_SCHEME, TWITCH_REDIRECT_URL};
 pub use manager::{AuthManager, AuthManagerBuilder, REFRESH_THRESHOLD_MS};
 pub use storage::{KeychainStore, MemoryStore, TokenStore, KEYCHAIN_SERVICE};
 pub use tokens::TwitchTokens;

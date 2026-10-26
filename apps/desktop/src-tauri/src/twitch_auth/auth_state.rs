@@ -6,11 +6,12 @@
 use std::sync::Arc;
 
 use serde::Serialize;
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::{mpsc, Mutex, Notify};
+use twitch_oauth2::url::Url;
 use twitch_oauth2::Scope;
 
 use super::errors::AuthError;
-use super::implicit::PendingLogin;
+use super::implicit::{CallbackParams, PendingLogin};
 use super::manager::AuthManager;
 use super::tokens::TwitchTokens;
 
@@ -22,10 +23,15 @@ use super::tokens::TwitchTokens;
 pub struct AuthState {
     pub manager: Arc<AuthManager>,
     pub pending: Mutex<Option<PendingLogin>>,
-    /// Fired by `cancel_login` so a waiting `complete_login` returns and
-    /// releases its port. `notify_waiters` leaves no permit behind, so a
-    /// cancel never leaks into the next attempt.
+    /// Fired by `cancel_login` so a waiting `complete_login` returns.
+    /// `notify_waiters` leaves no permit behind, so a cancel never leaks
+    /// into the next attempt.
     cancel: Notify,
+    /// Twitch's answers, as the deep-link handler lifts them off
+    /// `prismoid://auth/twitch` links. Stale ones are drained before each
+    /// wait and the state check discards any that are not for this login.
+    incoming: mpsc::UnboundedSender<CallbackParams>,
+    receiver: Mutex<mpsc::UnboundedReceiver<CallbackParams>>,
     /// Notifier the supervisor awaits while idle in `waiting_for_auth`.
     /// Successful login + logout both fire it: login so a fresh sidecar
     /// spins up immediately; logout so any in-progress sidecar tears
@@ -35,10 +41,13 @@ pub struct AuthState {
 
 impl AuthState {
     pub fn new(manager: Arc<AuthManager>, wakeup: Arc<Notify>) -> Self {
+        let (incoming, receiver) = mpsc::unbounded_channel();
         Self {
             manager,
             pending: Mutex::new(None),
             cancel: Notify::new(),
+            incoming,
+            receiver: Mutex::new(receiver),
             wakeup,
         }
     }
@@ -65,9 +74,9 @@ impl AuthState {
     }
 
     pub async fn start_login(&self) -> Result<LoginView, AuthCommandError> {
-        // A previous attempt still waiting would hold the port.
+        // A previous attempt may still be waiting.
         self.cancel.notify_waiters();
-        let (pending, authorize_url) = self.manager.start_login().await?;
+        let (pending, authorize_url) = self.manager.start_login();
         *self.pending.lock().await = Some(pending);
         Ok(LoginView {
             authorize_url: authorize_url.into(),
@@ -79,7 +88,12 @@ impl AuthState {
             kind: "no_pending_flow",
             message: "twitch_start_login has not been called".into(),
         })?;
-        let tokens = self.manager.complete_login(pending, &self.cancel).await?;
+        let mut receiver = self.receiver.lock().await;
+        while receiver.try_recv().is_ok() {}
+        let tokens = self
+            .manager
+            .complete_login(pending, &mut receiver, &self.cancel)
+            .await?;
         // notify_one stores a permit if the supervisor isn't currently
         // parked on notified(), so the wake can't be lost between login
         // completing and the supervisor reaching its await.
@@ -90,6 +104,14 @@ impl AuthState {
     pub async fn cancel_login(&self) {
         self.cancel.notify_waiters();
         self.pending.lock().await.take();
+    }
+
+    /// Called by the deep-link handler for every link the OS delivers;
+    /// links that are not Twitch's answer are ignored here.
+    pub fn deliver_deep_link(&self, url: &Url) {
+        if let Some(params) = CallbackParams::from_deep_link(url) {
+            let _ = self.incoming.send(params);
+        }
     }
 
     pub async fn logout(&self) -> Result<(), AuthCommandError> {
@@ -155,8 +177,6 @@ impl From<AuthError> for AuthCommandError {
             AuthError::RefreshTokenInvalid => "refresh_invalid",
             AuthError::LoginTimedOut => "login_timed_out",
             AuthError::LoginCancelled => "login_cancelled",
-            AuthError::LoginPortsBusy => "login_ports_busy",
-            AuthError::Loopback(_) => "loopback",
             AuthError::UserDenied => "user_denied",
             AuthError::Keychain(_) => "keychain",
             AuthError::OAuth(_) => "oauth",
@@ -215,14 +235,9 @@ mod tests {
 
     #[test]
     fn auth_command_error_maps_login_outcomes() {
-        let cases: [(AuthError, &str); 4] = [
+        let cases: [(AuthError, &str); 2] = [
             (AuthError::LoginTimedOut, "login_timed_out"),
             (AuthError::LoginCancelled, "login_cancelled"),
-            (AuthError::LoginPortsBusy, "login_ports_busy"),
-            (
-                AuthError::Loopback(std::io::Error::other("boom")),
-                "loopback",
-            ),
         ];
         for (err, kind) in cases {
             let mapped: AuthCommandError = err.into();

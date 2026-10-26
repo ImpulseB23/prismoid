@@ -1,8 +1,9 @@
 //! `AuthManager`, the facade callers interact with.
 //!
 //! Wraps the `twitch_oauth2` crate's Twitch-aware OAuth types plus a
-//! [`TokenStore`] for keychain persistence. ADR 43 (implicit grant on a
-//! loopback relay) and ADR 29 (proactive 5-min refresh) are enforced here.
+//! [`TokenStore`] for keychain persistence. ADR 43 (implicit grant over a
+//! hosted redirect and deep link) and ADR 29 (proactive 5-min refresh) are
+//! enforced here.
 //!
 //! Single-account per ADR 30: `load_or_refresh` and `complete_login` take
 //! no broadcaster_id argument because the store holds exactly one entry.
@@ -13,7 +14,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
-use tokio::sync::Notify;
+use tokio::sync::{mpsc, Notify};
 use twitch_oauth2::tokens::errors::{
     CreationError, RefreshTokenError, RetrieveTokenError, ValidationError,
 };
@@ -23,7 +24,7 @@ use twitch_oauth2::url::Url;
 use twitch_oauth2::{RequestParseError, Scope, TwitchToken};
 
 use super::errors::{error_chain, AuthError};
-use super::implicit::PendingLogin;
+use super::implicit::{CallbackParams, PendingLogin};
 use super::storage::TokenStore;
 use super::tokens::TwitchTokens;
 
@@ -131,18 +132,19 @@ impl AuthManager {
         &self.scopes
     }
 
-    /// Binds the loopback relay and returns the Twitch authorize URL the
+    /// Returns the login to wait on and the Twitch authorize URL the
     /// browser should open.
-    pub async fn start_login(&self) -> Result<(PendingLogin, Url), AuthError> {
-        PendingLogin::start(self.client_id.clone(), self.scopes.clone()).await
+    pub fn start_login(&self) -> (PendingLogin, Url) {
+        PendingLogin::start(self.client_id.clone(), self.scopes.clone())
     }
 
     pub async fn complete_login(
         &self,
         pending: PendingLogin,
+        incoming: &mut mpsc::UnboundedReceiver<CallbackParams>,
         cancel: &Notify,
     ) -> Result<TwitchTokens, AuthError> {
-        let user_token = pending.wait(&self.http_client, cancel).await?;
+        let user_token = pending.wait(&self.http_client, incoming, cancel).await?;
         let tokens = tokens_from_user_token(&user_token)?;
         self.store.save(&tokens)?;
         Ok(tokens)

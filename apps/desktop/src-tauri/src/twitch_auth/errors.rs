@@ -28,15 +28,6 @@ pub enum AuthError {
     #[error("sign-in cancelled")]
     LoginCancelled,
 
-    /// Both redirect ports registered on the Twitch application are held
-    /// by other programs, so Twitch has nowhere to send the token.
-    #[error("ports 21337 and 21338 are both in use")]
-    LoginPortsBusy,
-
-    /// The loopback relay failed to accept or read the browser's request.
-    #[error("sign-in relay failed: {0}")]
-    Loopback(std::io::Error),
-
     /// User declined the authorization request on Twitch.
     #[error("the Twitch authorization was declined")]
     UserDenied,
