@@ -14,8 +14,10 @@ use std::time::Duration;
 
 use chrono::Utc;
 use twitch_oauth2::id::DeviceCodeResponse;
+use twitch_oauth2::tokens::errors::{RefreshTokenError, RetrieveTokenError};
 use twitch_oauth2::tokens::{DeviceUserTokenBuilder, UserToken};
 use twitch_oauth2::types::{AccessToken, ClientId, RefreshToken};
+use twitch_oauth2::RequestParseError;
 use twitch_oauth2::{Scope, TwitchToken};
 
 use super::errors::AuthError;
@@ -181,22 +183,29 @@ impl AuthManager {
     }
 
     async fn refresh_tokens(&self, stored: &TwitchTokens) -> Result<TwitchTokens, AuthError> {
-        // Reconstruct a UserToken from the stored credentials with no
-        // secret (public client per ADR 37), then call refresh_token to
-        // rotate both access and refresh tokens in-place.
-        let mut token = UserToken::from_existing(
+        // Validates the stored access token and, when Twitch no longer
+        // accepts it, goes straight to the refresh grant. That is the
+        // normal path after the app sat closed past the token's lifetime;
+        // validating alone used to fail there and the supervisor backed
+        // off forever. Public client per ADR 37, so no secret.
+        let mut token = UserToken::from_existing_or_refresh_token(
             &self.http_client,
             AccessToken::new(stored.access_token.clone()),
-            Some(RefreshToken::new(stored.refresh_token.clone())),
-            None, // no client secret — public client
+            RefreshToken::new(stored.refresh_token.clone()),
+            self.client_id.clone(),
+            None,
         )
         .await
-        .map_err(classify_refresh_error)?;
+        .map_err(classify_retrieve_error)?;
 
-        token
-            .refresh_token(&self.http_client)
-            .await
-            .map_err(classify_refresh_error)?;
+        // An unchanged access token means validation passed and nothing
+        // has been rotated yet.
+        if token.access_token.secret() == stored.access_token {
+            token
+                .refresh_token(&self.http_client)
+                .await
+                .map_err(classify_refresh_error)?;
+        }
 
         tokens_from_user_token(&token)
     }
@@ -303,18 +312,54 @@ fn classify_device_flow_error<E: std::fmt::Display>(err: E) -> AuthError {
     }
 }
 
-fn classify_refresh_error<E: std::fmt::Display>(err: E) -> AuthError {
-    let s = err.to_string();
-    if s.contains("invalid_grant") || s.contains("Invalid refresh token") {
-        AuthError::RefreshTokenInvalid
-    } else {
-        AuthError::OAuth(s)
+fn classify_retrieve_error<RE>(err: RetrieveTokenError<RE>) -> AuthError
+where
+    RE: std::error::Error + Send + Sync + 'static,
+{
+    match err {
+        RetrieveTokenError::RefreshTokenError { error, .. } => classify_refresh_error(error),
+        other => AuthError::OAuth(error_chain(&other)),
     }
+}
+
+// Twitch answers a used, revoked or malformed refresh token with 400 and
+// a dead client authorization with 401. Both mean only a new sign-in can
+// recover, unlike a 5xx or a transport error, which the caller retries.
+fn classify_refresh_error<RE>(err: RefreshTokenError<RE>) -> AuthError
+where
+    RE: std::error::Error + Send + Sync + 'static,
+{
+    match err {
+        RefreshTokenError::RequestParseError(RequestParseError::TwitchError(resp))
+            if resp.status == reqwest::StatusCode::BAD_REQUEST
+                || resp.status == reqwest::StatusCode::UNAUTHORIZED =>
+        {
+            tracing::info!(status = %resp.status, message = %resp.message, "twitch rejected the refresh token");
+            AuthError::RefreshTokenInvalid
+        }
+        other => AuthError::OAuth(error_chain(&other)),
+    }
+}
+
+// The library's Display stops at the outer variant ("creation of token
+// failed"); the useful part is in the source chain.
+fn error_chain(err: &dyn std::error::Error) -> String {
+    let mut out = err.to_string();
+    let mut cur = err.source();
+    while let Some(e) = cur {
+        out.push_str(": ");
+        out.push_str(&e.to_string());
+        cur = e.source();
+    }
+    out
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use twitch_oauth2::id::TwitchTokenErrorResponse;
+    use twitch_oauth2::tokens::errors::ValidationError;
 
     use crate::twitch_auth::storage::MemoryStore;
 
@@ -349,26 +394,55 @@ mod tests {
         }
     }
 
+    fn twitch_rejection(status: u16, message: &str) -> RefreshTokenError<std::convert::Infallible> {
+        RefreshTokenError::RequestParseError(RequestParseError::TwitchError(
+            TwitchTokenErrorResponse {
+                status: reqwest::StatusCode::from_u16(status).unwrap(),
+                message: message.into(),
+                error: None,
+            },
+        ))
+    }
+
     #[test]
-    fn classify_refresh_error_maps_invalid_grant() {
-        match classify_refresh_error("invalid_grant") {
+    fn classify_refresh_error_maps_rejected_grant() {
+        for status in [400, 401] {
+            match classify_refresh_error(twitch_rejection(status, "Invalid refresh token")) {
+                AuthError::RefreshTokenInvalid => {}
+                other => panic!("expected RefreshTokenInvalid for {status}, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn classify_refresh_error_keeps_server_errors_retryable() {
+        match classify_refresh_error(twitch_rejection(503, "upstream unavailable")) {
+            AuthError::OAuth(s) => assert!(s.contains("upstream unavailable"), "{s}"),
+            other => panic!("expected OAuth, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn classify_retrieve_error_unwraps_refresh_rejection() {
+        let err = RetrieveTokenError::RefreshTokenError {
+            error: twitch_rejection(400, "Invalid refresh token"),
+            refresh_token: RefreshToken::new("rt".into()),
+        };
+        match classify_retrieve_error(err) {
             AuthError::RefreshTokenInvalid => {}
             other => panic!("expected RefreshTokenInvalid, got {other:?}"),
         }
     }
 
     #[test]
-    fn classify_refresh_error_maps_invalid_refresh_token_phrase() {
-        match classify_refresh_error("HTTP 400: Invalid refresh token") {
-            AuthError::RefreshTokenInvalid => {}
-            other => panic!("expected RefreshTokenInvalid, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn classify_refresh_error_falls_through_to_oauth() {
-        match classify_refresh_error("connection reset by peer") {
-            AuthError::OAuth(s) => assert!(s.contains("connection reset")),
+    fn classify_retrieve_error_reports_validation_chain() {
+        let err = RetrieveTokenError::<std::convert::Infallible>::ValidationError {
+            error: ValidationError::InvalidToken("expires_in is 0"),
+            access_token: AccessToken::new("at".into()),
+            refresh_token: None,
+        };
+        match classify_retrieve_error(err) {
+            AuthError::OAuth(s) => assert!(s.contains("expires_in is 0"), "{s}"),
             other => panic!("expected OAuth, got {other:?}"),
         }
     }
