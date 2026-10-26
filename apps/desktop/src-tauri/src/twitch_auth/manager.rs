@@ -108,6 +108,24 @@ impl AuthManager {
         handle_refresh_result(self.refresh_tokens(&stored).await, self.store.as_ref())
     }
 
+    /// Refreshes regardless of expiry. Used after Helix answers 401 with
+    /// a token we believed fresh: Twitch invalidates access tokens early
+    /// on password changes and disconnects, and the refresh token is the
+    /// only way to find out whether the session is still alive.
+    pub async fn force_refresh(&self) -> Result<TwitchTokens, AuthError> {
+        let Some(stored) = self.store.load()? else {
+            return Err(AuthError::NoTokens);
+        };
+        handle_refresh_result(self.refresh_tokens(&stored).await, self.store.as_ref())
+    }
+
+    /// Scopes the device flow asks for. Stored tokens granted before a
+    /// scope was added lack it until the user signs in again.
+    #[must_use]
+    pub fn scopes(&self) -> &[Scope] {
+        &self.scopes
+    }
+
     /// Requests a device code from Twitch. The returned response has
     /// `verification_uri` which the caller should open in a browser,
     /// and a `device_code` that [`AuthManager::complete_device_flow`]
@@ -147,6 +165,12 @@ impl AuthManager {
     /// without paying for a network round-trip on every poll.
     pub fn peek_login(&self) -> Result<Option<String>, AuthError> {
         Ok(self.store.load()?.map(|t| t.login))
+    }
+
+    /// Stored tokens without refreshing. For status views that need the
+    /// user id and granted scopes alongside the login.
+    pub fn peek_tokens(&self) -> Result<Option<TwitchTokens>, AuthError> {
+        self.store.load()
     }
 
     /// Wipes the persisted token entry. Used by the logout command. The

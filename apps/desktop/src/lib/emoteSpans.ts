@@ -14,6 +14,7 @@ export interface EmoteRenderInfo {
 
 export type MessagePiece =
   | { kind: "text"; text: string }
+  | { kind: "link"; text: string; href: string }
   | {
       kind: "emote";
       primary: EmoteRenderInfo;

@@ -113,6 +113,9 @@ pub struct BadgeSet {
 /// surface partial-failure state without a second round trip.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct EmoteBundle {
+    /// Channel the bundle belongs to; the host keeps one per joined channel.
+    #[serde(default)]
+    pub broadcaster_id: String,
     #[serde(default)]
     pub twitch_global_emotes: EmoteSet,
     #[serde(default)]
@@ -180,7 +183,7 @@ impl EmoteBundle {
 /// Byte range of a matched emote code inside a message's `message_text`,
 /// plus the resolved emote metadata. `start..end` is a UTF-8 byte slice of
 /// the original text.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmoteSpan {
     pub start: u32,
     pub end: u32,
@@ -334,6 +337,56 @@ impl EmoteIndex {
 }
 
 impl Default for EmoteIndex {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// One [`EmoteIndex`] per joined channel, keyed by broadcaster id. The map
+/// is swapped as a whole on every change, so the message hot path takes
+/// one snapshot per batch and looks each message's channel up in it.
+pub struct EmoteIndexes {
+    inner: ArcSwap<FxHashMap<Box<str>, Arc<EmoteIndex>>>,
+}
+
+impl EmoteIndexes {
+    pub fn new() -> Self {
+        Self {
+            inner: ArcSwap::from_pointee(FxHashMap::default()),
+        }
+    }
+
+    /// Builds the index for the bundle's channel, replacing any earlier one.
+    pub fn load_bundle(&self, bundle: EmoteBundle) {
+        let channel: Box<str> = bundle.broadcaster_id.as_str().into();
+        let index = Arc::new(EmoteIndex::new());
+        index.load_bundle(bundle);
+        self.inner.rcu(|map| {
+            let mut next = FxHashMap::clone(map);
+            next.insert(channel.clone(), Arc::clone(&index));
+            next
+        });
+    }
+
+    pub fn remove(&self, channel_id: &str) {
+        self.inner.rcu(|map| {
+            let mut next = FxHashMap::clone(map);
+            next.remove(channel_id);
+            next
+        });
+    }
+
+    pub fn get(&self, channel_id: &str) -> Option<Arc<EmoteIndex>> {
+        self.inner.load().get(channel_id).cloned()
+    }
+
+    /// The current map, for scanning a whole batch against one view.
+    pub fn snapshot(&self) -> Arc<FxHashMap<Box<str>, Arc<EmoteIndex>>> {
+        self.inner.load_full()
+    }
+}
+
+impl Default for EmoteIndexes {
     fn default() -> Self {
         Self::new()
     }

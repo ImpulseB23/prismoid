@@ -11,10 +11,10 @@ use std::time::Duration;
 
 use serde::Serialize;
 
-use crate::emote_index::{EmoteBundle, EmoteIndex};
+use crate::emote_index::{EmoteBundle, EmoteIndexes};
 use crate::message::{
     compute_effective_ts, parse_kick_event, parse_twitch_envelope, parse_youtube_message,
-    UnifiedMessage,
+    ChatEvent, TwitchItem, UnifiedMessage,
 };
 use crate::ringbuf::RawHandle;
 
@@ -22,6 +22,7 @@ use crate::ringbuf::RawHandle;
 const TAG_TWITCH: u8 = 0x01;
 const TAG_KICK: u8 = 0x02;
 const TAG_YOUTUBE: u8 = 0x03;
+const TAG_TWITCH_IRC: u8 = 0x04;
 
 /// Timeout for [`ringbuf::RingBufReader::wait_for_signal`] in the host drain
 /// loop. In the happy path the sidecar signals the auto-reset event after
@@ -41,6 +42,9 @@ pub struct TwitchCreds {
     pub client_id: String,
     pub access_token: String,
     pub broadcaster_id: String,
+    /// Login of the channel to join, for the IRC fallback when EventSub
+    /// refuses the chat.
+    pub channel_login: String,
     pub user_id: String,
 }
 
@@ -69,7 +73,17 @@ pub struct TwitchCreds {
 /// Messages that fail to parse or that aren't chat notifications are dropped
 /// with a log. Each parse is wrapped in `catch_unwind` so a panicking parser
 /// cannot kill the drain loop (`docs/stability.md` §Rust Panic Handling).
-pub fn parse_batch(raw: &[Vec<u8>], batch: &mut Vec<UnifiedMessage>, emote_index: &EmoteIndex) {
+/// Bytes of a rejected payload echoed to the debug log so the field that
+/// broke the parser can be found without a packet capture.
+const PARSE_FAILURE_SNIPPET: usize = 2048;
+
+pub fn parse_batch(
+    raw: &[Vec<u8>],
+    batch: &mut Vec<UnifiedMessage>,
+    events: &mut Vec<ChatEvent>,
+    emote_index: &EmoteIndexes,
+) {
+    let indexes = emote_index.snapshot();
     for payload in raw {
         if payload.is_empty() {
             continue;
@@ -78,28 +92,49 @@ pub fn parse_batch(raw: &[Vec<u8>], batch: &mut Vec<UnifiedMessage>, emote_index
         let data = &payload[1..];
         let outcome = std::panic::catch_unwind(|| match tag {
             TAG_TWITCH => parse_twitch_envelope(data),
-            TAG_KICK => parse_kick_event(data),
-            TAG_YOUTUBE => parse_youtube_message(data),
+            TAG_KICK => parse_kick_event(data).map(|m| m.map(|m| TwitchItem::Message(Box::new(m)))),
+            TAG_YOUTUBE => {
+                parse_youtube_message(data).map(|m| m.map(|m| TwitchItem::Message(Box::new(m))))
+            }
+            TAG_TWITCH_IRC => Ok(parse_irc_line(data)),
             _ => {
                 tracing::warn!(tag, "unknown platform tag, dropping message");
                 Ok(None)
             }
         });
         match outcome {
-            Ok(Ok(Some(mut msg))) => {
-                emote_index.scan_into(&msg.message_text, &mut msg.emote_spans);
+            Ok(Ok(Some(TwitchItem::Message(msg)))) => {
+                let mut msg = *msg;
+                if let Some(index) = indexes.get(msg.channel_id.as_str()) {
+                    index.scan_into(&msg.message_text, &mut msg.emote_spans);
+                }
                 msg.effective_ts = compute_effective_ts(msg.timestamp, msg.arrival_time);
                 batch.push(msg);
             }
+            Ok(Ok(Some(TwitchItem::Event(event)))) => events.push(event),
             Ok(Ok(None)) => {}
             Ok(Err(e)) => {
                 tracing::warn!(error = %e, "parse failed, dropping message");
+                tracing::debug!(
+                    payload = %String::from_utf8_lossy(&data[..data.len().min(PARSE_FAILURE_SNIPPET)]),
+                    "unparsable payload"
+                );
             }
             Err(_) => {
                 tracing::error!("panic during envelope parse, dropping message");
             }
         }
     }
+}
+
+/// A raw IRC line from the sidecar's read-only fallback connection. The
+/// line carries its own `room-id`, so nothing else is needed to route it.
+fn parse_irc_line(data: &[u8]) -> Option<TwitchItem> {
+    let line = std::str::from_utf8(data).ok()?;
+    Some(match crate::twitch_irc::parse_line(line, None)? {
+        crate::twitch_irc::IrcItem::Message { message, .. } => TwitchItem::Message(message),
+        crate::twitch_irc::IrcItem::Event(event) => TwitchItem::Event(event),
+    })
 }
 
 /// Serializes the bootstrap JSON line the Rust host writes to the sidecar's
@@ -126,6 +161,22 @@ pub fn build_bootstrap_line(
     Ok(bytes)
 }
 
+/// Serializes a `twitch_disconnect` control command line for the sidecar.
+pub fn build_twitch_disconnect_line(broadcaster_id: &str) -> serde_json::Result<Vec<u8>> {
+    #[derive(Serialize)]
+    struct DisconnectCmd<'a> {
+        cmd: &'a str,
+        broadcaster_id: &'a str,
+    }
+    let cmd = DisconnectCmd {
+        cmd: "twitch_disconnect",
+        broadcaster_id,
+    };
+    let mut bytes = serde_json::to_vec(&cmd)?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
 /// Serializes a `twitch_connect` control command line for the sidecar.
 pub fn build_twitch_connect_line(creds: &TwitchCreds) -> serde_json::Result<Vec<u8>> {
     #[derive(Serialize)]
@@ -134,6 +185,7 @@ pub fn build_twitch_connect_line(creds: &TwitchCreds) -> serde_json::Result<Vec<
         client_id: &'a str,
         token: &'a str,
         broadcaster_id: &'a str,
+        channel_login: &'a str,
         user_id: &'a str,
     }
     let cmd = ConnectCmd {
@@ -141,6 +193,7 @@ pub fn build_twitch_connect_line(creds: &TwitchCreds) -> serde_json::Result<Vec<
         client_id: &creds.client_id,
         token: &creds.access_token,
         broadcaster_id: &creds.broadcaster_id,
+        channel_login: &creds.channel_login,
         user_id: &creds.user_id,
     };
     let mut bytes = serde_json::to_vec(&cmd)?;
@@ -200,6 +253,8 @@ pub struct SendChatMessageArgs<'a> {
     pub broadcaster_id: &'a str,
     pub user_id: &'a str,
     pub message: &'a str,
+    /// Message this one answers, if any.
+    pub reply_parent_message_id: Option<&'a str>,
     /// Opaque correlation id echoed back in the sidecar's
     /// `send_chat_result` notification so the host can match the result
     /// to the awaiting Tauri invocation.
@@ -218,6 +273,8 @@ pub fn build_send_chat_message_line(args: SendChatMessageArgs<'_>) -> serde_json
         broadcaster_id: &'a str,
         user_id: &'a str,
         message: &'a str,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reply_parent_message_id: Option<&'a str>,
         request_id: u64,
     }
     let cmd = SendCmd {
@@ -227,6 +284,125 @@ pub fn build_send_chat_message_line(args: SendChatMessageArgs<'_>) -> serde_json
         broadcaster_id: args.broadcaster_id,
         user_id: args.user_id,
         message: args.message,
+        reply_parent_message_id: args.reply_parent_message_id,
+        request_id: args.request_id,
+    };
+    let mut bytes = serde_json::to_vec(&cmd)?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
+pub struct TwitchUserModActionArgs<'a> {
+    pub cmd: &'a str,
+    pub client_id: &'a str,
+    pub access_token: &'a str,
+    pub broadcaster_id: &'a str,
+    pub user_id: &'a str,
+    pub target_user_id: &'a str,
+    pub reason: &'a str,
+    pub request_id: u64,
+}
+
+pub fn build_twitch_user_mod_action_line(
+    args: TwitchUserModActionArgs<'_>,
+) -> serde_json::Result<Vec<u8>> {
+    #[derive(Serialize)]
+    struct ModCmd<'a> {
+        cmd: &'a str,
+        client_id: &'a str,
+        token: &'a str,
+        broadcaster_id: &'a str,
+        user_id: &'a str,
+        target_user_id: &'a str,
+        #[serde(skip_serializing_if = "str::is_empty")]
+        reason: &'a str,
+        request_id: u64,
+    }
+    let cmd = ModCmd {
+        cmd: args.cmd,
+        client_id: args.client_id,
+        token: args.access_token,
+        broadcaster_id: args.broadcaster_id,
+        user_id: args.user_id,
+        target_user_id: args.target_user_id,
+        reason: args.reason,
+        request_id: args.request_id,
+    };
+    let mut bytes = serde_json::to_vec(&cmd)?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
+pub struct TwitchTimeoutArgs<'a> {
+    pub client_id: &'a str,
+    pub access_token: &'a str,
+    pub broadcaster_id: &'a str,
+    pub user_id: &'a str,
+    pub target_user_id: &'a str,
+    pub duration_seconds: u32,
+    pub reason: &'a str,
+    pub request_id: u64,
+}
+
+pub fn build_twitch_timeout_line(args: TwitchTimeoutArgs<'_>) -> serde_json::Result<Vec<u8>> {
+    #[derive(Serialize)]
+    struct TimeoutCmd<'a> {
+        cmd: &'a str,
+        client_id: &'a str,
+        token: &'a str,
+        broadcaster_id: &'a str,
+        user_id: &'a str,
+        target_user_id: &'a str,
+        duration_seconds: u32,
+        #[serde(skip_serializing_if = "str::is_empty")]
+        reason: &'a str,
+        request_id: u64,
+    }
+    let cmd = TimeoutCmd {
+        cmd: "timeout_user",
+        client_id: args.client_id,
+        token: args.access_token,
+        broadcaster_id: args.broadcaster_id,
+        user_id: args.user_id,
+        target_user_id: args.target_user_id,
+        duration_seconds: args.duration_seconds,
+        reason: args.reason,
+        request_id: args.request_id,
+    };
+    let mut bytes = serde_json::to_vec(&cmd)?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
+pub struct TwitchDeleteMessageArgs<'a> {
+    pub client_id: &'a str,
+    pub access_token: &'a str,
+    pub broadcaster_id: &'a str,
+    pub user_id: &'a str,
+    pub message_id: &'a str,
+    pub request_id: u64,
+}
+
+pub fn build_twitch_delete_message_line(
+    args: TwitchDeleteMessageArgs<'_>,
+) -> serde_json::Result<Vec<u8>> {
+    #[derive(Serialize)]
+    struct DeleteCmd<'a> {
+        cmd: &'a str,
+        client_id: &'a str,
+        token: &'a str,
+        broadcaster_id: &'a str,
+        user_id: &'a str,
+        message_id: &'a str,
+        request_id: u64,
+    }
+    let cmd = DeleteCmd {
+        cmd: "delete_message",
+        client_id: args.client_id,
+        token: args.access_token,
+        broadcaster_id: args.broadcaster_id,
+        user_id: args.user_id,
+        message_id: args.message_id,
         request_id: args.request_id,
     };
     let mut bytes = serde_json::to_vec(&cmd)?;
@@ -357,11 +533,29 @@ pub enum SidecarEvent {
     /// back to the awaiting `twitch_send_message` invocation via its
     /// `request_id` correlation field.
     SendChatResult(SendChatResult),
+    /// `{"type":"mod_action_result","payload":SendChatResult}`. Uses the
+    /// same result envelope as send-chat: `ok` for success, drop/error fields
+    /// for API failures, and `request_id` for correlation.
+    ModActionResult(SendChatResult),
+    /// `{"type":"chat_banned","payload":ChatBanned}`. Twitch refuses to
+    /// deliver the channel's chat to the signed-in user (banned or timed
+    /// out there) and the sidecar has stopped that channel's client.
+    ChatBanned(ChatBanned),
     /// A well-formed `{type, payload}` message the host does not yet
     /// recognize. The inner string is the type tag.
     Other(String),
     /// Line was not valid JSON or lacked the `{type, payload}` shape.
     Invalid,
+}
+
+/// Payload of a `chat_banned` notification, forwarded to the webview as
+/// the `chat_banned` event. `detail` is Twitch's wording: the 403 body at
+/// subscribe time or the `chat_user_banned` revocation status.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct ChatBanned {
+    pub broadcaster_id: String,
+    #[serde(default)]
+    pub detail: String,
 }
 
 /// Parsed payload of a `send_chat_result` notification. Mirrors the
@@ -385,6 +579,11 @@ pub struct SendChatResult {
     pub drop_message: String,
     #[serde(default)]
     pub error_message: String,
+    /// HTTP status Helix answered with when the failure was an HTTP
+    /// error, zero otherwise. Lets the host tell a dead token (401) from
+    /// a rejected request without parsing the message text.
+    #[serde(default)]
+    pub http_status: u16,
 }
 
 /// Parses one line of sidecar stdout into a [`SidecarEvent`]. The sidecar
@@ -433,6 +632,26 @@ pub fn parse_sidecar_event(bytes: &[u8]) -> SidecarEvent {
                 }
             }
         }
+        "mod_action_result" => {
+            let payload = env.payload.unwrap_or(serde_json::Value::Null);
+            match serde_json::from_value::<SendChatResult>(payload) {
+                Ok(r) => SidecarEvent::ModActionResult(r),
+                Err(e) => {
+                    tracing::warn!(error = %e, "mod_action_result payload decode failed");
+                    SidecarEvent::Invalid
+                }
+            }
+        }
+        "chat_banned" => {
+            let payload = env.payload.unwrap_or(serde_json::Value::Null);
+            match serde_json::from_value::<ChatBanned>(payload) {
+                Ok(b) => SidecarEvent::ChatBanned(b),
+                Err(e) => {
+                    tracing::warn!(error = %e, "chat_banned payload decode failed");
+                    SidecarEvent::Invalid
+                }
+            }
+        }
         "" => SidecarEvent::Invalid,
         other => SidecarEvent::Other(other.to_owned()),
     }
@@ -460,6 +679,7 @@ mod tests {
             client_id: "cid".into(),
             access_token: "tok".into(),
             broadcaster_id: "bid".into(),
+            channel_login: "streamer".into(),
             user_id: "uid".into(),
         };
         let line = build_twitch_connect_line(&creds).unwrap();
@@ -469,8 +689,48 @@ mod tests {
         assert_eq!(parsed["cmd"], "twitch_connect");
         assert_eq!(parsed["client_id"], "cid");
         assert_eq!(parsed["token"], "tok");
+        assert!(parsed.get("reply_parent_message_id").is_none());
         assert_eq!(parsed["broadcaster_id"], "bid");
+        assert_eq!(parsed["channel_login"], "streamer");
         assert_eq!(parsed["user_id"], "uid");
+    }
+
+    #[test]
+    fn parse_batch_routes_irc_lines() {
+        let mut line = vec![TAG_TWITCH_IRC];
+        line.extend_from_slice(
+            b"@id=m1;room-id=9;tmi-sent-ts=5;user-id=7 :alice!alice@alice.tmi.twitch.tv PRIVMSG #c :hi",
+        );
+        let mut clear = vec![TAG_TWITCH_IRC];
+        clear.extend_from_slice(b"@room-id=9;tmi-sent-ts=6 :tmi.twitch.tv CLEARCHAT #c");
+        let mut batch = Vec::new();
+        let mut events = Vec::new();
+        parse_batch(
+            &[line, clear],
+            &mut batch,
+            &mut events,
+            &EmoteIndexes::new(),
+        );
+        assert_eq!(batch.len(), 1);
+        assert_eq!(batch[0].id, "m1");
+        assert_eq!(batch[0].channel_id, "9");
+        assert_eq!(
+            events,
+            vec![ChatEvent::ChatCleared {
+                channel_id: "9".into()
+            }]
+        );
+    }
+
+    /// A bundle for the fixtures' broadcaster (`broadcaster_user_id` is
+    /// absent in them, so it is the empty id) holding one emote.
+    fn kappa_bundle(emote: crate::emote_index::EmoteMeta) -> EmoteBundle {
+        EmoteBundle {
+            twitch_global_emotes: crate::emote_index::EmoteSet {
+                emotes: vec![emote],
+            },
+            ..EmoteBundle::default()
+        }
     }
 
     fn tag_twitch(json: &[u8]) -> Vec<u8> {
@@ -504,8 +764,8 @@ mod tests {
 
         let raw = vec![viewer, keepalive, junk];
         let mut batch = Vec::new();
-        let idx = EmoteIndex::new();
-        parse_batch(&raw, &mut batch, &idx);
+        let idx = EmoteIndexes::new();
+        parse_batch(&raw, &mut batch, &mut Vec::new(), &idx);
         assert_eq!(batch.len(), 1);
         assert_eq!(batch[0].message_text, "hi");
         assert!(batch[0].emote_spans.is_empty());
@@ -514,8 +774,8 @@ mod tests {
     #[test]
     fn parse_batch_empty_input() {
         let mut batch = Vec::new();
-        let idx = EmoteIndex::new();
-        parse_batch(&[], &mut batch, &idx);
+        let idx = EmoteIndexes::new();
+        parse_batch(&[], &mut batch, &mut Vec::new(), &idx);
         assert!(batch.is_empty());
     }
 
@@ -533,13 +793,23 @@ mod tests {
         }"##);
 
         let mut batch = Vec::new();
-        let idx = EmoteIndex::new();
-        parse_batch(std::slice::from_ref(&viewer), &mut batch, &idx);
+        let idx = EmoteIndexes::new();
+        parse_batch(
+            std::slice::from_ref(&viewer),
+            &mut batch,
+            &mut Vec::new(),
+            &idx,
+        );
         assert_eq!(batch.len(), 1);
         assert_eq!(batch[0].message_text, "second");
 
         // Second call appends, scratch is NOT cleared.
-        parse_batch(std::slice::from_ref(&viewer), &mut batch, &idx);
+        parse_batch(
+            std::slice::from_ref(&viewer),
+            &mut batch,
+            &mut Vec::new(),
+            &idx,
+        );
         assert_eq!(batch.len(), 2);
         assert_eq!(batch[1].message_text, "second");
     }
@@ -559,8 +829,8 @@ mod tests {
             }
         }"##);
 
-        let idx = EmoteIndex::new();
-        idx.load([EmoteMeta {
+        let idx = EmoteIndexes::new();
+        idx.load_bundle(kappa_bundle(EmoteMeta {
             id: "1".into(),
             code: "Kappa".into(),
             provider: Provider::Twitch,
@@ -571,10 +841,15 @@ mod tests {
             height: 28,
             animated: false,
             zero_width: false,
-        }]);
+        }));
 
         let mut batch = Vec::new();
-        parse_batch(std::slice::from_ref(&viewer), &mut batch, &idx);
+        parse_batch(
+            std::slice::from_ref(&viewer),
+            &mut batch,
+            &mut Vec::new(),
+            &idx,
+        );
         assert_eq!(batch.len(), 1);
         assert_eq!(batch[0].emote_spans.len(), 1);
         let span = &batch[0].emote_spans[0];
@@ -600,8 +875,8 @@ mod tests {
             }
         }"##);
 
-        let idx = EmoteIndex::new();
-        idx.load([EmoteMeta {
+        let idx = EmoteIndexes::new();
+        idx.load_bundle(kappa_bundle(EmoteMeta {
             id: "25".into(),
             code: "Kappa".into(),
             provider: Provider::Twitch,
@@ -612,10 +887,15 @@ mod tests {
             height: 28,
             animated: false,
             zero_width: false,
-        }]);
+        }));
 
         let mut batch = Vec::new();
-        parse_batch(std::slice::from_ref(&viewer), &mut batch, &idx);
+        parse_batch(
+            std::slice::from_ref(&viewer),
+            &mut batch,
+            &mut Vec::new(),
+            &idx,
+        );
         assert_eq!(batch.len(), 1);
 
         let json = serde_json::to_value(&batch[0]).unwrap();
@@ -635,8 +915,13 @@ mod tests {
         let yt_msg = tag_youtube(br##"{"id":"yt-1","snippet":{"type":"TEXT_MESSAGE_EVENT","published_at":"2024-01-01T00:00:00Z","display_message":"hello from yt","text_message_details":{"message_text":"hello from yt"}},"author_details":{"channel_id":"UC123","display_name":"YTUser","is_chat_owner":false,"is_chat_moderator":false,"is_chat_sponsor":false}}"##);
 
         let mut batch = Vec::new();
-        let idx = EmoteIndex::new();
-        parse_batch(std::slice::from_ref(&yt_msg), &mut batch, &idx);
+        let idx = EmoteIndexes::new();
+        parse_batch(
+            std::slice::from_ref(&yt_msg),
+            &mut batch,
+            &mut Vec::new(),
+            &idx,
+        );
         assert_eq!(batch.len(), 1);
         assert_eq!(batch[0].message_text, "hello from yt");
         assert!(matches!(batch[0].platform, Platform::YouTube));
@@ -650,8 +935,8 @@ mod tests {
 
         let raw = vec![twitch, yt];
         let mut batch = Vec::new();
-        let idx = EmoteIndex::new();
-        parse_batch(&raw, &mut batch, &idx);
+        let idx = EmoteIndexes::new();
+        parse_batch(&raw, &mut batch, &mut Vec::new(), &idx);
         assert_eq!(batch.len(), 2);
         assert!(matches!(batch[0].platform, Platform::Twitch));
         assert!(matches!(batch[1].platform, Platform::YouTube));
@@ -667,8 +952,13 @@ mod tests {
         };
 
         let mut batch = Vec::new();
-        let idx = EmoteIndex::new();
-        parse_batch(std::slice::from_ref(&kick_msg), &mut batch, &idx);
+        let idx = EmoteIndexes::new();
+        parse_batch(
+            std::slice::from_ref(&kick_msg),
+            &mut batch,
+            &mut Vec::new(),
+            &idx,
+        );
         assert_eq!(batch.len(), 1);
         assert_eq!(batch[0].message_text, "hello from kick");
         assert!(matches!(batch[0].platform, crate::message::Platform::Kick));
@@ -678,8 +968,8 @@ mod tests {
     fn parse_batch_skips_empty_payloads() {
         let raw = vec![vec![]];
         let mut batch = Vec::new();
-        let idx = EmoteIndex::new();
-        parse_batch(&raw, &mut batch, &idx);
+        let idx = EmoteIndexes::new();
+        parse_batch(&raw, &mut batch, &mut Vec::new(), &idx);
         assert!(batch.is_empty());
     }
 
@@ -689,8 +979,8 @@ mod tests {
         payload.extend_from_slice(b"{}");
         let raw = vec![payload];
         let mut batch = Vec::new();
-        let idx = EmoteIndex::new();
-        parse_batch(&raw, &mut batch, &idx);
+        let idx = EmoteIndexes::new();
+        parse_batch(&raw, &mut batch, &mut Vec::new(), &idx);
         assert!(batch.is_empty());
     }
 
@@ -712,8 +1002,13 @@ mod tests {
         }"##);
 
         let mut batch = Vec::new();
-        let idx = EmoteIndex::new();
-        parse_batch(std::slice::from_ref(&viewer), &mut batch, &idx);
+        let idx = EmoteIndexes::new();
+        parse_batch(
+            std::slice::from_ref(&viewer),
+            &mut batch,
+            &mut Vec::new(),
+            &idx,
+        );
         assert_eq!(batch.len(), 1);
         // Far-stale platform ts → effective_ts falls back to arrival_time.
         assert_eq!(batch[0].effective_ts, batch[0].arrival_time);
@@ -762,6 +1057,22 @@ mod tests {
             }
             _ => panic!("expected EmoteBundle variant"),
         }
+    }
+
+    #[test]
+    fn parse_sidecar_event_decodes_chat_banned() {
+        let line = br#"{"type":"chat_banned","payload":{"broadcaster_id":"42","detail":"chat_user_banned"}}"#;
+        match parse_sidecar_event(line) {
+            SidecarEvent::ChatBanned(b) => {
+                assert_eq!(b.broadcaster_id, "42");
+                assert_eq!(b.detail, "chat_user_banned");
+            }
+            _ => panic!("expected ChatBanned variant"),
+        }
+        assert!(matches!(
+            parse_sidecar_event(br#"{"type":"chat_banned","payload":{}}"#),
+            SidecarEvent::Invalid
+        ));
     }
 
     #[test]
@@ -821,6 +1132,30 @@ mod tests {
     }
 
     #[test]
+    fn parse_sidecar_event_decodes_mod_action_result() {
+        let line = br#"{"type":"mod_action_result","payload":{"request_id":9,"ok":false,"drop_code":"unauthorized","drop_message":"missing scope","http_status":401}}"#;
+        match parse_sidecar_event(line) {
+            SidecarEvent::ModActionResult(r) => {
+                assert_eq!(r.request_id, 9);
+                assert!(!r.ok);
+                assert_eq!(r.drop_code, "unauthorized");
+                assert_eq!(r.http_status, 401);
+            }
+            _ => panic!("expected ModActionResult"),
+        }
+    }
+
+    #[test]
+    fn send_chat_result_http_status_defaults_to_zero() {
+        let line =
+            br#"{"type":"send_chat_result","payload":{"request_id":1,"ok":true,"message_id":"m"}}"#;
+        match parse_sidecar_event(line) {
+            SidecarEvent::SendChatResult(r) => assert_eq!(r.http_status, 0),
+            _ => panic!("expected SendChatResult"),
+        }
+    }
+
+    #[test]
     fn build_send_chat_message_line_includes_request_id() {
         let line = build_send_chat_message_line(SendChatMessageArgs {
             client_id: "cid",
@@ -828,6 +1163,7 @@ mod tests {
             broadcaster_id: "b",
             user_id: "u",
             message: "hi",
+            reply_parent_message_id: None,
             request_id: 99,
         })
         .unwrap();
@@ -839,6 +1175,60 @@ mod tests {
         assert_eq!(parsed["broadcaster_id"], "b");
         assert_eq!(parsed["message"], "hi");
         assert_eq!(parsed["token"], "tok");
+    }
+
+    #[test]
+    fn build_twitch_user_mod_action_line_serializes_required_fields() {
+        let line = build_twitch_user_mod_action_line(TwitchUserModActionArgs {
+            cmd: "ban_user",
+            client_id: "cid",
+            access_token: "tok",
+            broadcaster_id: "b",
+            user_id: "u",
+            target_user_id: "target",
+            reason: "spam",
+            request_id: 3,
+        })
+        .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&line[..line.len() - 1]).unwrap();
+        assert_eq!(parsed["cmd"], "ban_user");
+        assert_eq!(parsed["target_user_id"], "target");
+        assert_eq!(parsed["reason"], "spam");
+        assert_eq!(parsed["request_id"], 3_u64);
+    }
+
+    #[test]
+    fn build_twitch_timeout_line_serializes_duration() {
+        let line = build_twitch_timeout_line(TwitchTimeoutArgs {
+            client_id: "cid",
+            access_token: "tok",
+            broadcaster_id: "b",
+            user_id: "u",
+            target_user_id: "target",
+            duration_seconds: 60,
+            reason: "caps",
+            request_id: 4,
+        })
+        .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&line[..line.len() - 1]).unwrap();
+        assert_eq!(parsed["cmd"], "timeout_user");
+        assert_eq!(parsed["duration_seconds"], 60_u64);
+    }
+
+    #[test]
+    fn build_twitch_delete_message_line_serializes_message_id() {
+        let line = build_twitch_delete_message_line(TwitchDeleteMessageArgs {
+            client_id: "cid",
+            access_token: "tok",
+            broadcaster_id: "b",
+            user_id: "u",
+            message_id: "m1",
+            request_id: 5,
+        })
+        .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&line[..line.len() - 1]).unwrap();
+        assert_eq!(parsed["cmd"], "delete_message");
+        assert_eq!(parsed["message_id"], "m1");
     }
 
     #[test]

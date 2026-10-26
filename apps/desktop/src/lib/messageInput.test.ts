@@ -60,6 +60,9 @@ describe("formatSendError", () => {
       formatSendError({ kind: "helix", code: "", message: "blocked" }),
     ).toContain("blocked");
     expect(
+      formatSendError({ kind: "helix", code: "unauthorized", message: "x" }),
+    ).toMatch(/reconnect/i);
+    expect(
       formatSendError({
         kind: "message_too_long_chars",
         max_chars: 200,

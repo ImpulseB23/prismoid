@@ -26,10 +26,12 @@ use tokio::sync::oneshot;
 use tauri_plugin_shell::process::CommandChild;
 
 use crate::host::{
-    build_send_chat_message_line, build_youtube_send_message_line, SendChatMessageArgs,
-    SendChatResult, YouTubeSendMessageArgs,
+    build_send_chat_message_line, build_twitch_delete_message_line, build_twitch_timeout_line,
+    build_twitch_user_mod_action_line, build_youtube_send_message_line, SendChatMessageArgs,
+    SendChatResult, TwitchDeleteMessageArgs, TwitchTimeoutArgs, TwitchUserModActionArgs,
+    YouTubeSendMessageArgs,
 };
-use crate::twitch_auth::{AuthError, AuthState, TWITCH_CLIENT_ID};
+use crate::twitch_auth::{AuthError, AuthState, TwitchTokens, TWITCH_CLIENT_ID};
 use crate::youtube_auth::{AuthError as YouTubeAuthError, AuthState as YouTubeAuthState};
 
 /// Pure registry of in-flight `send_chat_message` requests. Carved out
@@ -315,6 +317,10 @@ impl SendCommandError {
         Self::from_send_result_with(r, |code, message| Self::YouTube { code, message })
     }
 
+    fn from_mod_result(r: SendChatResult) -> Result<(), Self> {
+        Self::from_send_result_with(r, |code, message| Self::Helix { code, message }).map(|_| ())
+    }
+
     fn from_send_result_with(
         r: SendChatResult,
         rejected: impl FnOnce(String, String) -> Self,
@@ -392,6 +398,90 @@ fn validate_youtube_message(text: &str) -> Result<&str, SendCommandError> {
     Ok(trimmed)
 }
 
+fn validate_required_id<'a>(value: &'a str, field: &str) -> Result<&'a str, SendCommandError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(SendCommandError::Json {
+            message: format!("{field} is required"),
+        });
+    }
+    Ok(trimmed)
+}
+
+pub const MAX_TIMEOUT_SECONDS: u32 = 1_209_600;
+
+fn validate_timeout_seconds(duration_seconds: u32) -> Result<u32, SendCommandError> {
+    if duration_seconds == 0 || duration_seconds > MAX_TIMEOUT_SECONDS {
+        return Err(SendCommandError::Helix {
+            code: "invalid_timeout_duration".into(),
+            message: format!("duration_seconds must be in [1, {MAX_TIMEOUT_SECONDS}]"),
+        });
+    }
+    Ok(duration_seconds)
+}
+
+/// One request/response exchange with the sidecar using `tokens`.
+async fn round_trip(
+    sender: &SidecarCommandSender,
+    tokens: &TwitchTokens,
+    build: &mut impl FnMut(&TwitchTokens, u64) -> Result<Vec<u8>, serde_json::Error>,
+) -> Result<SendChatResult, SendCommandError> {
+    let (tx, rx) = oneshot::channel();
+    sender.send_with_pending(tx, |request_id| build(tokens, request_id))?;
+    // Sender dropped (sidecar terminated, completer cleared): treat as
+    // not-running rather than leaking the await.
+    rx.await.map_err(|_| SendCommandError::SidecarNotRunning)
+}
+
+/// Sends a Helix-backed command through the sidecar with the stored
+/// tokens. A 401 means Twitch no longer honours an access token we still
+/// considered valid, so the token is refreshed once and the request
+/// repeated; a second 401 is returned to the caller as-is.
+async fn with_twitch_tokens(
+    auth: &AuthState,
+    sender: &SidecarCommandSender,
+    mut build: impl FnMut(&TwitchTokens, u64) -> Result<Vec<u8>, serde_json::Error>,
+) -> Result<SendChatResult, SendCommandError> {
+    let tokens = auth
+        .manager
+        .load_or_refresh()
+        .await
+        .map_err(SendCommandError::auth)?;
+    let result = round_trip(sender, &tokens, &mut build).await?;
+    if result.http_status != 401 {
+        return Ok(result);
+    }
+    tracing::info!("helix answered 401 with a fresh-looking token; refreshing and retrying");
+    let tokens = auth
+        .manager
+        .force_refresh()
+        .await
+        .map_err(SendCommandError::auth)?;
+    round_trip(sender, &tokens, &mut build).await
+}
+
+/// Runs one moderation command in `channel_id`. The frontend names the
+/// channel the message or user belongs to, so a tab switch mid-flight can
+/// never redirect the action.
+async fn send_twitch_mod_command(
+    auth: State<'_, AuthState>,
+    sender: State<'_, SidecarCommandSender>,
+    channel_id: String,
+    mut build: impl FnMut(&str, &str, &str, u64) -> Result<Vec<u8>, serde_json::Error>,
+) -> Result<(), SendCommandError> {
+    let channel_id = validate_required_id(&channel_id, "channel_id")?.to_owned();
+    let result = with_twitch_tokens(&auth, &sender, |tokens, request_id| {
+        build(
+            &tokens.access_token,
+            &channel_id,
+            &tokens.user_id,
+            request_id,
+        )
+    })
+    .await?;
+    SendCommandError::from_mod_result(result)
+}
+
 /// Returns the successor of `current` for the request-id allocator,
 /// skipping zero on wraparound so a serialized 0 (which the Go side may
 /// omit because of `omitempty`) can never be confused with a real id.
@@ -406,32 +496,143 @@ fn advance_request_id(current: u64) -> u64 {
 pub async fn twitch_send_message(
     auth: State<'_, AuthState>,
     sender: State<'_, SidecarCommandSender>,
+    channel_id: String,
     text: String,
+    reply_to: Option<String>,
 ) -> Result<SendChatOk, SendCommandError> {
+    let channel_id = validate_required_id(&channel_id, "channel_id")?.to_owned();
     let trimmed = validate_message(&text)?;
-
-    let tokens = auth
-        .manager
-        .load_or_refresh()
-        .await
-        .map_err(SendCommandError::auth)?;
-
-    let (tx, rx) = oneshot::channel();
-    sender.send_with_pending(tx, |request_id| {
+    let result = with_twitch_tokens(&auth, &sender, |tokens, request_id| {
         build_send_chat_message_line(SendChatMessageArgs {
             client_id: TWITCH_CLIENT_ID,
             access_token: &tokens.access_token,
-            broadcaster_id: &tokens.user_id,
+            broadcaster_id: &channel_id,
             user_id: &tokens.user_id,
             message: trimmed,
+            reply_parent_message_id: reply_to.as_deref(),
             request_id,
         })
-    })?;
-
-    // Sender dropped (sidecar terminated, completer cleared) → treat as
-    // not-running rather than leaking the await.
-    let result = rx.await.map_err(|_| SendCommandError::SidecarNotRunning)?;
+    })
+    .await?;
     SendCommandError::from_send_result(result)
+}
+
+#[tauri::command]
+pub async fn twitch_ban_user(
+    auth: State<'_, AuthState>,
+    sender: State<'_, SidecarCommandSender>,
+    channel_id: String,
+    target_user_id: String,
+    reason: Option<String>,
+) -> Result<(), SendCommandError> {
+    let target_user_id = validate_required_id(&target_user_id, "target_user_id")?.to_owned();
+    let reason = reason.unwrap_or_default();
+    let reason = reason.trim().to_owned();
+    send_twitch_mod_command(
+        auth,
+        sender,
+        channel_id,
+        |access_token, broadcaster_id, user_id, request_id| {
+            build_twitch_user_mod_action_line(TwitchUserModActionArgs {
+                cmd: "ban_user",
+                client_id: TWITCH_CLIENT_ID,
+                access_token,
+                broadcaster_id,
+                user_id,
+                target_user_id: &target_user_id,
+                reason: &reason,
+                request_id,
+            })
+        },
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn twitch_unban_user(
+    auth: State<'_, AuthState>,
+    sender: State<'_, SidecarCommandSender>,
+    channel_id: String,
+    target_user_id: String,
+) -> Result<(), SendCommandError> {
+    let target_user_id = validate_required_id(&target_user_id, "target_user_id")?.to_owned();
+    send_twitch_mod_command(
+        auth,
+        sender,
+        channel_id,
+        |access_token, broadcaster_id, user_id, request_id| {
+            build_twitch_user_mod_action_line(TwitchUserModActionArgs {
+                cmd: "unban_user",
+                client_id: TWITCH_CLIENT_ID,
+                access_token,
+                broadcaster_id,
+                user_id,
+                target_user_id: &target_user_id,
+                reason: "",
+                request_id,
+            })
+        },
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn twitch_timeout_user(
+    auth: State<'_, AuthState>,
+    sender: State<'_, SidecarCommandSender>,
+    channel_id: String,
+    target_user_id: String,
+    duration_seconds: u32,
+    reason: Option<String>,
+) -> Result<(), SendCommandError> {
+    let target_user_id = validate_required_id(&target_user_id, "target_user_id")?.to_owned();
+    let duration_seconds = validate_timeout_seconds(duration_seconds)?;
+    let reason = reason.unwrap_or_default();
+    let reason = reason.trim().to_owned();
+    send_twitch_mod_command(
+        auth,
+        sender,
+        channel_id,
+        |access_token, broadcaster_id, user_id, request_id| {
+            build_twitch_timeout_line(TwitchTimeoutArgs {
+                client_id: TWITCH_CLIENT_ID,
+                access_token,
+                broadcaster_id,
+                user_id,
+                target_user_id: &target_user_id,
+                duration_seconds,
+                reason: &reason,
+                request_id,
+            })
+        },
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn twitch_delete_message(
+    auth: State<'_, AuthState>,
+    sender: State<'_, SidecarCommandSender>,
+    channel_id: String,
+    message_id: String,
+) -> Result<(), SendCommandError> {
+    let message_id = validate_required_id(&message_id, "message_id")?.to_owned();
+    send_twitch_mod_command(
+        auth,
+        sender,
+        channel_id,
+        |access_token, broadcaster_id, user_id, request_id| {
+            build_twitch_delete_message_line(TwitchDeleteMessageArgs {
+                client_id: TWITCH_CLIENT_ID,
+                access_token,
+                broadcaster_id,
+                user_id,
+                message_id: &message_id,
+                request_id,
+            })
+        },
+    )
+    .await
 }
 
 /// Sends a chat message to the active YouTube live broadcast. Mirrors
@@ -549,6 +750,7 @@ mod tests {
             drop_code: drop_code.into(),
             drop_message: drop_message.into(),
             error_message: error.into(),
+            http_status: 0,
         }
     }
 
@@ -624,6 +826,47 @@ mod tests {
             }
             other => panic!("expected YouTube, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn from_mod_result_maps_failure_to_helix_variant() {
+        match SendCommandError::from_mod_result(make_result(
+            false,
+            "unauthorized",
+            "missing scope",
+            "",
+        ))
+        .unwrap_err()
+        {
+            SendCommandError::Helix { code, message } => {
+                assert_eq!(code, "unauthorized");
+                assert_eq!(message, "missing scope");
+            }
+            other => panic!("expected Helix, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn from_mod_result_ok_succeeds_without_message_id() {
+        let mut r = make_result(true, "", "", "");
+        r.message_id.clear();
+        assert!(SendCommandError::from_mod_result(r).is_ok());
+    }
+
+    #[test]
+    fn validate_required_id_rejects_blank() {
+        match validate_required_id("   ", "target_user_id").unwrap_err() {
+            SendCommandError::Json { message } => assert_eq!(message, "target_user_id is required"),
+            other => panic!("expected Json, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_timeout_seconds_enforces_helix_range() {
+        assert!(validate_timeout_seconds(1).is_ok());
+        assert!(validate_timeout_seconds(MAX_TIMEOUT_SECONDS).is_ok());
+        assert!(validate_timeout_seconds(0).is_err());
+        assert!(validate_timeout_seconds(MAX_TIMEOUT_SECONDS + 1).is_err());
     }
 
     #[tokio::test]
@@ -772,6 +1015,7 @@ mod tests {
             drop_code: String::new(),
             drop_message: String::new(),
             error_message: String::new(),
+            http_status: 0,
         };
         r.request_id = id;
         p.complete(r);
@@ -789,6 +1033,7 @@ mod tests {
             drop_code: String::new(),
             drop_message: String::new(),
             error_message: String::new(),
+            http_status: 0,
         });
     }
 

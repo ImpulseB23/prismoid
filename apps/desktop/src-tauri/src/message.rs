@@ -5,20 +5,27 @@ use serde::{Deserialize, Serialize};
 
 use crate::emote_index::EmoteSpan;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Platform {
     Twitch,
     YouTube,
     Kick,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Badge {
     pub set_id: String,
     pub id: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReplyParent {
+    pub user_login: String,
+    pub user_name: String,
+    pub body: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnifiedMessage {
     pub id: String,
     pub platform: Platform,
@@ -39,6 +46,10 @@ pub struct UnifiedMessage {
     pub username: String,
     pub display_name: String,
     pub platform_user_id: String,
+    /// Identifier of the room the message was posted in: Twitch
+    /// broadcaster id, YouTube live chat id, or Kick chatroom id. Lets the
+    /// frontend drop stragglers from a previous channel after a switch.
+    pub channel_id: String,
     pub message_text: String,
     pub badges: Vec<Badge>,
     pub is_mod: bool,
@@ -46,6 +57,10 @@ pub struct UnifiedMessage {
     pub is_broadcaster: bool,
     pub color: Option<String>,
     pub reply_to: Option<String>,
+    /// Who and what a Twitch reply answers, for rendering the quoted line.
+    pub reply_parent: Option<ReplyParent>,
+    /// Set on Twitch system notices (subs, raids, announcements).
+    pub notice: Option<ChatNotice>,
     /// Emote matches inside [`message_text`](Self::message_text), populated
     /// by [`crate::emote_index::EmoteIndex::scan_into`] after parsing.
     /// Empty when no index is active or the message has no emotes.
@@ -146,48 +161,397 @@ struct TwitchSubscription {
     subscription_type: String,
 }
 
+/// Twitch sends `null` for fields it documents as plain strings (shared
+/// chat sources, anonymous chatters, empty notice bodies). `#[serde(default)]`
+/// only covers a missing key, so explicit nulls go through here and land
+/// on the type's default instead of failing the whole envelope.
+fn null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
+}
+
 #[derive(Debug, Deserialize)]
 struct TwitchChatEvent {
+    #[serde(default, deserialize_with = "null_default")]
+    broadcaster_user_id: String,
+    #[serde(default, deserialize_with = "null_default")]
     chatter_user_id: String,
+    #[serde(default, deserialize_with = "null_default")]
     chatter_user_login: String,
+    #[serde(default, deserialize_with = "null_default")]
     chatter_user_name: String,
     message_id: String,
+    #[serde(default, deserialize_with = "null_default")]
     message: TwitchChatMessage,
     #[serde(default)]
     color: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     badges: Vec<TwitchBadge>,
     #[serde(default)]
     reply: Option<TwitchReply>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 struct TwitchChatMessage {
+    #[serde(default, deserialize_with = "null_default")]
     text: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct TwitchBadge {
+    #[serde(default, deserialize_with = "null_default")]
     set_id: String,
+    #[serde(default, deserialize_with = "null_default")]
     id: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct TwitchReply {
+    #[serde(default, deserialize_with = "null_default")]
     parent_message_id: String,
+    #[serde(default, deserialize_with = "null_default")]
+    parent_user_login: String,
+    #[serde(default, deserialize_with = "null_default")]
+    parent_user_name: String,
+    #[serde(default, deserialize_with = "null_default")]
+    parent_message_body: String,
 }
 
-/// Parses a raw Twitch EventSub envelope into a [`UnifiedMessage`] when the
-/// envelope is a `channel.chat.message` notification.
+/// A Twitch system notice rendered inline with chat: subs, resubs, gifts,
+/// raids and announcements. Carried on a [`UnifiedMessage`] so it sorts and
+/// scrolls like any other row; `system_message` is the line Twitch shows.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatNotice {
+    pub notice_type: String,
+    pub system_message: String,
+}
+
+/// Moderation events that change messages already shown. Emitted to the
+/// frontend as `chat_events`, separate from the message batch.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ChatEvent {
+    MessageDeleted {
+        channel_id: String,
+        message_id: String,
+        target_user_id: String,
+    },
+    /// A ban or timeout: every message from the target is gone.
+    UserCleared {
+        channel_id: String,
+        target_user_id: String,
+        target_user_login: String,
+        target_user_name: String,
+    },
+    ChatCleared {
+        channel_id: String,
+    },
+    /// A moderator did something, from `channel.moderate` v2. Only arrives
+    /// in channels where the signed-in user moderates.
+    ModAction(Box<ModAction>),
+}
+
+/// One `channel.moderate` event flattened for the frontend. `action` is
+/// Twitch's verb (`timeout`, `ban`, `delete`, `slow`, `vip`, ...); the
+/// target fields are filled for actions aimed at a person and the rest
+/// carry the one detail each remaining action has.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
+pub struct ModAction {
+    pub channel_id: String,
+    pub timestamp: i64,
+    pub moderator_login: String,
+    pub moderator_name: String,
+    pub action: String,
+    pub target_user_id: String,
+    pub target_user_login: String,
+    pub target_user_name: String,
+    pub reason: String,
+    /// Timeout length in whole seconds, derived from `expires_at`.
+    pub duration_seconds: Option<u64>,
+    pub message_id: String,
+    pub message_body: String,
+    pub wait_time_seconds: Option<u64>,
+    pub follow_duration_minutes: Option<u64>,
+    pub viewer_count: Option<u64>,
+    /// Blocked or permitted terms touched by an `automod_terms` action.
+    pub terms: Vec<String>,
+    /// Moderator note on an approved or denied unban request.
+    pub moderator_message: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TwitchModerateEvent {
+    #[serde(default, deserialize_with = "null_default")]
+    broadcaster_user_id: String,
+    #[serde(default, deserialize_with = "null_default")]
+    moderator_user_login: String,
+    #[serde(default, deserialize_with = "null_default")]
+    moderator_user_name: String,
+    #[serde(default, deserialize_with = "null_default")]
+    action: String,
+    #[serde(default)]
+    ban: Option<ModTarget>,
+    #[serde(default)]
+    unban: Option<ModTarget>,
+    #[serde(default)]
+    timeout: Option<ModTimeout>,
+    #[serde(default)]
+    untimeout: Option<ModTarget>,
+    #[serde(default)]
+    delete: Option<ModDelete>,
+    #[serde(default)]
+    warn: Option<ModTarget>,
+    #[serde(default, rename = "mod")]
+    mod_: Option<ModTarget>,
+    #[serde(default)]
+    unmod: Option<ModTarget>,
+    #[serde(default)]
+    vip: Option<ModTarget>,
+    #[serde(default)]
+    unvip: Option<ModTarget>,
+    #[serde(default)]
+    raid: Option<ModRaid>,
+    #[serde(default)]
+    unraid: Option<ModTarget>,
+    #[serde(default)]
+    slow: Option<ModSlow>,
+    #[serde(default)]
+    followers: Option<ModFollowers>,
+    #[serde(default)]
+    automod_terms: Option<ModTerms>,
+    #[serde(default)]
+    unban_request: Option<ModUnbanRequest>,
+    #[serde(default)]
+    shared_chat_ban: Option<ModTarget>,
+    #[serde(default)]
+    shared_chat_unban: Option<ModTarget>,
+    #[serde(default)]
+    shared_chat_timeout: Option<ModTimeout>,
+    #[serde(default)]
+    shared_chat_untimeout: Option<ModTarget>,
+    #[serde(default)]
+    shared_chat_delete: Option<ModDelete>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct ModTarget {
+    #[serde(default, deserialize_with = "null_default")]
+    user_id: String,
+    #[serde(default, deserialize_with = "null_default")]
+    user_login: String,
+    #[serde(default, deserialize_with = "null_default")]
+    user_name: String,
+    #[serde(default, deserialize_with = "null_default")]
+    reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ModTimeout {
+    #[serde(flatten)]
+    target: ModTarget,
+    #[serde(default, deserialize_with = "null_default")]
+    expires_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ModDelete {
+    #[serde(flatten)]
+    target: ModTarget,
+    #[serde(default, deserialize_with = "null_default")]
+    message_id: String,
+    #[serde(default, deserialize_with = "null_default")]
+    message_body: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ModRaid {
+    #[serde(flatten)]
+    target: ModTarget,
+    #[serde(default)]
+    viewer_count: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ModSlow {
+    #[serde(default)]
+    wait_time_seconds: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ModFollowers {
+    #[serde(default)]
+    follow_duration_minutes: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ModTerms {
+    #[serde(default, deserialize_with = "null_default")]
+    terms: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ModUnbanRequest {
+    #[serde(flatten)]
+    target: ModTarget,
+    #[serde(default, deserialize_with = "null_default")]
+    moderator_message: String,
+}
+
+fn mod_action(
+    event: TwitchModerateEvent,
+    message_timestamp: &str,
+) -> Result<ModAction, ParseError> {
+    let timestamp = parse_platform_ts(message_timestamp)?;
+    let mut out = ModAction {
+        channel_id: event.broadcaster_user_id,
+        timestamp,
+        moderator_login: event.moderator_user_login,
+        moderator_name: event.moderator_user_name,
+        action: event.action,
+        ..ModAction::default()
+    };
+    let mut set_target = |t: ModTarget| {
+        out.target_user_id = t.user_id;
+        out.target_user_login = t.user_login;
+        out.target_user_name = t.user_name;
+        out.reason = t.reason;
+    };
+    let plain = [
+        event.ban,
+        event.unban,
+        event.untimeout,
+        event.warn,
+        event.mod_,
+        event.unmod,
+        event.vip,
+        event.unvip,
+        event.unraid,
+        event.shared_chat_ban,
+        event.shared_chat_unban,
+        event.shared_chat_untimeout,
+    ];
+    if let Some(t) = plain.into_iter().flatten().next() {
+        set_target(t);
+    }
+    if let Some(t) = event.timeout.or(event.shared_chat_timeout) {
+        let expires = chrono::DateTime::parse_from_rfc3339(&t.expires_at)
+            .ok()
+            .map(|e| e.timestamp_millis());
+        set_target(t.target);
+        out.duration_seconds = expires.map(|e| ((e - timestamp).max(0) / 1000) as u64);
+    }
+    if let Some(d) = event.delete.or(event.shared_chat_delete) {
+        set_target(d.target);
+        out.message_id = d.message_id;
+        out.message_body = d.message_body;
+    }
+    if let Some(r) = event.raid {
+        set_target(r.target);
+        out.viewer_count = r.viewer_count;
+    }
+    if let Some(u) = event.unban_request {
+        set_target(u.target);
+        out.moderator_message = u.moderator_message;
+    }
+    out.wait_time_seconds = event.slow.and_then(|s| s.wait_time_seconds);
+    out.follow_duration_minutes = event.followers.and_then(|f| f.follow_duration_minutes);
+    out.terms = event.automod_terms.map(|t| t.terms).unwrap_or_default();
+    Ok(out)
+}
+
+/// What one Twitch EventSub notification turned into.
+#[derive(Debug, Clone)]
+pub enum TwitchItem {
+    Message(Box<UnifiedMessage>),
+    Event(ChatEvent),
+}
+
+#[derive(Debug, Deserialize)]
+struct TwitchNoticeEvent {
+    #[serde(default, deserialize_with = "null_default")]
+    broadcaster_user_id: String,
+    #[serde(default, deserialize_with = "null_default")]
+    chatter_user_id: String,
+    #[serde(default, deserialize_with = "null_default")]
+    chatter_user_login: String,
+    #[serde(default, deserialize_with = "null_default")]
+    chatter_user_name: String,
+    #[serde(default)]
+    color: Option<String>,
+    #[serde(default, deserialize_with = "null_default")]
+    badges: Vec<TwitchBadge>,
+    #[serde(default, deserialize_with = "null_default")]
+    system_message: String,
+    message_id: String,
+    #[serde(default)]
+    message: Option<TwitchChatMessage>,
+    #[serde(default, deserialize_with = "null_default")]
+    notice_type: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TwitchDeleteEvent {
+    #[serde(default, deserialize_with = "null_default")]
+    broadcaster_user_id: String,
+    #[serde(default, deserialize_with = "null_default")]
+    target_user_id: String,
+    message_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TwitchClearUserEvent {
+    #[serde(default, deserialize_with = "null_default")]
+    broadcaster_user_id: String,
+    #[serde(default, deserialize_with = "null_default")]
+    target_user_id: String,
+    #[serde(default, deserialize_with = "null_default")]
+    target_user_login: String,
+    #[serde(default, deserialize_with = "null_default")]
+    target_user_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TwitchClearEvent {
+    #[serde(default, deserialize_with = "null_default")]
+    broadcaster_user_id: String,
+}
+
+pub(crate) fn badge_flags(badges: &[Badge]) -> (bool, bool, bool) {
+    let is_broadcaster = badges.iter().any(|b| b.set_id == "broadcaster");
+    let is_mod = is_broadcaster || badges.iter().any(|b| b.set_id == "moderator");
+    let is_subscriber = badges
+        .iter()
+        .any(|b| b.set_id == "subscriber" || b.set_id == "founder");
+    (is_broadcaster, is_mod, is_subscriber)
+}
+
+fn convert_badges(badges: Vec<TwitchBadge>) -> Vec<Badge> {
+    badges
+        .into_iter()
+        .map(|b| Badge {
+            set_id: b.set_id,
+            id: b.id,
+        })
+        .collect()
+}
+
+/// Parses a raw Twitch EventSub envelope into a [`TwitchItem`] when the
+/// envelope is a notification for one of the chat subscriptions:
+/// `channel.chat.message` and `channel.chat.notification` become messages,
+/// `channel.chat.message_delete`, `channel.chat.clear_user_messages` and
+/// `channel.chat.clear` become events.
 ///
-/// Returns `Ok(None)` for any other envelope shape — keepalives, reconnects,
+/// Returns `Ok(None)` for any other envelope shape: keepalives, reconnects,
 /// revocations, notifications for other subscription types, or payloads that
 /// are missing the nested `subscription`/`event` fields. Those are not parse
 /// errors; the drain loop filters them out silently.
 ///
 /// Defensive parsing per `docs/stability.md`: no `unwrap` on external data,
 /// unknown fields are ignored via serde, missing optional fields default.
-pub fn parse_twitch_envelope(bytes: &[u8]) -> Result<Option<UnifiedMessage>, ParseError> {
+pub fn parse_twitch_envelope(bytes: &[u8]) -> Result<Option<TwitchItem>, ParseError> {
     let envelope: TwitchEnvelope = serde_json::from_slice(bytes)?;
 
     if envelope.metadata.message_type != "notification" {
@@ -200,34 +564,68 @@ pub fn parse_twitch_envelope(bytes: &[u8]) -> Result<Option<UnifiedMessage>, Par
     let Some(subscription) = payload.subscription else {
         return Ok(None);
     };
-    if subscription.subscription_type != "channel.chat.message" {
-        return Ok(None);
-    }
     let Some(event_value) = payload.event else {
         return Ok(None);
     };
-    let event: TwitchChatEvent = serde_json::from_value(event_value)?;
+    let stamp = &envelope.metadata.message_timestamp;
 
-    let platform_ts = chrono::DateTime::parse_from_rfc3339(&envelope.metadata.message_timestamp)
+    let item = match subscription.subscription_type.as_str() {
+        "channel.chat.message" => {
+            let event: TwitchChatEvent = serde_json::from_value(event_value)?;
+            TwitchItem::Message(Box::new(chat_message(event, stamp)?))
+        }
+        "channel.chat.notification" => {
+            let event: TwitchNoticeEvent = serde_json::from_value(event_value)?;
+            TwitchItem::Message(Box::new(chat_notice(event, stamp)?))
+        }
+        "channel.chat.message_delete" => {
+            let event: TwitchDeleteEvent = serde_json::from_value(event_value)?;
+            TwitchItem::Event(ChatEvent::MessageDeleted {
+                channel_id: event.broadcaster_user_id,
+                message_id: event.message_id,
+                target_user_id: event.target_user_id,
+            })
+        }
+        "channel.chat.clear_user_messages" => {
+            let event: TwitchClearUserEvent = serde_json::from_value(event_value)?;
+            TwitchItem::Event(ChatEvent::UserCleared {
+                channel_id: event.broadcaster_user_id,
+                target_user_id: event.target_user_id,
+                target_user_login: event.target_user_login,
+                target_user_name: event.target_user_name,
+            })
+        }
+        "channel.chat.clear" => {
+            let event: TwitchClearEvent = serde_json::from_value(event_value)?;
+            TwitchItem::Event(ChatEvent::ChatCleared {
+                channel_id: event.broadcaster_user_id,
+            })
+        }
+        "channel.moderate" => {
+            let event: TwitchModerateEvent = serde_json::from_value(event_value)?;
+            TwitchItem::Event(ChatEvent::ModAction(Box::new(mod_action(event, stamp)?)))
+        }
+        _ => return Ok(None),
+    };
+    Ok(Some(item))
+}
+
+fn parse_platform_ts(message_timestamp: &str) -> Result<i64, ParseError> {
+    Ok(chrono::DateTime::parse_from_rfc3339(message_timestamp)
         .map_err(ParseError::Timestamp)?
-        .timestamp_millis();
+        .timestamp_millis())
+}
+
+fn chat_message(
+    event: TwitchChatEvent,
+    message_timestamp: &str,
+) -> Result<UnifiedMessage, ParseError> {
+    let platform_ts = parse_platform_ts(message_timestamp)?;
     let arrival_time = chrono::Utc::now().timestamp_millis();
+    let badges = convert_badges(event.badges);
+    let (is_broadcaster, is_mod, is_subscriber) = badge_flags(&badges);
 
-    let badges: Vec<Badge> = event
-        .badges
-        .into_iter()
-        .map(|b| Badge {
-            set_id: b.set_id,
-            id: b.id,
-        })
-        .collect();
-    let is_broadcaster = badges.iter().any(|b| b.set_id == "broadcaster");
-    let is_mod = is_broadcaster || badges.iter().any(|b| b.set_id == "moderator");
-    let is_subscriber = badges
-        .iter()
-        .any(|b| b.set_id == "subscriber" || b.set_id == "founder");
-
-    Ok(Some(UnifiedMessage {
+    Ok(UnifiedMessage {
         id: event.message_id,
         platform: Platform::Twitch,
         timestamp: platform_ts,
@@ -237,15 +635,58 @@ pub fn parse_twitch_envelope(bytes: &[u8]) -> Result<Option<UnifiedMessage>, Par
         username: event.chatter_user_login,
         display_name: event.chatter_user_name,
         platform_user_id: event.chatter_user_id,
+        channel_id: event.broadcaster_user_id,
         message_text: event.message.text,
         badges,
         is_mod,
         is_subscriber,
         is_broadcaster,
         color: event.color,
-        reply_to: event.reply.map(|r| r.parent_message_id),
+        reply_to: event.reply.as_ref().map(|r| r.parent_message_id.clone()),
+        reply_parent: event.reply.map(|r| ReplyParent {
+            user_login: r.parent_user_login,
+            user_name: r.parent_user_name,
+            body: r.parent_message_body,
+        }),
+        notice: None,
         emote_spans: Vec::new(),
-    }))
+    })
+}
+
+fn chat_notice(
+    event: TwitchNoticeEvent,
+    message_timestamp: &str,
+) -> Result<UnifiedMessage, ParseError> {
+    let platform_ts = parse_platform_ts(message_timestamp)?;
+    let arrival_time = chrono::Utc::now().timestamp_millis();
+    let badges = convert_badges(event.badges);
+    let (is_broadcaster, is_mod, is_subscriber) = badge_flags(&badges);
+
+    Ok(UnifiedMessage {
+        id: event.message_id,
+        platform: Platform::Twitch,
+        timestamp: platform_ts,
+        arrival_time,
+        effective_ts: 0,
+        arrival_seq: 0,
+        username: event.chatter_user_login,
+        display_name: event.chatter_user_name,
+        platform_user_id: event.chatter_user_id,
+        channel_id: event.broadcaster_user_id,
+        message_text: event.message.map(|m| m.text).unwrap_or_default(),
+        badges,
+        is_mod,
+        is_subscriber,
+        is_broadcaster,
+        color: event.color,
+        reply_to: None,
+        reply_parent: None,
+        notice: Some(ChatNotice {
+            notice_type: event.notice_type,
+            system_message: event.system_message,
+        }),
+        emote_spans: Vec::new(),
+    })
 }
 
 // --- YouTube protojson deserialization types (private, narrow) ---
@@ -266,6 +707,8 @@ struct YouTubeSnippet {
     msg_type: Option<String>,
     #[serde(default)]
     published_at: Option<String>,
+    #[serde(default)]
+    live_chat_id: Option<String>,
     #[serde(default)]
     display_message: Option<String>,
     #[serde(default)]
@@ -387,6 +830,7 @@ pub fn parse_youtube_message(bytes: &[u8]) -> Result<Option<UnifiedMessage>, Par
         username: channel_id.clone(),
         display_name,
         platform_user_id: channel_id,
+        channel_id: snippet.live_chat_id.unwrap_or_default(),
         message_text: text,
         badges,
         is_mod,
@@ -394,6 +838,8 @@ pub fn parse_youtube_message(bytes: &[u8]) -> Result<Option<UnifiedMessage>, Par
         is_broadcaster,
         color,
         reply_to: None,
+        reply_parent: None,
+        notice: None,
         emote_spans: Vec::new(),
     }))
 }
@@ -411,7 +857,6 @@ struct KickPusherEvent {
 struct KickChatMessage {
     id: String,
     #[serde(default)]
-    #[allow(dead_code)]
     chatroom_id: Option<i64>,
     content: String,
     created_at: String,
@@ -499,6 +944,7 @@ pub fn parse_kick_event(bytes: &[u8]) -> Result<Option<UnifiedMessage>, ParseErr
         username: msg.sender.username.clone(),
         display_name: msg.sender.username,
         platform_user_id: msg.sender.id.to_string(),
+        channel_id: msg.chatroom_id.map(|id| id.to_string()).unwrap_or_default(),
         message_text: msg.content,
         badges,
         is_mod,
@@ -506,6 +952,8 @@ pub fn parse_kick_event(bytes: &[u8]) -> Result<Option<UnifiedMessage>, ParseErr
         is_broadcaster,
         color: identity.color,
         reply_to: None,
+        reply_parent: None,
+        notice: None,
         emote_spans: Vec::new(),
     }))
 }
@@ -513,6 +961,13 @@ pub fn parse_kick_event(bytes: &[u8]) -> Result<Option<UnifiedMessage>, ParseErr
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn message(bytes: &[u8]) -> UnifiedMessage {
+        match parse_twitch_envelope(bytes).unwrap().unwrap() {
+            TwitchItem::Message(m) => *m,
+            TwitchItem::Event(_) => panic!("expected a message"),
+        }
+    }
 
     const VIEWER_MSG: &[u8] = br##"{
         "metadata": {
@@ -608,7 +1063,9 @@ mod tests {
                 "reply": {
                     "parent_message_id": "parent-abc",
                     "parent_user_id": "1",
-                    "parent_user_login": "streamer"
+                    "parent_user_login": "streamer",
+                    "parent_user_name": "Streamer",
+                    "parent_message_body": "original take"
                 }
             }
         }
@@ -637,8 +1094,9 @@ mod tests {
 
     #[test]
     fn parses_viewer_message() {
-        let msg = parse_twitch_envelope(VIEWER_MSG).unwrap().unwrap();
+        let msg = message(VIEWER_MSG);
         assert_eq!(msg.id, "cc106a89-1814-919d-454c-f4f2f970aae7");
+        assert_eq!(msg.channel_id, "1971641");
         assert_eq!(msg.username, "viewer32");
         assert_eq!(msg.display_name, "viewer32");
         assert_eq!(msg.platform_user_id, "4145994");
@@ -655,7 +1113,7 @@ mod tests {
 
     #[test]
     fn parses_moderator_flags() {
-        let msg = parse_twitch_envelope(MOD_MSG).unwrap().unwrap();
+        let msg = message(MOD_MSG);
         assert!(msg.is_mod);
         assert!(msg.is_subscriber);
         assert!(!msg.is_broadcaster);
@@ -664,15 +1122,23 @@ mod tests {
 
     #[test]
     fn broadcaster_implies_mod() {
-        let msg = parse_twitch_envelope(BROADCASTER_MSG).unwrap().unwrap();
+        let msg = message(BROADCASTER_MSG);
         assert!(msg.is_broadcaster);
         assert!(msg.is_mod);
     }
 
     #[test]
-    fn parses_reply_parent_id() {
-        let msg = parse_twitch_envelope(REPLY_MSG).unwrap().unwrap();
+    fn parses_reply_parent() {
+        let msg = message(REPLY_MSG);
         assert_eq!(msg.reply_to.as_deref(), Some("parent-abc"));
+        assert_eq!(
+            msg.reply_parent,
+            Some(ReplyParent {
+                user_login: "streamer".into(),
+                user_name: "Streamer".into(),
+                body: "original take".into(),
+            })
+        );
     }
 
     #[test]
@@ -1006,6 +1472,7 @@ mod tests {
             username: String::new(),
             display_name: String::new(),
             platform_user_id: String::new(),
+            channel_id: String::new(),
             message_text: String::new(),
             badges: Vec::new(),
             is_mod: false,
@@ -1013,6 +1480,8 @@ mod tests {
             is_broadcaster: false,
             color: None,
             reply_to: None,
+            reply_parent: None,
+            notice: None,
             emote_spans: Vec::new(),
         }
     }
@@ -1077,5 +1546,245 @@ mod tests {
         let mut counter: u64 = 7;
         assign_arrival_seqs(&mut batch, &mut counter);
         assert_eq!(counter, 7);
+    }
+
+    const NOTICE_MSG: &[u8] = br##"{
+        "metadata": {
+            "message_id": "n-1",
+            "message_type": "notification",
+            "message_timestamp": "2023-11-06T18:12:05.250Z"
+        },
+        "payload": {
+            "subscription": { "type": "channel.chat.notification" },
+            "event": {
+                "broadcaster_user_id": "1971641",
+                "chatter_user_id": "49",
+                "chatter_user_login": "subber",
+                "chatter_user_name": "Subber",
+                "chatter_is_anonymous": false,
+                "color": "#FF0000",
+                "badges": [{ "set_id": "subscriber", "id": "12", "info": "12" }],
+                "system_message": "Subber subscribed at Tier 1. They've subscribed for 12 months!",
+                "message_id": "notice-1",
+                "message": { "text": "pog", "fragments": [] },
+                "notice_type": "resub",
+                "resub": { "cumulative_months": 12, "sub_tier": "1000" }
+            }
+        }
+    }"##;
+
+    const DELETE_MSG: &[u8] = br##"{
+        "metadata": {
+            "message_id": "d-1",
+            "message_type": "notification",
+            "message_timestamp": "2023-11-06T18:12:05.250Z"
+        },
+        "payload": {
+            "subscription": { "type": "channel.chat.message_delete" },
+            "event": {
+                "broadcaster_user_id": "1971641",
+                "target_user_id": "42",
+                "target_user_login": "replier",
+                "target_user_name": "Replier",
+                "message_id": "r-1"
+            }
+        }
+    }"##;
+
+    const CLEAR_USER_MSG: &[u8] = br##"{
+        "metadata": {
+            "message_id": "cu-1",
+            "message_type": "notification",
+            "message_timestamp": "2023-11-06T18:12:05.250Z"
+        },
+        "payload": {
+            "subscription": { "type": "channel.chat.clear_user_messages" },
+            "event": {
+                "broadcaster_user_id": "1971641",
+                "target_user_id": "42",
+                "target_user_login": "replier",
+                "target_user_name": "Replier"
+            }
+        }
+    }"##;
+
+    const CLEAR_MSG: &[u8] = br##"{
+        "metadata": {
+            "message_id": "c-1",
+            "message_type": "notification",
+            "message_timestamp": "2023-11-06T18:12:05.250Z"
+        },
+        "payload": {
+            "subscription": { "type": "channel.chat.clear" },
+            "event": { "broadcaster_user_id": "1971641" }
+        }
+    }"##;
+
+    fn event(bytes: &[u8]) -> ChatEvent {
+        match parse_twitch_envelope(bytes).unwrap().unwrap() {
+            TwitchItem::Event(e) => e,
+            TwitchItem::Message(_) => panic!("expected an event"),
+        }
+    }
+
+    #[test]
+    fn tolerates_explicit_nulls_in_string_fields() {
+        let chat = br##"{
+            "metadata": { "message_type": "notification", "message_timestamp": "2023-11-06T18:12:05.250Z" },
+            "payload": {
+                "subscription": { "type": "channel.chat.message" },
+                "event": {
+                    "broadcaster_user_id": "1971641",
+                    "chatter_user_id": "1",
+                    "chatter_user_login": "a",
+                    "chatter_user_name": null,
+                    "message_id": "m-null",
+                    "message": { "text": "hi", "fragments": [] },
+                    "color": null,
+                    "badges": null,
+                    "reply": { "parent_message_id": "p", "parent_user_login": null, "parent_user_name": null, "parent_message_body": null },
+                    "source_broadcaster_user_id": null
+                }
+            }
+        }"##;
+        let msg = message(chat);
+        assert_eq!(msg.id, "m-null");
+        assert_eq!(msg.display_name, "");
+        assert!(msg.badges.is_empty());
+        assert_eq!(msg.reply_parent.as_ref().map(|r| r.body.as_str()), Some(""));
+
+        let notice = br##"{
+            "metadata": { "message_type": "notification", "message_timestamp": "2023-11-06T18:12:05.250Z" },
+            "payload": {
+                "subscription": { "type": "channel.chat.notification" },
+                "event": {
+                    "broadcaster_user_id": "1971641",
+                    "chatter_user_id": null,
+                    "chatter_user_login": null,
+                    "chatter_user_name": null,
+                    "chatter_is_anonymous": true,
+                    "color": null,
+                    "badges": [],
+                    "system_message": null,
+                    "message_id": "n-null",
+                    "message": { "text": null, "fragments": [] },
+                    "notice_type": "community_sub_gift"
+                }
+            }
+        }"##;
+        let msg = message(notice);
+        assert_eq!(msg.id, "n-null");
+        assert_eq!(msg.message_text, "");
+        assert_eq!(msg.notice.unwrap().notice_type, "community_sub_gift");
+    }
+
+    #[test]
+    fn parses_notice_as_message_with_system_line() {
+        let msg = message(NOTICE_MSG);
+        assert_eq!(msg.id, "notice-1");
+        assert_eq!(msg.username, "subber");
+        assert_eq!(msg.message_text, "pog");
+        assert!(msg.is_subscriber);
+        assert_eq!(
+            msg.notice,
+            Some(ChatNotice {
+                notice_type: "resub".into(),
+                system_message: "Subber subscribed at Tier 1. They've subscribed for 12 months!"
+                    .into(),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_moderation_events() {
+        assert_eq!(
+            event(DELETE_MSG),
+            ChatEvent::MessageDeleted {
+                channel_id: "1971641".into(),
+                message_id: "r-1".into(),
+                target_user_id: "42".into(),
+            }
+        );
+        assert_eq!(
+            event(CLEAR_USER_MSG),
+            ChatEvent::UserCleared {
+                channel_id: "1971641".into(),
+                target_user_id: "42".into(),
+                target_user_login: "replier".into(),
+                target_user_name: "Replier".into(),
+            }
+        );
+        assert_eq!(
+            event(CLEAR_MSG),
+            ChatEvent::ChatCleared {
+                channel_id: "1971641".into(),
+            }
+        );
+    }
+
+    fn moderate(action: &str, body: &str) -> ModAction {
+        let raw = format!(
+            r##"{{
+                "metadata": {{ "message_type": "notification", "message_timestamp": "2023-11-06T18:12:05.250Z" }},
+                "payload": {{
+                    "subscription": {{ "type": "channel.moderate", "version": "2" }},
+                    "event": {{
+                        "broadcaster_user_id": "1971641",
+                        "broadcaster_user_login": "streamer",
+                        "broadcaster_user_name": "Streamer",
+                        "source_broadcaster_user_id": "1971641",
+                        "source_broadcaster_user_name": null,
+                        "moderator_user_id": "7",
+                        "moderator_user_login": "modguy",
+                        "moderator_user_name": "ModGuy",
+                        "action": "{action}",
+                        "ban": null, "timeout": null, "delete": null, "slow": null,
+                        {body}
+                    }}
+                }}
+            }}"##
+        );
+        match event(raw.as_bytes()) {
+            ChatEvent::ModAction(a) => *a,
+            other => panic!("expected mod action, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_moderate_timeout_with_duration() {
+        let a = moderate(
+            "timeout",
+            r#""timeout": {"user_id": "42", "user_login": "spammer", "user_name": "Spammer", "reason": "caps", "expires_at": "2023-11-06T18:22:05.250Z"}"#,
+        );
+        assert_eq!(a.moderator_login, "modguy");
+        assert_eq!(a.target_user_login, "spammer");
+        assert_eq!(a.reason, "caps");
+        assert_eq!(a.duration_seconds, Some(600));
+        assert_eq!(a.channel_id, "1971641");
+    }
+
+    #[test]
+    fn parses_moderate_delete_slow_and_terms() {
+        let d = moderate(
+            "delete",
+            r#""delete": {"user_id": "42", "user_login": "x", "user_name": "X", "message_id": "m-9", "message_body": "bad words"}"#,
+        );
+        assert_eq!(d.message_id, "m-9");
+        assert_eq!(d.message_body, "bad words");
+        assert_eq!(d.target_user_id, "42");
+
+        let s = moderate("slow", r#""slow": {"wait_time_seconds": 30}"#);
+        assert_eq!(s.wait_time_seconds, Some(30));
+        assert!(s.target_user_id.is_empty());
+
+        let t = moderate(
+            "add_blocked_term",
+            r#""automod_terms": {"action": "add", "list": "blocked", "terms": ["abc", "def"], "from_automod": false}"#,
+        );
+        assert_eq!(t.terms, vec!["abc", "def"]);
+
+        let json = serde_json::to_value(ChatEvent::ModAction(Box::new(s))).unwrap();
+        assert_eq!(json["kind"], "mod_action");
+        assert_eq!(json["action"], "slow");
     }
 }

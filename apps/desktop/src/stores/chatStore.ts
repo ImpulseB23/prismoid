@@ -57,6 +57,13 @@ export interface ChatMessage {
   username: string;
   display_name: string;
   platform_user_id: string;
+  /**
+   * Room the message was posted in (Twitch broadcaster id, YouTube live
+   * chat id, Kick chatroom id). Renderers drop Twitch messages whose
+   * `channel_id` is not the active channel so stragglers from a channel
+   * switch never land in the new view.
+   */
+  channel_id: string;
   message_text: string;
   badges: { set_id: string; id: string }[];
   is_mod: boolean;
@@ -64,6 +71,10 @@ export interface ChatMessage {
   is_broadcaster: boolean;
   color: string | null;
   reply_to: string | null;
+  /** Who and what a reply answers; null for top-level messages. */
+  reply_parent: { user_login: string; user_name: string; body: string } | null;
+  /** Twitch system notice (sub, raid, announcement) this row represents. */
+  notice: { notice_type: string; system_message: string } | null;
   emote_spans: EmoteSpan[];
   /**
    * Optimistic-render state. `undefined` for confirmed messages (the
@@ -72,6 +83,8 @@ export interface ChatMessage {
    * pending entries and surface failed ones with a retry affordance.
    */
   status?: "pending" | "failed";
+  /** Removed by a moderator after it was shown. Kept in place, rendered dimmed. */
+  deleted?: boolean;
   /**
    * Client-generated id used to correlate an optimistic message with
    * its later platform echo. Only set on optimistic inserts.
@@ -115,6 +128,8 @@ export interface ChatStore {
   messageRevision: () => number;
   addMessages: (batch: ChatMessage[]) => void;
   getMessage: (monoIndex: number) => ChatMessage | undefined;
+  /** Newest live message with this platform id, if it is still in the ring. */
+  findById: (id: string) => ChatMessage | undefined;
   /**
    * Inserts a locally-authored message in pending state. The caller
    * supplies a `local_id`; later calls to `confirmPendingId`,
@@ -142,6 +157,23 @@ export interface ChatStore {
    * `undefined` if the entry is missing or not in failed state.
    */
   retryPending: (localId: string) => string | undefined;
+  /**
+   * Drops every message from view (channel switch). Monotonic indices
+   * keep increasing so renderer caches keyed by index stay valid.
+   */
+  clear: () => void;
+  /**
+   * Confirmed messages by one author still held in the ring, oldest
+   * first, at most `limit`. Scans from the newest end so cost is bounded
+   * by the ring size, not the session length.
+   */
+  recentByUser: (platformUserId: string, limit: number) => ChatMessage[];
+  /** Marks one message deleted by id. No-op if it is not in the ring. */
+  markDeleted: (messageId: string) => void;
+  /** Marks every message by one author deleted (ban or timeout). */
+  markUserCleared: (platformUserId: string) => void;
+  /** Marks everything deleted (chat clear). */
+  markAllDeleted: () => void;
 }
 
 export const DEFAULT_MAX_MESSAGES = 5000;
@@ -165,6 +197,8 @@ export interface OptimisticInput {
   login: string;
   /** Trimmed payload, exactly as it will be sent to the platform. */
   text: string;
+  /** Active channel the message is being sent to. */
+  channelId: string;
 }
 
 /**
@@ -187,6 +221,7 @@ export function buildOptimisticMessage(input: OptimisticInput): ChatMessage {
     username: input.login,
     display_name: input.login,
     platform_user_id: "",
+    channel_id: input.channelId,
     message_text: input.text,
     badges: [],
     is_mod: false,
@@ -194,6 +229,8 @@ export function buildOptimisticMessage(input: OptimisticInput): ChatMessage {
     is_broadcaster: false,
     color: null,
     reply_to: null,
+    reply_parent: null,
+    notice: null,
     emote_spans: [],
     status: "pending",
     local_id: localId,
@@ -232,6 +269,9 @@ export function createChatStore(maxMessages = DEFAULT_MAX_MESSAGES): ChatStore {
     maxMessages,
   );
   let writeIndex = 0;
+  // Oldest index still visible. Bumped to `writeIndex` on clear(), so
+  // everything written before the clear reads as evicted.
+  let floor = 0;
   let rafPending = false;
   let pendingMutation = false;
 
@@ -246,8 +286,12 @@ export function createChatStore(maxMessages = DEFAULT_MAX_MESSAGES): ChatStore {
   });
   const [messageRevision, setMessageRevision] = createSignal(0);
 
+  function oldestLive(): number {
+    return Math.max(floor, writeIndex - maxMessages);
+  }
+
   function isLive(monoIndex: number): boolean {
-    return monoIndex >= 0 && monoIndex >= writeIndex - maxMessages;
+    return monoIndex >= oldestLive();
   }
 
   function lookupPendingEntry(
@@ -269,7 +313,7 @@ export function createChatStore(maxMessages = DEFAULT_MAX_MESSAGES): ChatStore {
 
   function tryReconcile(incoming: ChatMessage): boolean {
     if (pendingByLocalId.size === 0) return false;
-    const tailStart = Math.max(0, writeIndex - PENDING_SCAN_TAIL);
+    const tailStart = Math.max(oldestLive(), writeIndex - PENDING_SCAN_TAIL);
     for (let mono = writeIndex - 1; mono >= tailStart; mono--) {
       const entry = ring[mono % maxMessages];
       // Reconcile against both pending and failed optimistic entries:
@@ -313,6 +357,8 @@ export function createChatStore(maxMessages = DEFAULT_MAX_MESSAGES): ChatStore {
     entry.is_broadcaster = incoming.is_broadcaster;
     entry.color = incoming.color;
     entry.reply_to = incoming.reply_to;
+    entry.reply_parent = incoming.reply_parent;
+    entry.notice = incoming.notice;
     entry.emote_spans = incoming.emote_spans;
     entry.status = undefined;
     entry.error_message = undefined;
@@ -378,11 +424,19 @@ export function createChatStore(maxMessages = DEFAULT_MAX_MESSAGES): ChatStore {
     rafPending = true;
     requestAnimationFrame(() => {
       rafPending = false;
-      setViewport({
-        start: Math.max(0, writeIndex - maxMessages),
-        count: Math.min(writeIndex, maxMessages),
-      });
+      setViewport(currentViewport());
     });
+  }
+
+  function currentViewport(): Viewport {
+    const start = oldestLive();
+    return { start, count: writeIndex - start };
+  }
+
+  function clear(): void {
+    floor = writeIndex;
+    pendingByLocalId.clear();
+    setViewport(currentViewport());
   }
 
   function bumpMessageRevision(): void {
@@ -395,10 +449,58 @@ export function createChatStore(maxMessages = DEFAULT_MAX_MESSAGES): ChatStore {
   }
 
   function getMessage(monoIndex: number): ChatMessage | undefined {
-    if (monoIndex < 0 || monoIndex >= writeIndex) return undefined;
-    // evicted by wraparound
-    if (monoIndex < writeIndex - maxMessages) return undefined;
+    if (monoIndex >= writeIndex || !isLive(monoIndex)) return undefined;
     return ring[monoIndex % maxMessages];
+  }
+
+  function recentByUser(platformUserId: string, limit: number): ChatMessage[] {
+    const out: ChatMessage[] = [];
+    const stop = oldestLive();
+    for (
+      let mono = writeIndex - 1;
+      mono >= stop && out.length < limit;
+      mono--
+    ) {
+      const msg = ring[mono % maxMessages];
+      if (!msg || msg.status !== undefined) continue;
+      if (msg.platform_user_id === platformUserId) out.push(msg);
+    }
+    return out.reverse();
+  }
+
+  function findById(id: string): ChatMessage | undefined {
+    const stop = oldestLive();
+    for (let mono = writeIndex - 1; mono >= stop; mono--) {
+      const msg = ring[mono % maxMessages];
+      if (msg && msg.id === id && msg.status === undefined) return msg;
+    }
+    return undefined;
+  }
+
+  function markWhere(pred: (msg: ChatMessage) => boolean): void {
+    let changed = false;
+    const stop = oldestLive();
+    for (let mono = writeIndex - 1; mono >= stop; mono--) {
+      const msg = ring[mono % maxMessages];
+      if (!msg || msg.deleted || msg.status !== undefined) continue;
+      if (pred(msg)) {
+        msg.deleted = true;
+        changed = true;
+      }
+    }
+    if (changed) bumpMessageRevision();
+  }
+
+  function markDeleted(messageId: string): void {
+    markWhere((m) => m.id === messageId);
+  }
+
+  function markUserCleared(platformUserId: string): void {
+    markWhere((m) => m.platform_user_id === platformUserId);
+  }
+
+  function markAllDeleted(): void {
+    markWhere(() => true);
   }
 
   return {
@@ -406,10 +508,16 @@ export function createChatStore(maxMessages = DEFAULT_MAX_MESSAGES): ChatStore {
     messageRevision,
     addMessages,
     getMessage,
+    findById,
     insertPending,
     confirmPendingId,
     failPending,
     retryPending,
+    clear,
+    recentByUser,
+    markDeleted,
+    markUserCleared,
+    markAllDeleted,
   };
 }
 
@@ -420,7 +528,13 @@ export const viewport = defaultStore.viewport;
 export const messageRevision = defaultStore.messageRevision;
 export const addMessages = defaultStore.addMessages;
 export const getMessage = defaultStore.getMessage;
+export const findMessageById = defaultStore.findById;
 export const insertPending = defaultStore.insertPending;
 export const confirmPendingId = defaultStore.confirmPendingId;
 export const failPending = defaultStore.failPending;
 export const retryPending = defaultStore.retryPending;
+export const clearMessages = defaultStore.clear;
+export const recentMessagesByUser = defaultStore.recentByUser;
+export const markMessageDeleted = defaultStore.markDeleted;
+export const markUserMessagesCleared = defaultStore.markUserCleared;
+export const markAllMessagesDeleted = defaultStore.markAllDeleted;

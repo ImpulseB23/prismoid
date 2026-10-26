@@ -1,6 +1,6 @@
-// Pure state→indicator mapping shared with the header component.
-// Split out so unit tests don't need to resolve the Solid/Tauri
-// component module graph.
+// Sidecar state as the host reports it, and the indicator it maps to.
+
+import { invoke } from "@tauri-apps/api/core";
 
 export type SidecarState =
   | "spawning"
@@ -16,25 +16,7 @@ export interface SidecarStatus {
   backoff_ms?: number;
 }
 
-export interface Indicator {
-  label: string;
-  color: string;
-}
-
-export function indicatorFor(state: SidecarState | null): Indicator {
-  switch (state) {
-    case "running":
-      return { label: "Connected", color: "#3fb950" };
-    case "spawning":
-    case "backoff":
-      return { label: "Connecting", color: "#d29922" };
-    case "waiting_for_auth":
-      return { label: "Waiting for sign-in", color: "#d29922" };
-    case "unhealthy":
-      return { label: "Unhealthy", color: "#db6d28" };
-    case "terminated":
-      return { label: "Disconnected", color: "#f85149" };
-    default:
-      return { label: "Starting", color: "#6e7681" };
-  }
+/** The host's latest status, for a window that mounted after it was sent. */
+export function currentSidecarStatus(): Promise<SidecarStatus | null> {
+  return invoke("current_sidecar_status");
 }

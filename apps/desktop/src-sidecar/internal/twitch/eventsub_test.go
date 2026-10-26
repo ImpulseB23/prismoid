@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -35,16 +36,85 @@ func keepaliveMsg() []byte {
 	return []byte(`{"metadata":{"message_id":"ka-1","message_type":"session_keepalive","message_timestamp":"2025-01-01T00:00:02Z"},"payload":{}}`)
 }
 
-func newTestClient(wsURL, helixURL string, out chan<- []byte) *Client {
-	c := NewClient("broadcaster-1", "user-1", "test-token", "test-client", out, zerolog.Nop(), func(string, any) {})
-	c.HelixBase = helixURL
-	c.WSURL = wsURL
-	return c
+func revocationMsg(status, broadcaster string) []byte {
+	return []byte(fmt.Sprintf(`{
+		"metadata":{"message_id":"rev-1","message_type":"revocation","message_timestamp":"2025-01-01T00:00:04Z"},
+		"payload":{"subscription":{"type":"channel.chat.message","status":"%s","condition":{"broadcaster_user_id":"%s","user_id":"user-1"}}}
+	}`, status, broadcaster))
+}
+
+// helixRecorder is a Helix stub that accepts every subscription with a
+// fresh id and remembers each request.
+type helixRecorder struct {
+	mu      sync.Mutex
+	posts   []SubscriptionRequest
+	deletes []string
+	next    int
+}
+
+func (h *helixRecorder) handler(w http.ResponseWriter, r *http.Request) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	switch r.Method {
+	case http.MethodPost:
+		var req SubscriptionRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		h.posts = append(h.posts, req)
+		h.next++
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = fmt.Fprintf(w, `{"data":[{"id":"sub-%d","status":"enabled"}]}`, h.next)
+	case http.MethodDelete:
+		h.deletes = append(h.deletes, r.URL.Query().Get("id"))
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func (h *helixRecorder) postCount() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.posts)
+}
+
+func (h *helixRecorder) deleted() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]string(nil), h.deletes...)
+}
+
+func acceptingHelix(t *testing.T) (*httptest.Server, *helixRecorder) {
+	t.Helper()
+	rec := &helixRecorder{}
+	srv := httptest.NewServer(http.HandlerFunc(rec.handler))
+	t.Cleanup(srv.Close)
+	return srv, rec
+}
+
+// wsServer runs handle for every WebSocket connection and returns the ws URL.
+func wsServer(t *testing.T, handle func(conn *websocket.Conn, n int)) string {
+	t.Helper()
+	var n atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer func() { _ = conn.CloseNow() }()
+		handle(conn, int(n.Add(1)))
+	}))
+	t.Cleanup(srv.Close)
+	return "ws" + strings.TrimPrefix(srv.URL, "http")
+}
+
+func newTestSession(ctx context.Context, wsURL, helixURL string, out chan<- []byte, notify Notify) *Session {
+	s := NewSession(ctx, out, zerolog.Nop(), notify)
+	s.HelixBase = helixURL
+	s.WSURL = wsURL
+	s.Configure("user-1", "test-token", "test-client")
+	return s
 }
 
 // drainChan reads everything currently in ch (non-blocking after a brief
-// settle) so tests can assert on the bytes the client sent. The settle gives
-// the client a chance to flush after Run returns from the test server closing.
+// settle) so tests can assert on the bytes the session sent.
 func drainChan(ch <-chan []byte) [][]byte {
 	var msgs [][]byte
 	deadline := time.After(50 * time.Millisecond)
@@ -58,51 +128,41 @@ func drainChan(ch <-chan []byte) [][]byte {
 	}
 }
 
-func TestClientReceivesNotifications(t *testing.T) {
-	helixSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusAccepted)
-	}))
-	defer helixSrv.Close()
-
-	wsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := websocket.Accept(w, r, nil)
-		if err != nil {
-			t.Errorf("accept: %v", err)
+func waitFor(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
 			return
 		}
-		defer func() { _ = conn.CloseNow() }()
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", what)
+}
 
+func TestSessionReceivesNotifications(t *testing.T) {
+	helix, _ := acceptingHelix(t)
+	ws := wsServer(t, func(conn *websocket.Conn, _ int) {
 		ctx := context.Background()
 		_ = conn.Write(ctx, websocket.MessageText, welcomeMsg("sess-1", 30))
 		_ = conn.Write(ctx, websocket.MessageText, notificationMsg("n-1", "hello chat"))
 		_ = conn.Write(ctx, websocket.MessageText, notificationMsg("n-2", "second msg"))
-
 		time.Sleep(100 * time.Millisecond)
 		_ = conn.Close(websocket.StatusNormalClosure, "done")
-	}))
-	defer wsSrv.Close()
+	})
 
 	out := make(chan []byte, 16)
-	client := newTestClient(
-		"ws"+strings.TrimPrefix(wsSrv.URL, "http"),
-		helixSrv.URL,
-		out,
-	)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	s := newTestSession(ctx, ws, helix.URL, out, nil)
+	s.Join("broadcaster-1", nil)
 
-	_ = client.Run(ctx)
-
+	waitFor(t, "two notifications", func() bool { return len(out) >= 2 })
 	msgs := drainChan(out)
-	if len(msgs) < 2 {
-		t.Fatalf("expected at least 2 messages on the out channel, got %d", len(msgs))
-	}
-
-	var env Envelope
 	if msgs[0][0] != 0x01 {
 		t.Fatalf("expected tag 0x01, got %x", msgs[0][0])
 	}
+	var env Envelope
 	if err := json.Unmarshal(msgs[0][1:], &env); err != nil {
 		t.Fatalf("unmarshal first message: %v", err)
 	}
@@ -111,382 +171,320 @@ func TestClientReceivesNotifications(t *testing.T) {
 	}
 }
 
-func TestClientHandlesKeepalive(t *testing.T) {
-	helixSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusAccepted)
-	}))
-	defer helixSrv.Close()
-
-	wsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := websocket.Accept(w, r, nil)
-		if err != nil {
-			return
-		}
-		defer func() { _ = conn.CloseNow() }()
-
+func TestSessionHandlesKeepalive(t *testing.T) {
+	helix, _ := acceptingHelix(t)
+	ws := wsServer(t, func(conn *websocket.Conn, _ int) {
 		ctx := context.Background()
 		_ = conn.Write(ctx, websocket.MessageText, welcomeMsg("sess-2", 30))
 		_ = conn.Write(ctx, websocket.MessageText, keepaliveMsg())
 		_ = conn.Write(ctx, websocket.MessageText, notificationMsg("n-1", "after keepalive"))
-
 		time.Sleep(100 * time.Millisecond)
 		_ = conn.Close(websocket.StatusNormalClosure, "done")
-	}))
-	defer wsSrv.Close()
+	})
 
 	out := make(chan []byte, 16)
-	client := newTestClient(
-		"ws"+strings.TrimPrefix(wsSrv.URL, "http"),
-		helixSrv.URL,
-		out,
-	)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	newTestSession(ctx, ws, helix.URL, out, nil).Join("broadcaster-1", nil)
+	waitFor(t, "notification after keepalive", func() bool { return len(out) >= 1 })
+}
 
-	_ = client.Run(ctx)
+func TestSessionSubscribesEveryJoinedChannelAndImmediatelyWhenConnected(t *testing.T) {
+	helix, rec := acceptingHelix(t)
+	ws := wsServer(t, func(conn *websocket.Conn, _ int) {
+		_ = conn.Write(context.Background(), websocket.MessageText, welcomeMsg("sess-3", 30))
+		time.Sleep(3 * time.Second)
+	})
 
-	msgs := drainChan(out)
-	if len(msgs) < 1 {
-		t.Fatal("expected at least 1 notification after keepalive")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := newTestSession(ctx, ws, helix.URL, make(chan []byte, 16), nil)
+	s.Join("a", nil)
+	s.Join("b", nil)
+	// five chat subscriptions plus channel.moderate, per channel
+	waitFor(t, "both channels subscribed", func() bool { return rec.postCount() == 12 })
+
+	s.Join("c", nil)
+	waitFor(t, "late join subscribed on the live socket", func() bool { return rec.postCount() == 18 })
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	seen := map[string]int{}
+	for _, p := range rec.posts {
+		if p.Transport.SessionID != "sess-3" {
+			t.Fatalf("subscription made on wrong session: %+v", p)
+		}
+		seen[p.Condition["broadcaster_user_id"]]++
+	}
+	if seen["a"] != 6 || seen["b"] != 6 || seen["c"] != 6 {
+		t.Fatalf("unexpected per-channel subscriptions: %v", seen)
 	}
 }
 
-func TestClientAuthError(t *testing.T) {
-	helixSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+func TestSessionLeaveDeletesOnlyThatChannel(t *testing.T) {
+	helix, rec := acceptingHelix(t)
+	ws := wsServer(t, func(conn *websocket.Conn, _ int) {
+		_ = conn.Write(context.Background(), websocket.MessageText, welcomeMsg("sess-4", 30))
+		time.Sleep(3 * time.Second)
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := newTestSession(ctx, ws, helix.URL, make(chan []byte, 16), nil)
+	s.Join("a", nil)
+	waitFor(t, "a subscribed", func() bool { return rec.postCount() == 6 })
+	s.Join("b", nil)
+	waitFor(t, "b subscribed", func() bool { return rec.postCount() == 12 })
+
+	s.Leave("a")
+	waitFor(t, "a's subscriptions deleted", func() bool { return len(rec.deleted()) == 6 })
+	for _, id := range rec.deleted() {
+		n := 0
+		_, _ = fmt.Sscanf(id, "sub-%d", &n)
+		if n < 1 || n > 6 {
+			t.Fatalf("deleted a subscription that was not a's: %s", id)
+		}
+	}
+	if joined := s.Joined(); len(joined) != 1 || joined[0] != "b" {
+		t.Fatalf("expected only b to remain, got %v", joined)
+	}
+}
+
+func TestSessionAuthErrorIsReported(t *testing.T) {
+	helix := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"error":"Unauthorized"}`))
 	}))
-	defer helixSrv.Close()
-
-	wsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := websocket.Accept(w, r, nil)
-		if err != nil {
-			return
-		}
-		defer func() { _ = conn.CloseNow() }()
-
-		ctx := context.Background()
-		_ = conn.Write(ctx, websocket.MessageText, welcomeMsg("sess-3", 30))
-
+	defer helix.Close()
+	ws := wsServer(t, func(conn *websocket.Conn, _ int) {
+		_ = conn.Write(context.Background(), websocket.MessageText, welcomeMsg("sess-5", 30))
 		time.Sleep(2 * time.Second)
-	}))
-	defer wsSrv.Close()
-
-	out := make(chan []byte, 16)
+	})
 
 	var notified atomic.Bool
-	client := newTestClient(
-		"ws"+strings.TrimPrefix(wsSrv.URL, "http"),
-		helixSrv.URL,
-		out,
-	)
-	client.Notify = func(msgType string, _ any) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	newTestSession(ctx, ws, helix.URL, make(chan []byte, 16), func(msgType string, _ any) {
 		if msgType == "auth_error" {
 			notified.Store(true)
 		}
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	err := client.Run(ctx)
-	if err == nil {
-		t.Fatal("expected error on auth failure")
-	}
-	if !notified.Load() {
-		t.Fatal("expected auth_error notification")
-	}
+	}).Join("broadcaster-1", nil)
+	waitFor(t, "auth_error notification", notified.Load)
 }
 
-func TestClientReconnect(t *testing.T) {
-	helixSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusAccepted)
-	}))
-	defer helixSrv.Close()
-
+func TestSessionReconnectCarriesSubscriptionsOver(t *testing.T) {
+	helix, rec := acceptingHelix(t)
 	var secondConnected atomic.Bool
-
-	// second server (reconnect target)
-	secondSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := websocket.Accept(w, r, nil)
-		if err != nil {
-			return
-		}
-		defer func() { _ = conn.CloseNow() }()
+	second := wsServer(t, func(conn *websocket.Conn, _ int) {
 		secondConnected.Store(true)
-
 		ctx := context.Background()
 		_ = conn.Write(ctx, websocket.MessageText, welcomeMsg("sess-new", 30))
 		_ = conn.Write(ctx, websocket.MessageText, notificationMsg("n-after-reconnect", "reconnected"))
-
-		time.Sleep(100 * time.Millisecond)
-		_ = conn.Close(websocket.StatusNormalClosure, "done")
-	}))
-	defer secondSrv.Close()
-
-	reconnectURL := "ws" + strings.TrimPrefix(secondSrv.URL, "http")
-
-	// first server sends reconnect
-	firstSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := websocket.Accept(w, r, nil)
-		if err != nil {
-			return
-		}
-		defer func() { _ = conn.CloseNow() }()
-
+		time.Sleep(2 * time.Second)
+	})
+	first := wsServer(t, func(conn *websocket.Conn, _ int) {
 		ctx := context.Background()
 		_ = conn.Write(ctx, websocket.MessageText, welcomeMsg("sess-old", 30))
-
-		reconnectMsg := fmt.Sprintf(`{
+		reconnect := fmt.Sprintf(`{
 			"metadata":{"message_id":"r-1","message_type":"session_reconnect","message_timestamp":"2025-01-01T00:00:03Z"},
 			"payload":{"session":{"id":"sess-old","reconnect_url":"%s"}}
-		}`, reconnectURL)
-		_ = conn.Write(ctx, websocket.MessageText, []byte(reconnectMsg))
-
+		}`, second)
+		_ = conn.Write(ctx, websocket.MessageText, []byte(reconnect))
 		time.Sleep(2 * time.Second)
-	}))
-	defer firstSrv.Close()
+	})
 
 	out := make(chan []byte, 16)
-	client := newTestClient(
-		"ws"+strings.TrimPrefix(firstSrv.URL, "http"),
-		helixSrv.URL,
-		out,
-	)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	newTestSession(ctx, first, helix.URL, out, nil).Join("broadcaster-1", nil)
 
-	_ = client.Run(ctx)
-
-	if !secondConnected.Load() {
-		t.Fatal("expected client to connect to reconnect URL")
-	}
-
-	msgs := drainChan(out)
-	if len(msgs) < 1 {
-		t.Fatal("expected at least 1 message after reconnect")
+	waitFor(t, "connection to the reconnect url", secondConnected.Load)
+	waitFor(t, "message after reconnect", func() bool { return len(out) >= 1 })
+	// The reconnect url carries the old subscriptions, so nothing is
+	// subscribed twice.
+	time.Sleep(100 * time.Millisecond)
+	if n := rec.postCount(); n != 6 {
+		t.Fatalf("expected 6 subscriptions in total, got %d", n)
 	}
 }
 
-func TestClientRevocation(t *testing.T) {
-	helixSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusAccepted)
-	}))
-	defer helixSrv.Close()
-
-	wsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := websocket.Accept(w, r, nil)
-		if err != nil {
+func TestSessionResubscribesAfterADrop(t *testing.T) {
+	helix, rec := acceptingHelix(t)
+	ws := wsServer(t, func(conn *websocket.Conn, n int) {
+		_ = conn.Write(context.Background(), websocket.MessageText, welcomeMsg(fmt.Sprintf("sess-%d", n), 30))
+		if n == 1 {
+			_ = conn.Close(websocket.StatusNormalClosure, "bye")
 			return
 		}
-		defer func() { _ = conn.CloseNow() }()
+		time.Sleep(3 * time.Second)
+	})
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	newTestSession(ctx, ws, helix.URL, make(chan []byte, 16), nil).Join("broadcaster-1", nil)
+	waitFor(t, "subscriptions on both sockets", func() bool { return rec.postCount() == 12 })
+}
+
+func TestSessionRevocationIsReportedAndKeepsTheSocket(t *testing.T) {
+	helix, _ := acceptingHelix(t)
+	var dials atomic.Int32
+	ws := wsServer(t, func(conn *websocket.Conn, _ int) {
+		dials.Add(1)
 		ctx := context.Background()
 		_ = conn.Write(ctx, websocket.MessageText, welcomeMsg("sess-rev", 30))
-		_ = conn.Write(ctx, websocket.MessageText, []byte(`{
-			"metadata":{"message_id":"rev-1","message_type":"revocation","message_timestamp":"2025-01-01T00:00:04Z"},
-			"payload":{"subscription":{"type":"channel.chat.message","status":"user_removed"}}
-		}`))
-
+		_ = conn.Write(ctx, websocket.MessageText, revocationMsg("user_removed", "broadcaster-1"))
 		time.Sleep(2 * time.Second)
-	}))
-	defer wsSrv.Close()
-
-	out := make(chan []byte, 16)
+	})
 
 	var notifyType atomic.Value
-	client := newTestClient(
-		"ws"+strings.TrimPrefix(wsSrv.URL, "http"),
-		helixSrv.URL,
-		out,
-	)
-	client.Notify = func(msgType string, _ any) {
-		notifyType.Store(msgType)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	newTestSession(ctx, ws, helix.URL, make(chan []byte, 16), func(msgType string, _ any) {
+		if msgType == "revocation" {
+			notifyType.Store(msgType)
+		}
+	}).Join("broadcaster-1", nil)
 
-	err := client.Run(ctx)
-	if err == nil {
-		t.Fatal("expected error on revocation")
-	}
-
-	v := notifyType.Load()
-	if v == nil || v.(string) != "revocation" {
-		t.Fatalf("expected revocation notification, got %v", v)
+	waitFor(t, "revocation notification", func() bool { return notifyType.Load() != nil })
+	time.Sleep(300 * time.Millisecond)
+	if dials.Load() != 1 {
+		t.Fatalf("a revocation must not drop the socket, got %d connections", dials.Load())
 	}
 }
 
-func TestClientChannelFull(t *testing.T) {
-	helixSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusAccepted)
+func TestSessionDropsAChannelWhenSubscribeIsForbidden(t *testing.T) {
+	helix := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":"Forbidden","status":403,"message":"subscription missing proper authorization"}`))
 	}))
-	defer helixSrv.Close()
+	defer helix.Close()
+	var dials atomic.Int32
+	ws := wsServer(t, func(conn *websocket.Conn, _ int) {
+		dials.Add(1)
+		_ = conn.Write(context.Background(), websocket.MessageText, welcomeMsg("sess-ban", 30))
+		time.Sleep(2 * time.Second)
+	})
 
-	wsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := websocket.Accept(w, r, nil)
-		if err != nil {
-			return
+	var got atomic.Value
+	var detail atomic.Value
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := newTestSession(ctx, ws, helix.URL, make(chan []byte, 16), func(msgType string, payload any) {
+		if msgType == "chat_banned" {
+			got.Store(payload)
 		}
-		defer func() { _ = conn.CloseNow() }()
+	})
+	s.Join("broadcaster-1", func(d string) { detail.Store(d) })
 
+	waitFor(t, "ban callback", func() bool { return detail.Load() != nil })
+	if !strings.Contains(detail.Load().(string), "missing proper authorization") {
+		t.Fatalf("unexpected detail %q", detail.Load())
+	}
+	p, ok := got.Load().(ChatBannedPayload)
+	if !ok || p.BroadcasterID != "broadcaster-1" {
+		t.Fatalf("unexpected chat_banned payload: %#v", got.Load())
+	}
+	if len(s.Joined()) != 0 {
+		t.Fatalf("banned channel should be dropped, still joined: %v", s.Joined())
+	}
+	if dials.Load() != 1 {
+		t.Fatalf("expected a single connection, got %d", dials.Load())
+	}
+}
+
+func TestSessionDropsOnlyTheBannedChannelOnRevocation(t *testing.T) {
+	helix, _ := acceptingHelix(t)
+	var dials atomic.Int32
+	ws := wsServer(t, func(conn *websocket.Conn, _ int) {
+		dials.Add(1)
+		ctx := context.Background()
+		_ = conn.Write(ctx, websocket.MessageText, welcomeMsg("sess-rev-ban", 30))
+		time.Sleep(200 * time.Millisecond)
+		_ = conn.Write(ctx, websocket.MessageText, revocationMsg("chat_user_banned", "a"))
+		time.Sleep(2 * time.Second)
+	})
+
+	var detail atomic.Value
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := newTestSession(ctx, ws, helix.URL, make(chan []byte, 16), nil)
+	s.Join("a", func(d string) { detail.Store(d) })
+	s.Join("b", nil)
+
+	waitFor(t, "ban callback", func() bool { return detail.Load() != nil })
+	if detail.Load().(string) != "chat_user_banned" {
+		t.Fatalf("unexpected detail %q", detail.Load())
+	}
+	if joined := s.Joined(); len(joined) != 1 || joined[0] != "b" {
+		t.Fatalf("expected b to stay joined, got %v", joined)
+	}
+	if dials.Load() != 1 {
+		t.Fatalf("expected no reconnect after a ban, got %d connections", dials.Load())
+	}
+}
+
+func TestSessionChannelFull(t *testing.T) {
+	helix, _ := acceptingHelix(t)
+	done := make(chan struct{})
+	ws := wsServer(t, func(conn *websocket.Conn, _ int) {
 		ctx := context.Background()
 		_ = conn.Write(ctx, websocket.MessageText, welcomeMsg("sess-full", 30))
-
-		// send many notifications without anyone draining the channel
 		for i := range 20 {
 			_ = conn.Write(ctx, websocket.MessageText, notificationMsg(
 				fmt.Sprintf("n-%d", i),
 				"will eventually overflow the tiny channel",
 			))
 		}
-
 		time.Sleep(100 * time.Millisecond)
 		_ = conn.Close(websocket.StatusNormalClosure, "done")
-	}))
-	defer wsSrv.Close()
+		close(done)
+	})
 
-	// tiny channel that fills almost immediately; the client must drop
+	// tiny channel that fills almost immediately; the session must drop
 	// without blocking the websocket reader.
-	out := make(chan []byte, 1)
-	client := newTestClient(
-		"ws"+strings.TrimPrefix(wsSrv.URL, "http"),
-		helixSrv.URL,
-		out,
-	)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	// should not panic, just drop messages
-	_ = client.Run(ctx)
+	newTestSession(ctx, ws, helix.URL, make(chan []byte, 1), nil).Join("broadcaster-1", nil)
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("server never finished writing; reader stalled")
+	}
 }
 
 func TestReconnectErrorMessage(t *testing.T) {
 	e := &reconnectError{url: "wss://example.com/new"}
-	got := e.Error()
-	if got != "reconnect to wss://example.com/new" {
+	if got := e.Error(); got != "reconnect to wss://example.com/new" {
 		t.Fatalf("unexpected error message: %s", got)
 	}
 }
 
-func TestClient_wsURLDefault(t *testing.T) {
-	c := &Client{}
-	if got := c.wsURL(); got != defaultWSURL {
+func TestSession_wsURL(t *testing.T) {
+	if got := (&Session{}).wsURL(); got != defaultWSURL {
 		t.Errorf("expected default %q, got %q", defaultWSURL, got)
 	}
-}
-
-func TestClient_wsURLOverride(t *testing.T) {
-	c := &Client{WSURL: "wss://override.example/ws"}
-	if got := c.wsURL(); got != "wss://override.example/ws" {
+	if got := (&Session{WSURL: "wss://override.example/ws"}).wsURL(); got != "wss://override.example/ws" {
 		t.Errorf("expected override, got %q", got)
 	}
 }
 
-func TestClient_AccessTokenConcurrent(t *testing.T) {
-	c := NewClient("b", "u", "initial", "cid", nil, zerolog.Nop(), nil)
+func TestSession_AccessTokenConcurrent(t *testing.T) {
+	s := NewSession(context.Background(), nil, zerolog.Nop(), nil)
+	s.Configure("u", "initial", "cid")
 
 	done := make(chan struct{})
 	go func() {
 		for i := 0; i < 1000; i++ {
-			c.SetAccessToken("rotated")
+			s.SetAccessToken("rotated")
 		}
 		close(done)
 	}()
 	for i := 0; i < 1000; i++ {
-		_ = c.AccessToken()
+		_ = s.AccessToken()
 	}
 	<-done
 
-	if got := c.AccessToken(); got != "rotated" {
+	if got := s.AccessToken(); got != "rotated" {
 		t.Errorf("expected rotated, got %q", got)
-	}
-}
-
-func TestClientHandlesUnknownMessageType(t *testing.T) {
-	helixSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusAccepted)
-	}))
-	defer helixSrv.Close()
-
-	wsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := websocket.Accept(w, r, nil)
-		if err != nil {
-			return
-		}
-		defer func() { _ = conn.CloseNow() }()
-
-		ctx := context.Background()
-		_ = conn.Write(ctx, websocket.MessageText, welcomeMsg("sess-unknown", 30))
-		_ = conn.Write(ctx, websocket.MessageText, []byte(`{"metadata":{"message_id":"u-1","message_type":"future_type","message_timestamp":"2025-01-01T00:00:05Z"},"payload":{}}`))
-		_ = conn.Write(ctx, websocket.MessageText, notificationMsg("n-after-unknown", "still working"))
-
-		time.Sleep(100 * time.Millisecond)
-		_ = conn.Close(websocket.StatusNormalClosure, "done")
-	}))
-	defer wsSrv.Close()
-
-	out := make(chan []byte, 16)
-	client := newTestClient(
-		"ws"+strings.TrimPrefix(wsSrv.URL, "http"),
-		helixSrv.URL,
-		out,
-	)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	_ = client.Run(ctx)
-
-	// the unknown type message must not break the loop; we should still see
-	// the notification that came after it
-	msgs := drainChan(out)
-	if len(msgs) < 1 {
-		t.Fatal("expected the post-unknown notification to make it through")
-	}
-}
-
-func TestClientHandlesMalformedEnvelope(t *testing.T) {
-	helixSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusAccepted)
-	}))
-	defer helixSrv.Close()
-
-	wsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := websocket.Accept(w, r, nil)
-		if err != nil {
-			return
-		}
-		defer func() { _ = conn.CloseNow() }()
-
-		ctx := context.Background()
-		_ = conn.Write(ctx, websocket.MessageText, welcomeMsg("sess-malformed", 30))
-		_ = conn.Write(ctx, websocket.MessageText, []byte(`not json at all`))
-		_ = conn.Write(ctx, websocket.MessageText, notificationMsg("n-after-bad", "still alive"))
-
-		time.Sleep(100 * time.Millisecond)
-		_ = conn.Close(websocket.StatusNormalClosure, "done")
-	}))
-	defer wsSrv.Close()
-
-	out := make(chan []byte, 16)
-	client := newTestClient(
-		"ws"+strings.TrimPrefix(wsSrv.URL, "http"),
-		helixSrv.URL,
-		out,
-	)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	_ = client.Run(ctx)
-
-	msgs := drainChan(out)
-	if len(msgs) < 1 {
-		t.Fatal("expected the post-malformed notification to make it through")
 	}
 }

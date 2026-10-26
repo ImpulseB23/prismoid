@@ -21,127 +21,298 @@ const defaultWSURL = "wss://eventsub.wss.twitch.tv/ws"
 // the Rust host should know about. The caller wires this to stdout JSON.
 type Notify func(msgType string, payload any)
 
-// Client streams Twitch EventSub notifications and writes raw envelope bytes
-// to a shared channel. The sidecar owns the channel and a single writer
-// goroutine drains it into the ring buffer, preserving the SPSC invariant
-// across all platform clients.
-type Client struct {
-	BroadcasterID string
-	UserID        string
-	ClientID      string
-	HelixBase     string // override for testing; "" uses default
-	WSURL         string // override for testing; "" uses default
+// ChatBannedPayload is the `chat_banned` notification: Twitch refuses to
+// deliver this channel's chat to the signed-in user, who is banned or timed
+// out there. Detail carries Twitch's own wording (403 body or revocation
+// status) for the log and the UI.
+type ChatBannedPayload struct {
+	BroadcasterID string `json:"broadcaster_id"`
+	Detail        string `json:"detail"`
+}
+
+// Session owns one EventSub WebSocket and the chat subscriptions of every
+// joined channel. Twitch allows three sockets per user, so channels share
+// one: a join adds that channel's subscriptions to the live session, a
+// leave deletes them, and a fresh socket subscribes every joined channel
+// again. Notifications for all channels flow to Out as raw envelope bytes;
+// the host routes them by broadcaster id.
+type Session struct {
+	HelixBase string // override for testing; "" uses default
+	WSURL     string // override for testing; "" uses default
 
 	Out    chan<- []byte
 	Log    zerolog.Logger
 	Notify Notify
 
-	mu          sync.RWMutex
+	ctx context.Context
+
+	mu          sync.Mutex
+	userID      string
+	clientID    string
 	accessToken string
+	channels    map[string]*channelSubs
+	// sessionID is "" while no socket is up; subscriptions made against it
+	// die with the socket.
+	sessionID string
+	running   bool
 }
 
-// NewClient constructs a Client with the given access token. The token
-// can be rotated mid-session via SetAccessToken.
-func NewClient(broadcasterID, userID, accessToken, clientID string, out chan<- []byte, log zerolog.Logger, notify Notify) *Client {
-	return &Client{
-		BroadcasterID: broadcasterID,
-		UserID:        userID,
-		ClientID:      clientID,
-		Out:           out,
-		Log:           log,
-		Notify:        notify,
-		accessToken:   accessToken,
+// channelSubs is one joined channel: its live subscription ids and what to
+// do when Twitch says the user may not read it.
+type channelSubs struct {
+	ids      []string
+	onBanned func(detail string)
+}
+
+// NewSession makes an idle session; the socket opens on the first Join and
+// closes once ctx ends.
+func NewSession(ctx context.Context, out chan<- []byte, log zerolog.Logger, notify Notify) *Session {
+	return &Session{
+		Out:      out,
+		Log:      log,
+		Notify:   notify,
+		ctx:      ctx,
+		channels: make(map[string]*channelSubs),
 	}
+}
+
+// Configure sets the identity every subscription is made as. The token can
+// be rotated later with SetAccessToken.
+func (s *Session) Configure(userID, accessToken, clientID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.userID = userID
+	s.clientID = clientID
+	s.accessToken = accessToken
 }
 
 // AccessToken returns the current token. Safe for concurrent use.
-func (c *Client) AccessToken() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.accessToken
+func (s *Session) AccessToken() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.accessToken
 }
 
-// SetAccessToken rotates the token. The next EventSub reconnect or Helix
-// call will pick up the new value.
-func (c *Client) SetAccessToken(token string) {
-	c.mu.Lock()
-	c.accessToken = token
-	c.mu.Unlock()
+// SetAccessToken rotates the token. The next subscribe or Helix call picks
+// up the new value.
+func (s *Session) SetAccessToken(token string) {
+	s.mu.Lock()
+	s.accessToken = token
+	s.mu.Unlock()
 }
 
-// Run connects to EventSub and reads messages until ctx is cancelled.
-// It reconnects automatically on errors with exponential backoff.
-func (c *Client) Run(ctx context.Context) error {
-	bo := backoff.New(1*time.Second, 30*time.Second)
-	wsURL := c.WSURL
-	if wsURL == "" {
-		wsURL = defaultWSURL
+// Joined lists the broadcaster ids currently followed.
+func (s *Session) Joined() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ids := make([]string, 0, len(s.channels))
+	for id := range s.channels {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+// Join starts delivering a channel's chat. If the socket is already up the
+// subscriptions go out now; otherwise they go out when it connects.
+// `onBanned` runs (at most once per join) when Twitch refuses the chat for
+// a ban or timeout, after which the channel is dropped from the session.
+func (s *Session) Join(broadcasterID string, onBanned func(detail string)) {
+	s.mu.Lock()
+	if _, exists := s.channels[broadcasterID]; exists {
+		s.mu.Unlock()
+		return
+	}
+	s.channels[broadcasterID] = &channelSubs{onBanned: onBanned}
+	sessionID := s.sessionID
+	if !s.running {
+		s.running = true
+		go s.run()
+	}
+	s.mu.Unlock()
+
+	if sessionID != "" {
+		go s.subscribeChannel(sessionID, broadcasterID)
+	}
+}
+
+// Leave stops delivering a channel's chat and deletes its subscriptions.
+func (s *Session) Leave(broadcasterID string) {
+	s.mu.Lock()
+	subs, ok := s.channels[broadcasterID]
+	delete(s.channels, broadcasterID)
+	s.mu.Unlock()
+	if !ok || len(subs.ids) == 0 {
+		return
+	}
+	go s.deleteSubscriptions(subs.ids)
+}
+
+func (s *Session) helix() *HelixClient {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return &HelixClient{
+		BaseURL:     s.HelixBase,
+		ClientID:    s.clientID,
+		AccessToken: s.accessToken,
+	}
+}
+
+// subscribeChannel creates one channel's subscriptions on `sessionID` and
+// records their ids, unless the channel left or the socket changed in the
+// meantime. A 403 means the user is banned or timed out there.
+func (s *Session) subscribeChannel(sessionID, broadcasterID string) {
+	s.mu.Lock()
+	userID := s.userID
+	s.mu.Unlock()
+
+	ids, err := Subscribe(s.ctx, s.helix(), sessionID, broadcasterID, userID)
+	if err != nil {
+		var denied *ChatAccessError
+		if errors.As(err, &denied) {
+			s.Log.Warn().Str("broadcaster", broadcasterID).Str("body", denied.Body).Msg("chat subscription forbidden: banned or timed out")
+			s.dropBanned(broadcasterID, denied.Body)
+			return
+		}
+		var authErr *AuthError
+		if errors.As(err, &authErr) && s.Notify != nil {
+			s.Notify("auth_error", authErr.Error())
+		}
+		s.Log.Error().Err(err).Str("broadcaster", broadcasterID).Msg("chat subscribe failed")
+		return
+	}
+	// Twitch only grants channel.moderate to the broadcaster and their
+	// moderators, so a refusal here is the normal case in most channels.
+	if modID, err := SubscribeModeration(s.ctx, s.helix(), sessionID, broadcasterID, userID); err != nil {
+		s.Log.Info().Err(err).Str("broadcaster", broadcasterID).Msg("moderation feed unavailable; not a moderator here or scopes missing")
+	} else {
+		ids = append(ids, modID)
 	}
 
-	for {
-		err := c.connectAndListen(ctx, wsURL)
-		if err == nil || errors.Is(err, context.Canceled) {
-			return err
-		}
+	s.mu.Lock()
+	subs, ok := s.channels[broadcasterID]
+	stale := s.sessionID != sessionID
+	if ok && !stale {
+		subs.ids = ids
+	}
+	s.mu.Unlock()
+	if !ok || stale {
+		go s.deleteSubscriptions(ids)
+		return
+	}
+	s.Log.Info().Str("broadcaster", broadcasterID).Int("subscriptions", len(ids)).Msg("subscribed to chat events")
+}
 
-		// reconnect messages provide a URL; on normal errors use the default
+// dropBanned removes a channel Twitch will not deliver and tells its owner.
+func (s *Session) dropBanned(broadcasterID, detail string) {
+	s.mu.Lock()
+	subs, ok := s.channels[broadcasterID]
+	delete(s.channels, broadcasterID)
+	s.mu.Unlock()
+	if !ok {
+		return
+	}
+	if s.Notify != nil {
+		s.Notify("chat_banned", ChatBannedPayload{BroadcasterID: broadcasterID, Detail: detail})
+	}
+	if subs.onBanned != nil {
+		subs.onBanned(detail)
+	}
+	if len(subs.ids) > 0 {
+		go s.deleteSubscriptions(subs.ids)
+	}
+}
+
+func (s *Session) deleteSubscriptions(ids []string) {
+	client := s.helix()
+	for _, id := range ids {
+		if err := DeleteSubscription(s.ctx, client, id); err != nil && s.ctx.Err() == nil {
+			s.Log.Warn().Err(err).Str("subscription", id).Msg("failed to delete eventsub subscription")
+		}
+	}
+}
+
+// run keeps a socket up while there are channels to follow, reconnecting
+// with backoff. It returns when the context ends or the last channel left,
+// in which case the next Join starts it again.
+func (s *Session) run() {
+	bo := backoff.New(1*time.Second, 30*time.Second)
+	wsURL := s.wsURL()
+
+	for {
+		s.mu.Lock()
+		if len(s.channels) == 0 || s.ctx.Err() != nil {
+			s.running = false
+			s.sessionID = ""
+			s.mu.Unlock()
+			return
+		}
+		s.mu.Unlock()
+
+		err := s.connectAndListen(s.ctx, wsURL)
+
+		s.mu.Lock()
+		s.sessionID = ""
+		s.mu.Unlock()
+
+		if s.ctx.Err() != nil {
+			continue
+		}
 		var re *reconnectError
 		if errors.As(err, &re) {
 			wsURL = re.url
 			bo.Reset()
 			continue
 		}
-
-		wsURL = c.wsURL()
-		c.Log.Warn().Err(err).Msg("eventsub disconnected, reconnecting")
-
-		delay := bo.Next()
+		wsURL = s.wsURL()
+		s.Log.Warn().Err(err).Msg("eventsub disconnected, reconnecting")
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(delay):
+		case <-s.ctx.Done():
+		case <-time.After(bo.Next()):
 		}
 	}
 }
 
-func (c *Client) wsURL() string {
-	if c.WSURL != "" {
-		return c.WSURL
+func (s *Session) wsURL() string {
+	if s.WSURL != "" {
+		return s.WSURL
 	}
 	return defaultWSURL
 }
 
-func (c *Client) connectAndListen(ctx context.Context, url string) error {
+func (s *Session) connectAndListen(ctx context.Context, url string) error {
 	conn, _, err := websocket.Dial(ctx, url, nil)
 	if err != nil {
 		return fmt.Errorf("dial %s: %w", url, err)
 	}
 	defer func() { _ = conn.CloseNow() }()
 
-	sessionID, keepalive, err := c.readWelcome(ctx, conn)
+	sessionID, keepalive, err := readWelcome(ctx, conn)
 	if err != nil {
 		return err
 	}
+	s.Log.Info().Str("session", sessionID).Int("keepalive_s", keepalive).Msg("connected to eventsub")
 
-	c.Log.Info().Str("session", sessionID).Int("keepalive_s", keepalive).Msg("connected to eventsub")
-
-	if err := Subscribe(ctx, c.HelixBase, sessionID, c.BroadcasterID, c.UserID, c.AccessToken(), c.ClientID); err != nil {
-		var authErr *AuthError
-		if errors.As(err, &authErr) {
-			if c.Notify != nil {
-				c.Notify("auth_error", authErr.Error())
-			}
-			return err
+	// A reconnect URL carries the old session's subscriptions over, so only
+	// a fresh socket subscribes the joined channels again.
+	s.mu.Lock()
+	carried := url != s.wsURL()
+	s.sessionID = sessionID
+	var pending []string
+	if !carried {
+		for id, subs := range s.channels {
+			subs.ids = nil
+			pending = append(pending, id)
 		}
-		return fmt.Errorf("subscribe: %w", err)
+	}
+	s.mu.Unlock()
+	for _, id := range pending {
+		go s.subscribeChannel(sessionID, id)
 	}
 
-	c.Log.Info().Msg("subscribed to channel.chat.message")
-
-	return c.listenLoop(ctx, conn, keepalive)
+	return s.listenLoop(ctx, conn, keepalive)
 }
 
-func (c *Client) readWelcome(ctx context.Context, conn *websocket.Conn) (string, int, error) {
+func readWelcome(ctx context.Context, conn *websocket.Conn) (string, int, error) {
 	// twitch expects subscription within keepalive_timeout_seconds (default 10s)
 	readCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -168,7 +339,7 @@ func (c *Client) readWelcome(ctx context.Context, conn *websocket.Conn) (string,
 	return payload.Session.ID, payload.Session.KeepaliveTimeoutSeconds, nil
 }
 
-func (c *Client) listenLoop(ctx context.Context, conn *websocket.Conn, keepaliveSec int) error {
+func (s *Session) listenLoop(ctx context.Context, conn *websocket.Conn, keepaliveSec int) error {
 	// Each Read uses a fresh context.WithTimeout, so the keepalive timeout is
 	// enforced per read. No standalone timer needed.
 	timeout := time.Duration(keepaliveSec)*time.Second + time.Second
@@ -187,7 +358,7 @@ func (c *Client) listenLoop(ctx context.Context, conn *websocket.Conn, keepalive
 
 		var env Envelope
 		if err := json.Unmarshal(data, &env); err != nil {
-			c.Log.Error().Err(err).Msg("unmarshal envelope failed")
+			s.Log.Error().Err(err).Msg("unmarshal envelope failed")
 			continue
 		}
 
@@ -207,9 +378,9 @@ func (c *Client) listenLoop(ctx context.Context, conn *websocket.Conn, keepalive
 			copy(tagged[1:], data)
 
 			select {
-			case c.Out <- tagged:
+			case s.Out <- tagged:
 			default:
-				c.Log.Warn().Msg("output channel full, dropping message")
+				s.Log.Warn().Msg("output channel full, dropping message")
 			}
 
 		case "session_keepalive":
@@ -218,21 +389,31 @@ func (c *Client) listenLoop(ctx context.Context, conn *websocket.Conn, keepalive
 		case "session_reconnect":
 			var payload ReconnectPayload
 			if err := json.Unmarshal(env.Payload, &payload); err != nil {
-				c.Log.Error().Err(err).Msg("unmarshal reconnect payload")
+				s.Log.Error().Err(err).Msg("unmarshal reconnect payload")
 				continue
 			}
-			c.Log.Info().Str("url", payload.Session.ReconnectURL).Msg("reconnect requested")
+			s.Log.Info().Str("url", payload.Session.ReconnectURL).Msg("reconnect requested")
 			return &reconnectError{url: payload.Session.ReconnectURL}
 
 		case "revocation":
-			c.Log.Warn().RawJSON("payload", env.Payload).Msg("subscription revoked")
-			if c.Notify != nil {
-				c.Notify("revocation", json.RawMessage(env.Payload))
+			var payload RevocationPayload
+			if err := json.Unmarshal(env.Payload, &payload); err != nil {
+				s.Log.Error().Err(err).Msg("unmarshal revocation payload")
 			}
-			return fmt.Errorf("subscription revoked")
+			sub := payload.Subscription
+			s.Log.Warn().Str("status", sub.Status).Str("broadcaster", sub.Condition.BroadcasterUserID).RawJSON("payload", env.Payload).Msg("subscription revoked")
+			// Only this channel is affected; the socket and every other
+			// channel carry on.
+			if sub.Status == revokedChatUserBanned {
+				s.dropBanned(sub.Condition.BroadcasterUserID, sub.Status)
+				continue
+			}
+			if s.Notify != nil {
+				s.Notify("revocation", json.RawMessage(env.Payload))
+			}
 
 		default:
-			c.Log.Debug().Str("type", env.Metadata.MessageType).Msg("unhandled message type")
+			s.Log.Debug().Str("type", env.Metadata.MessageType).Msg("unhandled message type")
 		}
 	}
 }

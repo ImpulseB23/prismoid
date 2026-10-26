@@ -7,9 +7,11 @@ use std::sync::Arc;
 
 use serde::Serialize;
 use tokio::sync::{Mutex, Notify};
+use twitch_oauth2::Scope;
 
 use super::errors::AuthError;
 use super::manager::{AuthManager, PendingDeviceFlow};
+use super::tokens::TwitchTokens;
 
 /// Shared auth state held in Tauri's managed-state map. The supervisor
 /// holds a clone of the same `Arc<AuthManager>` and the same
@@ -36,17 +38,24 @@ impl AuthState {
     }
 
     pub fn status(&self) -> Result<AuthStatus, AuthCommandError> {
-        let login = self.manager.peek_login()?;
-        Ok(match login {
-            Some(l) => AuthStatus {
-                state: AuthStatusState::LoggedIn,
-                login: Some(l),
-            },
+        Ok(match self.manager.peek_tokens()? {
+            Some(tokens) => self.logged_in(&tokens),
             None => AuthStatus {
                 state: AuthStatusState::LoggedOut,
                 login: None,
+                user_id: None,
+                missing_scopes: Vec::new(),
             },
         })
+    }
+
+    fn logged_in(&self, tokens: &TwitchTokens) -> AuthStatus {
+        AuthStatus {
+            state: AuthStatusState::LoggedIn,
+            login: Some(tokens.login.clone()),
+            user_id: Some(tokens.user_id.clone()),
+            missing_scopes: missing_scopes(self.manager.scopes(), &tokens.scopes),
+        }
     }
 
     pub async fn start_login(&self) -> Result<DeviceCodeView, AuthCommandError> {
@@ -70,10 +79,7 @@ impl AuthState {
         // parked on notified(), so the wake can't be lost between login
         // completing and the supervisor reaching its await.
         self.wakeup.notify_one();
-        Ok(AuthStatus {
-            state: AuthStatusState::LoggedIn,
-            login: Some(tokens.login),
-        })
+        Ok(self.logged_in(&tokens))
     }
 
     pub async fn cancel_login(&self) {
@@ -90,12 +96,26 @@ impl AuthState {
 
 /// Result of `twitch_auth_status`. The frontend uses `state` to pick
 /// between the SignIn overlay and the chat view; `login` is rendered
-/// in the header bar when logged in.
+/// in the header bar when logged in. `missing_scopes` lists what the
+/// app now asks for that the stored grant lacks, so the UI can offer a
+/// reconnect instead of letting moderation fail with a 401.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct AuthStatus {
     pub state: AuthStatusState,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub login: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<String>,
+    pub missing_scopes: Vec<String>,
+}
+
+/// Requested scopes absent from the granted set, in request order.
+pub fn missing_scopes(requested: &[Scope], granted: &[String]) -> Vec<String> {
+    requested
+        .iter()
+        .map(|s| s.to_string())
+        .filter(|s| !granted.contains(s))
+        .collect()
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -225,6 +245,8 @@ mod tests {
         let s = AuthStatus {
             state: AuthStatusState::LoggedOut,
             login: None,
+            user_id: None,
+            missing_scopes: Vec::new(),
         };
         let v: serde_json::Value = serde_json::to_value(&s).unwrap();
         assert_eq!(v["state"], "logged_out");
@@ -239,10 +261,51 @@ mod tests {
         let s = AuthStatus {
             state: AuthStatusState::LoggedIn,
             login: Some("tester".into()),
+            user_id: Some("12345".into()),
+            missing_scopes: vec!["moderator:manage:banned_users".into()],
         };
         let v: serde_json::Value = serde_json::to_value(&s).unwrap();
         assert_eq!(v["state"], "logged_in");
         assert_eq!(v["login"], "tester");
+        assert_eq!(v["user_id"], "12345");
+        assert_eq!(v["missing_scopes"][0], "moderator:manage:banned_users");
+    }
+
+    #[test]
+    fn missing_scopes_keeps_request_order() {
+        let requested = [
+            Scope::UserReadChat,
+            Scope::ModeratorManageBannedUsers,
+            Scope::UserWriteChat,
+        ];
+        let granted = vec!["user:read:chat".to_string()];
+        assert_eq!(
+            missing_scopes(&requested, &granted),
+            vec!["moderator:manage:banned_users", "user:write:chat"]
+        );
+        let all = vec![
+            "user:read:chat".to_string(),
+            "moderator:manage:banned_users".to_string(),
+            "user:write:chat".to_string(),
+        ];
+        assert!(missing_scopes(&requested, &all).is_empty());
+    }
+
+    #[tokio::test]
+    async fn status_reports_scopes_the_stored_grant_lacks() {
+        let store = MemoryStore::default();
+        store.save(&fixture_tokens()).unwrap();
+        let manager = Arc::new(
+            AuthManagerBuilder::new("test_client_id")
+                .scope(Scope::UserReadChat)
+                .scope(Scope::UserWriteChat)
+                .build(store, http_client()),
+        );
+        let state = AuthState::new(manager, Arc::new(Notify::new()));
+
+        let status = state.status().unwrap();
+        assert_eq!(status.user_id.as_deref(), Some("12345"));
+        assert_eq!(status.missing_scopes, vec!["user:write:chat"]);
     }
 
     #[tokio::test]

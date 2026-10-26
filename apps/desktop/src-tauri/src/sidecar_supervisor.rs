@@ -13,18 +13,19 @@
 //! behind `cfg(windows)` and callers fall back to a warn-and-bail in
 //! `lib::setup`.
 
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Emitter, Runtime, State};
 
 #[cfg(windows)]
-use std::sync::{
-    atomic::{AtomicBool, AtomicU64, Ordering},
-    Arc,
-};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 #[cfg(windows)]
 use std::time::Instant;
+#[cfg(windows)]
+use tauri::Manager;
 #[cfg(windows)]
 use tauri_plugin_shell::{
     process::{CommandChild, CommandEvent},
@@ -32,15 +33,18 @@ use tauri_plugin_shell::{
 };
 
 #[cfg(windows)]
-use crate::emote_index::{EmoteBundle, EmoteIndex};
+use crate::backlog::{self, BacklogSetting};
+use crate::chat_history::History;
+use crate::emote_index::EmoteBundle;
+#[cfg(windows)]
+use crate::emote_index::EmoteIndexes;
 #[cfg(windows)]
 use crate::host::{
     build_bootstrap_line, build_token_refresh_line, build_twitch_connect_line,
-    mark_handle_inheritable, parse_batch, parse_sidecar_event, unmark_handle_inheritable,
-    SidecarEvent, TwitchCreds, SIDECAR_BINARY, SIGNAL_WAIT_TIMEOUT,
+    build_twitch_disconnect_line, mark_handle_inheritable, parse_batch, parse_sidecar_event,
+    unmark_handle_inheritable, SidecarEvent, TwitchCreds, SIDECAR_BINARY, SIGNAL_WAIT_TIMEOUT,
 };
-#[cfg(windows)]
-use crate::message::{assign_arrival_seqs, UnifiedMessage};
+use crate::message::{assign_arrival_seqs, ChatEvent, UnifiedMessage};
 #[cfg(windows)]
 use crate::ringbuf::{RawHandle, RingBufReader, WaitOutcome, DEFAULT_CAPACITY};
 #[cfg(windows)]
@@ -48,7 +52,9 @@ use crate::sidecar_commands::SidecarCommandSender;
 #[cfg(windows)]
 use crate::twitch_auth::{AuthError, AuthManager, TWITCH_CLIENT_ID};
 #[cfg(windows)]
-use tokio::sync::Notify;
+use crate::twitch_channel::{Channel, ChannelSelection};
+#[cfg(windows)]
+use tokio::sync::{watch, Notify};
 
 /// Supervisor timings. Defaults are production values; tests can override.
 #[derive(Debug, Clone)]
@@ -112,10 +118,12 @@ pub fn spawn<R: Runtime>(
     auth: Arc<AuthManager>,
     wakeup: Arc<Notify>,
     sender: SidecarCommandSender,
+    channels: watch::Receiver<ChannelSelection>,
+    history: History,
 ) {
     let cfg = SupervisorConfig::default();
     tauri::async_runtime::spawn(async move {
-        supervise(app, cfg, auth, wakeup, sender).await;
+        supervise(app, cfg, auth, wakeup, sender, channels, history).await;
     });
 }
 
@@ -126,6 +134,8 @@ async fn supervise<R: Runtime>(
     auth: Arc<AuthManager>,
     wakeup: Arc<Notify>,
     sender: SidecarCommandSender,
+    channels: watch::Receiver<ChannelSelection>,
+    history: History,
 ) {
     // `client_id` lives in the shared AuthManager; broadcaster/user
     // identifiers ride inside the persisted [`TwitchTokens`] itself
@@ -172,26 +182,21 @@ async fn supervise<R: Runtime>(
             }
         };
 
-        // Single-account per ADR 30: the authenticated Twitch user IS
-        // the broadcaster. `user_id` doubles as broadcaster_id in
-        // EventSub's `channel.chat.message` subscription condition.
-        let uid = tokens.user_id;
-        let creds = TwitchCreds {
-            client_id: TWITCH_CLIENT_ID.to_owned(),
-            access_token: tokens.access_token,
-            broadcaster_id: uid.clone(),
-            user_id: uid,
-        };
-
         let started = Instant::now();
+        let ctx = RunContext {
+            app: &app,
+            cfg: &cfg,
+            sender: &sender,
+            auth: &auth,
+            arrival_seq: &arrival_seq,
+            history: &history,
+        };
         match run_once(
-            &app,
-            &cfg,
+            &ctx,
             attempt,
-            Some(&creds),
-            &sender,
-            &auth,
-            &arrival_seq,
+            tokens.user_id,
+            tokens.login,
+            channels.clone(),
         )
         .await
         {
@@ -266,16 +271,35 @@ impl Drop for ChildGuard {
     }
 }
 
+/// Handles that outlive a single sidecar run and are shared by every
+/// iteration of [`supervise`].
+#[cfg(windows)]
+#[derive(Clone, Copy)]
+struct RunContext<'a, R: Runtime> {
+    app: &'a AppHandle<R>,
+    cfg: &'a SupervisorConfig,
+    sender: &'a SidecarCommandSender,
+    auth: &'a Arc<AuthManager>,
+    arrival_seq: &'a Arc<AtomicU64>,
+    history: &'a History,
+}
+
 #[cfg(windows)]
 async fn run_once<R: Runtime>(
-    app: &AppHandle<R>,
-    cfg: &SupervisorConfig,
+    ctx: &RunContext<'_, R>,
     attempt: u32,
-    creds: Option<&TwitchCreds>,
-    sender: &SidecarCommandSender,
-    auth: &Arc<AuthManager>,
-    arrival_seq: &Arc<AtomicU64>,
+    own_user_id: String,
+    own_login: String,
+    channels: watch::Receiver<ChannelSelection>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let RunContext {
+        app,
+        cfg,
+        sender,
+        auth,
+        arrival_seq,
+        history,
+    } = *ctx;
     let reader = RingBufReader::create_owner(DEFAULT_CAPACITY)?;
     let handle = reader.raw_handle();
     let event_handle = reader
@@ -328,12 +352,6 @@ async fn run_once<R: Runtime>(
     child.write(&bootstrap_line)?;
     tracing::info!(attempt, "sidecar bootstrap written");
 
-    if let Some(creds) = creds {
-        let connect_line = build_twitch_connect_line(creds)?;
-        child.write(&connect_line)?;
-        tracing::info!(attempt, broadcaster = %creds.broadcaster_id, "sent twitch_connect");
-    }
-
     // Disarm the kill-on-drop: the CommandEvent stream now owns the
     // child's lifecycle. Publish the released CommandChild into the
     // shared sender so Tauri commands can write control lines into its
@@ -343,19 +361,56 @@ async fn run_once<R: Runtime>(
     // lingering handle once the iteration ends.
     sender.publish(child.release());
 
-    // EmoteIndex lives for the lifetime of this sidecar run; a fresh one is
+    // The channel task owns every twitch_connect / twitch_disconnect
+    // write for this run: it sends the initial connect for whichever
+    // channel is selected right now and re-points the subscription on
+    // each later selection change. Routing all of it through one task
+    // means a switch can never interleave with the initial connect.
+    // EmoteIndexes lives for the lifetime of this sidecar run; a fresh one is
     // built on every respawn. Shared by the control-plane reader (which
-    // swaps in fresh bundles on `emote_bundle`) and the drain loop (which
-    // scans each parsed message against the current snapshot).
-    let emote_index: Arc<EmoteIndex> = Arc::new(EmoteIndex::new());
+    // swaps in fresh bundles on `emote_bundle`), the drain loop (which
+    // scans each parsed message against the current snapshot) and backlog
+    // imports.
+    let emote_index: Arc<EmoteIndexes> = Arc::new(EmoteIndexes::new());
+
+    let channel_handle = {
+        let auth = Arc::clone(auth);
+        let sender = sender.clone();
+        let app = app.clone();
+        let history = history.clone();
+        let emote_index = emote_index.clone();
+        tauri::async_runtime::spawn(async move {
+            channel_switch_loop(
+                channels,
+                own_user_id,
+                own_login,
+                auth,
+                sender,
+                BacklogDeps {
+                    app,
+                    history,
+                    emote_index,
+                },
+            )
+            .await;
+        })
+    };
 
     let shutdown = Arc::new(AtomicBool::new(false));
     let drain_shutdown = shutdown.clone();
     let drain_app = app.clone();
     let drain_index = emote_index.clone();
     let drain_seq = Arc::clone(arrival_seq);
+    let drain_history = history.clone();
     let drain_handle = tauri::async_runtime::spawn_blocking(move || {
-        run_drain_loop(reader, drain_app, drain_shutdown, drain_index, drain_seq);
+        run_drain_loop(
+            reader,
+            drain_app,
+            drain_shutdown,
+            drain_index,
+            drain_seq,
+            &drain_history,
+        );
     });
 
     emit_status(app, "running", attempt, None);
@@ -389,6 +444,7 @@ async fn run_once<R: Runtime>(
     .await;
 
     refresh_handle.abort();
+    channel_handle.abort();
 
     // Release-store the shutdown flag; the drain loop does an Acquire-load
     // at the top of every iteration and exits after one final drain pass
@@ -481,6 +537,189 @@ async fn run_event_loop<F, K, U>(
     }
 }
 
+/// The signed-in user, whose own channel is joined when no tab is open.
+#[cfg(windows)]
+struct Identity {
+    user_id: String,
+    login: String,
+}
+
+/// What a join needs to import the channel's backlog.
+#[cfg(windows)]
+struct BacklogDeps<R: Runtime> {
+    app: AppHandle<R>,
+    history: History,
+    emote_index: Arc<EmoteIndexes>,
+}
+
+/// Delay before retrying a channel connect whose token load failed.
+#[cfg(windows)]
+const CHANNEL_RETRY_DELAY: Duration = Duration::from_secs(5);
+
+#[cfg(windows)]
+async fn channel_switch_loop<R: Runtime>(
+    channels: watch::Receiver<ChannelSelection>,
+    own_user_id: String,
+    own_login: String,
+    auth: Arc<AuthManager>,
+    sender: SidecarCommandSender,
+    backlog: BacklogDeps<R>,
+) {
+    let BacklogDeps {
+        app,
+        history,
+        emote_index,
+    } = backlog;
+    let http = auth.http_client().clone();
+    channel_switch_loop_inner(
+        channels,
+        Identity {
+            user_id: own_user_id,
+            login: own_login,
+        },
+        CHANNEL_RETRY_DELAY,
+        || {
+            let auth = Arc::clone(&auth);
+            async move { auth.load_or_refresh().await.map(|t| t.access_token) }
+        },
+        |line| sender.write_raw(line),
+        |channel| {
+            let Some(channel) = channel else { return };
+            if !app.state::<BacklogSetting>().is_enabled() {
+                return;
+            }
+            // Subscribing here, before the sidecar can answer the connect,
+            // guarantees this channel's bundle arrives after the receiver.
+            let bundle = app.state::<EmoteBundleState>().subscribe();
+            history.begin_import(channel.id.clone());
+            tauri::async_runtime::spawn(backlog::import(
+                http.clone(),
+                channel.clone(),
+                history.clone(),
+                emote_index.clone(),
+                bundle,
+            ));
+        },
+        |channel_id| {
+            emote_index.remove(channel_id);
+            app.state::<EmoteBundleState>().remove(channel_id);
+        },
+    )
+    .await;
+}
+
+/// Keeps the sidecar joined to exactly the selected channels. An empty
+/// selection means the signed-in user's own channel. `on_join` runs right
+/// after each connect is written, `on_leave` after each disconnect, so the
+/// caller can set up and tear down per-channel state. Returns when the
+/// sidecar stdin is gone (write fails) or the channel selector has been
+/// dropped.
+#[cfg(windows)]
+async fn channel_switch_loop_inner<T, Fut, W, J, L>(
+    mut channels: watch::Receiver<ChannelSelection>,
+    me: Identity,
+    retry_delay: Duration,
+    mut fetch_token: T,
+    mut write: W,
+    mut on_join: J,
+    mut on_leave: L,
+) where
+    T: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<String, AuthError>>,
+    W: FnMut(&[u8]) -> bool,
+    J: FnMut(Option<&Channel>),
+    L: FnMut(&str),
+{
+    let Identity {
+        user_id: own_user_id,
+        login: own_login,
+    } = me;
+    // Join counter of every live connection by broadcaster id; a bumped
+    // counter turns a rejoin of the same channel into a leave and a join.
+    let mut connected: HashMap<String, u64> = HashMap::new();
+    loop {
+        let desired: Vec<(String, u64, Option<Channel>)> = {
+            let sel = channels.borrow_and_update();
+            if sel.joined.is_empty() {
+                vec![(own_user_id.clone(), 0, None)]
+            } else {
+                sel.joined
+                    .iter()
+                    .map(|j| (j.channel.id.clone(), j.join, Some(j.channel.clone())))
+                    .collect()
+            }
+        };
+        let mut leaving: Vec<String> = connected
+            .iter()
+            .filter(|(id, join)| !desired.iter().any(|(d, j, _)| d == *id && j == *join))
+            .map(|(id, _)| id.clone())
+            .collect();
+        leaving.sort();
+        let joining: Vec<&(String, u64, Option<Channel>)> = desired
+            .iter()
+            .filter(|(id, join, _)| connected.get(id) != Some(join))
+            .collect();
+
+        if !leaving.is_empty() || !joining.is_empty() {
+            let access_token = if joining.is_empty() {
+                String::new()
+            } else {
+                match fetch_token().await {
+                    Ok(t) => t,
+                    Err(e) => {
+                        tracing::warn!(error = %e, "token load failed before channel connect; retrying");
+                        tokio::time::sleep(retry_delay).await;
+                        continue;
+                    }
+                }
+            };
+            for id in leaving {
+                let line = match build_twitch_disconnect_line(&id) {
+                    Ok(l) => l,
+                    Err(e) => {
+                        tracing::error!(error = %e, "failed to serialize twitch_disconnect");
+                        return;
+                    }
+                };
+                if !write(&line) {
+                    return;
+                }
+                tracing::info!(broadcaster = %id, "sent twitch_disconnect");
+                connected.remove(&id);
+                on_leave(&id);
+            }
+            for (id, join, channel) in joining {
+                let creds = TwitchCreds {
+                    client_id: TWITCH_CLIENT_ID.to_owned(),
+                    access_token: access_token.clone(),
+                    broadcaster_id: id.clone(),
+                    channel_login: channel
+                        .as_ref()
+                        .map_or_else(|| own_login.clone(), |c| c.login.clone()),
+                    user_id: own_user_id.clone(),
+                };
+                let line = match build_twitch_connect_line(&creds) {
+                    Ok(l) => l,
+                    Err(e) => {
+                        tracing::error!(error = %e, "failed to serialize twitch_connect");
+                        return;
+                    }
+                };
+                if !write(&line) {
+                    return;
+                }
+                tracing::info!(broadcaster = %id, "sent twitch_connect");
+                on_join(channel.as_ref());
+                connected.insert(id.clone(), *join);
+            }
+        }
+
+        if channels.changed().await.is_err() {
+            return;
+        }
+    }
+}
+
 /// Check interval for proactive token refresh. Slightly shorter than the
 /// 5-minute refresh threshold so we always refresh before the sidecar's
 /// token actually expires.
@@ -548,14 +787,16 @@ fn run_drain_loop<R: Runtime>(
     mut reader: RingBufReader,
     app: AppHandle<R>,
     shutdown: Arc<AtomicBool>,
-    emote_index: Arc<EmoteIndex>,
+    emote_index: Arc<EmoteIndexes>,
     arrival_seq: Arc<AtomicU64>,
+    history: &History,
 ) {
     let timeout_ms: u32 = SIGNAL_WAIT_TIMEOUT
         .as_millis()
         .try_into()
         .expect("signal wait timeout fits in u32 ms");
     let mut batch: Vec<UnifiedMessage> = Vec::with_capacity(64);
+    let mut events: Vec<ChatEvent> = Vec::new();
     // Local mirror of the shared atomic; loaded once, written back after
     // each emit. Only one drain loop runs at a time across the
     // supervisor lifetime (each respawn awaits the prior `run_once`),
@@ -565,7 +806,15 @@ fn run_drain_loop<R: Runtime>(
 
     loop {
         if shutdown.load(Ordering::Acquire) {
-            drain_and_emit(&mut reader, &app, &mut batch, &emote_index, &mut next_seq);
+            drain_and_emit(
+                &mut reader,
+                &app,
+                &mut batch,
+                &mut events,
+                &emote_index,
+                &mut next_seq,
+                history,
+            );
             arrival_seq.store(next_seq, Ordering::Relaxed);
             return;
         }
@@ -577,7 +826,15 @@ fn run_drain_loop<R: Runtime>(
                 return;
             }
         }
-        drain_and_emit(&mut reader, &app, &mut batch, &emote_index, &mut next_seq);
+        drain_and_emit(
+            &mut reader,
+            &app,
+            &mut batch,
+            &mut events,
+            &emote_index,
+            &mut next_seq,
+            history,
+        );
         arrival_seq.store(next_seq, Ordering::Relaxed);
     }
 }
@@ -587,21 +844,30 @@ fn drain_and_emit<R: Runtime>(
     reader: &mut RingBufReader,
     app: &AppHandle<R>,
     batch: &mut Vec<UnifiedMessage>,
-    emote_index: &EmoteIndex,
+    events: &mut Vec<ChatEvent>,
+    emote_index: &EmoteIndexes,
     next_seq: &mut u64,
+    history: &History,
 ) {
     let raw = reader.drain();
     if raw.is_empty() {
         return;
     }
     batch.clear();
-    parse_batch(&raw, batch, emote_index);
-    if batch.is_empty() {
-        return;
+    events.clear();
+    parse_batch(&raw, batch, events, emote_index);
+    if !batch.is_empty() {
+        assign_arrival_seqs(batch, next_seq);
+        history.store(batch);
+        if let Err(e) = app.emit("chat_messages", &*batch) {
+            tracing::error!(error = %e, "failed to emit chat_messages");
+        }
     }
-    assign_arrival_seqs(batch, next_seq);
-    if let Err(e) = app.emit("chat_messages", &*batch) {
-        tracing::error!(error = %e, "failed to emit chat_messages");
+    if !events.is_empty() {
+        history.apply(events);
+        if let Err(e) = app.emit("chat_events", &*events) {
+            tracing::error!(error = %e, "failed to emit chat_events");
+        }
     }
 }
 
@@ -621,26 +887,37 @@ fn drain_and_emit<R: Runtime>(
 fn handle_sidecar_stdout<R: Runtime>(
     bytes: &[u8],
     app: &AppHandle<R>,
-    emote_index: &Arc<EmoteIndex>,
+    emote_index: &Arc<EmoteIndexes>,
     sender: &SidecarCommandSender,
 ) -> bool {
     scan_sidecar_stdout(
         bytes,
         |bundle| apply_emote_bundle(bundle, app, emote_index),
         |result| sender.complete_send_chat(result),
+        |banned| {
+            if let Err(e) = app.emit("chat_banned", &banned) {
+                tracing::warn!(error = %e, "failed to emit chat_banned");
+            }
+        },
     )
 }
 
 /// Pure scan-and-dispatch core of [`handle_sidecar_stdout`]. Splits the
 /// batch on newlines, parses each non-empty piece via
 /// [`parse_sidecar_event`], returns `true` if any line was a heartbeat,
-/// and invokes `on_bundle`/`on_send_result` for the corresponding
-/// variants. Factored out so it can be unit-tested without a Tauri
+/// and invokes `on_bundle`/`on_send_result`/`on_banned` for the
+/// corresponding variants. Factored out so it can be unit-tested without a Tauri
 /// runtime (the AppHandle-dependent work happens inside the closures).
-fn scan_sidecar_stdout<F, G>(bytes: &[u8], mut on_bundle: F, mut on_send_result: G) -> bool
+fn scan_sidecar_stdout<F, G, H>(
+    bytes: &[u8],
+    mut on_bundle: F,
+    mut on_send_result: G,
+    mut on_banned: H,
+) -> bool
 where
     F: FnMut(Box<crate::emote_index::EmoteBundle>),
     G: FnMut(crate::host::SendChatResult),
+    H: FnMut(crate::host::ChatBanned),
 {
     let mut saw_heartbeat = false;
     for line in bytes.split(|b| *b == b'\n') {
@@ -651,6 +928,8 @@ where
             SidecarEvent::Heartbeat => saw_heartbeat = true,
             SidecarEvent::EmoteBundle(bundle) => on_bundle(bundle),
             SidecarEvent::SendChatResult(r) => on_send_result(r),
+            SidecarEvent::ModActionResult(r) => on_send_result(r),
+            SidecarEvent::ChatBanned(b) => on_banned(b),
             SidecarEvent::Other(t) => {
                 tracing::debug!(msg_type = %t, "unhandled sidecar control message");
             }
@@ -662,18 +941,18 @@ where
     saw_heartbeat
 }
 
-/// Swaps a fresh [`EmoteBundle`] into the supervisor's [`EmoteIndex`] and
+/// Swaps a fresh [`EmoteBundle`] into the supervisor's [`EmoteIndexes`] and
 /// forwards a clone to the frontend. The frontend gets the full bundle
 /// (emotes + badges + per-provider errors) so it can render emote and
 /// badge images and surface partial-failure state without a second round
-/// trip; only the emote sets feed [`EmoteIndex::load_bundle`], which is
+/// trip; only the emote sets feed [`EmoteIndexes::load_bundle`], which is
 /// lock-free for readers. Badges are resolved entirely on the frontend
 /// from the same bundle — keeping the message hot path allocation-free.
 #[cfg(windows)]
 fn apply_emote_bundle<R: Runtime>(
     bundle: Box<EmoteBundle>,
     app: &AppHandle<R>,
-    emote_index: &Arc<EmoteIndex>,
+    emote_index: &Arc<EmoteIndexes>,
 ) {
     let total = bundle.total_emotes();
     // Frontend needs the full bundle to render URLs; cloning is cheap
@@ -682,8 +961,75 @@ fn apply_emote_bundle<R: Runtime>(
     if let Err(e) = app.emit("emote_bundle", bundle.as_ref()) {
         tracing::error!(error = %e, "failed to emit emote_bundle");
     }
-    emote_index.load_bundle(*bundle);
+    // The index is loaded before the state announces the bundle, so a
+    // backlog import woken by the announcement scans against it.
+    emote_index.load_bundle(bundle.as_ref().clone());
+    app.state::<EmoteBundleState>().set(*bundle);
     tracing::info!(total_emotes = total, "emote index rebuilt");
+}
+
+/// Every joined channel's bundle, so a tab switch or a webview reload can
+/// ask for the right emotes and badges instead of waiting for the next
+/// join. Also announces each arrival with its channel so a backlog import
+/// can wait for its own channel's emotes.
+pub struct EmoteBundleState {
+    bundles: Mutex<HashMap<String, Arc<EmoteBundle>>>,
+    arrivals: watch::Sender<BundleArrival>,
+}
+
+/// A counter plus the broadcaster whose bundle just arrived; the counter
+/// makes every arrival a change even for the same channel.
+pub type BundleArrival = (u64, String);
+
+impl Default for EmoteBundleState {
+    fn default() -> Self {
+        Self {
+            bundles: Mutex::new(HashMap::new()),
+            arrivals: watch::channel((0, String::new())).0,
+        }
+    }
+}
+
+impl EmoteBundleState {
+    pub fn set(&self, bundle: EmoteBundle) {
+        let channel = bundle.broadcaster_id.clone();
+        self.bundles
+            .lock()
+            .expect("emote bundle state poisoned")
+            .insert(channel.clone(), Arc::new(bundle));
+        self.arrivals.send_modify(|a| {
+            a.0 += 1;
+            a.1 = channel;
+        });
+    }
+
+    pub fn current(&self, channel_id: &str) -> Option<Arc<EmoteBundle>> {
+        self.bundles
+            .lock()
+            .expect("emote bundle state poisoned")
+            .get(channel_id)
+            .cloned()
+    }
+
+    pub fn remove(&self, channel_id: &str) {
+        self.bundles
+            .lock()
+            .expect("emote bundle state poisoned")
+            .remove(channel_id);
+    }
+
+    /// A receiver that reports every bundle arriving after this call.
+    pub fn subscribe(&self) -> watch::Receiver<BundleArrival> {
+        self.arrivals.subscribe()
+    }
+}
+
+#[tauri::command]
+pub fn current_emote_bundle(
+    state: State<'_, EmoteBundleState>,
+    channel_id: String,
+) -> Option<EmoteBundle> {
+    state.current(&channel_id).map(|b| (*b).clone())
 }
 
 fn emit_status<R: Runtime>(
@@ -697,14 +1043,333 @@ fn emit_status<R: Runtime>(
         attempt,
         backoff_ms,
     };
+    app.state::<SidecarStatusState>().set(status.clone());
     if let Err(e) = app.emit("sidecar_status", &status) {
         tracing::warn!(error = %e, state, "failed to emit sidecar_status");
     }
 }
 
+/// The latest status, kept so a webview that mounts after the sidecar
+/// already connected (a reload, or a slow first paint) can read it instead
+/// of waiting for the next transition.
+#[derive(Default)]
+pub struct SidecarStatusState(Mutex<Option<SidecarStatus>>);
+
+impl SidecarStatusState {
+    pub fn set(&self, status: SidecarStatus) {
+        *self.0.lock().expect("sidecar status poisoned") = Some(status);
+    }
+
+    pub fn current(&self) -> Option<SidecarStatus> {
+        self.0.lock().expect("sidecar status poisoned").clone()
+    }
+}
+
+#[tauri::command]
+pub fn current_sidecar_status(state: State<'_, SidecarStatusState>) -> Option<SidecarStatus> {
+    state.current()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    mod channel_switch {
+        use super::*;
+        use crate::twitch_channel::JoinedChannel;
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        fn chan(id: &str) -> Channel {
+            Channel {
+                id: id.into(),
+                login: id.into(),
+                display_name: id.into(),
+                profile_image_url: String::new(),
+            }
+        }
+
+        fn sel(channel: Option<Channel>) -> ChannelSelection {
+            tabs(channel.into_iter().collect())
+        }
+
+        fn me() -> Identity {
+            Identity {
+                user_id: "me".into(),
+                login: "me".into(),
+            }
+        }
+
+        // Yields until the loop has written `n` commands, so a test never
+        // depends on how the scheduler interleaves the two futures.
+        async fn settle(written: &Rc<RefCell<Vec<Vec<u8>>>>, n: usize) {
+            for _ in 0..100 {
+                if written.borrow().len() >= n {
+                    return;
+                }
+                tokio::task::yield_now().await;
+            }
+            panic!("loop never wrote {n} commands");
+        }
+
+        fn tabs(channels: Vec<Channel>) -> ChannelSelection {
+            ChannelSelection {
+                focused: channels.last().cloned(),
+                joined: channels
+                    .into_iter()
+                    .map(|channel| JoinedChannel { channel, join: 0 })
+                    .collect(),
+            }
+        }
+
+        fn cmds(lines: &[Vec<u8>]) -> Vec<(String, String)> {
+            lines
+                .iter()
+                .map(|l| {
+                    let v: serde_json::Value = serde_json::from_slice(l).unwrap();
+                    (
+                        v["cmd"].as_str().unwrap().to_owned(),
+                        v["broadcaster_id"].as_str().unwrap().to_owned(),
+                    )
+                })
+                .collect()
+        }
+
+        type Written = Rc<RefCell<Vec<Vec<u8>>>>;
+
+        fn recorder() -> (Written, impl FnMut(&[u8]) -> bool) {
+            let written = Rc::new(RefCell::new(Vec::new()));
+            let w = Rc::clone(&written);
+            (written, move |line: &[u8]| {
+                w.borrow_mut().push(line.to_vec());
+                true
+            })
+        }
+
+        #[tokio::test]
+        async fn connects_to_own_channel_when_nothing_selected() {
+            let (tx, rx) = watch::channel(sel(None));
+            let (written, write) = recorder();
+            drop(tx);
+            channel_switch_loop_inner(
+                rx,
+                me(),
+                Duration::from_millis(1),
+                || async { Ok("tok".to_owned()) },
+                write,
+                |_| {},
+                |_| {},
+            )
+            .await;
+            assert_eq!(
+                cmds(&written.borrow()),
+                vec![("twitch_connect".into(), "me".into())]
+            );
+        }
+
+        #[tokio::test]
+        async fn switches_with_disconnect_then_connect_and_ignores_same_channel() {
+            let (tx, rx) = watch::channel(sel(None));
+            let (written, write) = recorder();
+            let loop_fut = channel_switch_loop_inner(
+                rx,
+                me(),
+                Duration::from_millis(1),
+                || async { Ok("tok".to_owned()) },
+                write,
+                |_| {},
+                |_| {},
+            );
+            let driver = async {
+                tokio::task::yield_now().await;
+                tx.send(sel(Some(chan("a")))).unwrap();
+                tokio::task::yield_now().await;
+                tx.send(sel(Some(chan("a")))).unwrap();
+                tokio::task::yield_now().await;
+                tx.send(sel(Some(chan("b")))).unwrap();
+                tokio::task::yield_now().await;
+                drop(tx);
+            };
+            tokio::join!(loop_fut, driver);
+            assert_eq!(
+                cmds(&written.borrow()),
+                vec![
+                    ("twitch_connect".into(), "me".into()),
+                    ("twitch_disconnect".into(), "me".into()),
+                    ("twitch_connect".into(), "a".into()),
+                    ("twitch_disconnect".into(), "a".into()),
+                    ("twitch_connect".into(), "b".into()),
+                ]
+            );
+        }
+
+        #[tokio::test]
+        async fn join_hook_sees_the_selected_channel_on_each_connect() {
+            let (tx, rx) = watch::channel(sel(Some(chan("a"))));
+            let (_written, write) = recorder();
+            let joined = Rc::new(RefCell::new(Vec::new()));
+            let seen = joined.clone();
+            let loop_fut = channel_switch_loop_inner(
+                rx,
+                me(),
+                Duration::from_millis(1),
+                || async { Ok("tok".to_owned()) },
+                write,
+                move |c| seen.borrow_mut().push(c.map(|c| c.login.clone())),
+                |_| {},
+            );
+            let driver = async {
+                tokio::task::yield_now().await;
+                tx.send(sel(None)).unwrap();
+                tokio::task::yield_now().await;
+                drop(tx);
+            };
+            tokio::join!(loop_fut, driver);
+            assert_eq!(*joined.borrow(), vec![Some("a".to_owned()), None]);
+        }
+
+        #[tokio::test]
+        async fn tabs_join_and_leave_as_the_set_changes() {
+            let (tx, rx) = watch::channel(tabs(vec![chan("a"), chan("b")]));
+            let (written, write) = recorder();
+            let left = Rc::new(RefCell::new(Vec::new()));
+            let seen = left.clone();
+            let loop_fut = channel_switch_loop_inner(
+                rx,
+                me(),
+                Duration::from_millis(1),
+                || async { Ok("tok".to_owned()) },
+                write,
+                |_| {},
+                move |id| seen.borrow_mut().push(id.to_owned()),
+            );
+            let driver = async {
+                settle(&written, 2).await;
+                tx.send(tabs(vec![chan("b")])).unwrap();
+                settle(&written, 3).await;
+                tx.send(tabs(vec![chan("b"), chan("c")])).unwrap();
+                settle(&written, 4).await;
+                tx.send(tabs(vec![])).unwrap();
+                settle(&written, 7).await;
+                drop(tx);
+            };
+            tokio::join!(loop_fut, driver);
+            assert_eq!(
+                cmds(&written.borrow()),
+                vec![
+                    ("twitch_connect".into(), "a".into()),
+                    ("twitch_connect".into(), "b".into()),
+                    ("twitch_disconnect".into(), "a".into()),
+                    ("twitch_connect".into(), "c".into()),
+                    ("twitch_disconnect".into(), "b".into()),
+                    ("twitch_disconnect".into(), "c".into()),
+                    ("twitch_connect".into(), "me".into()),
+                ]
+            );
+            assert_eq!(*left.borrow(), vec!["a".to_owned(), "b".into(), "c".into()]);
+        }
+
+        #[tokio::test]
+        async fn rejoin_leaves_and_rejoins_the_same_channel() {
+            let (tx, rx) = watch::channel(sel(Some(chan("a"))));
+            let (written, write) = recorder();
+            let loop_fut = channel_switch_loop_inner(
+                rx,
+                me(),
+                Duration::from_millis(1),
+                || async { Ok("tok".to_owned()) },
+                write,
+                |_| {},
+                |_| {},
+            );
+            let driver = async {
+                tokio::task::yield_now().await;
+                tx.send_modify(|s| s.joined[0].join += 1);
+                tokio::task::yield_now().await;
+                drop(tx);
+            };
+            tokio::join!(loop_fut, driver);
+            assert_eq!(
+                cmds(&written.borrow()),
+                vec![
+                    ("twitch_connect".into(), "a".into()),
+                    ("twitch_disconnect".into(), "a".into()),
+                    ("twitch_connect".into(), "a".into()),
+                ]
+            );
+        }
+
+        #[tokio::test]
+        async fn connect_line_carries_token_and_self_user_id() {
+            let (tx, rx) = watch::channel(sel(Some(chan("streamer"))));
+            let (written, write) = recorder();
+            drop(tx);
+            channel_switch_loop_inner(
+                rx,
+                me(),
+                Duration::from_millis(1),
+                || async { Ok("tok".to_owned()) },
+                write,
+                |_| {},
+                |_| {},
+            )
+            .await;
+            let v: serde_json::Value = serde_json::from_slice(&written.borrow()[0]).unwrap();
+            assert_eq!(v["broadcaster_id"], "streamer");
+            assert_eq!(v["user_id"], "me");
+            assert_eq!(v["token"], "tok");
+            assert_eq!(v["client_id"], TWITCH_CLIENT_ID);
+        }
+
+        #[tokio::test]
+        async fn exits_when_sidecar_stdin_is_gone() {
+            let (_tx, rx) = watch::channel(sel(None));
+            channel_switch_loop_inner(
+                rx,
+                me(),
+                Duration::from_millis(1),
+                || async { Ok("tok".to_owned()) },
+                |_line| false,
+                |_| {},
+                |_| {},
+            )
+            .await;
+        }
+
+        #[tokio::test]
+        async fn retries_connect_after_token_failure() {
+            let (tx, rx) = watch::channel(sel(None));
+            let (written, write) = recorder();
+            let calls = RefCell::new(0u32);
+            drop(tx);
+            channel_switch_loop_inner(
+                rx,
+                me(),
+                Duration::from_millis(1),
+                || {
+                    *calls.borrow_mut() += 1;
+                    let fail = *calls.borrow() == 1;
+                    async move {
+                        if fail {
+                            Err(AuthError::OAuth("boom".into()))
+                        } else {
+                            Ok("tok".to_owned())
+                        }
+                    }
+                },
+                write,
+                |_| {},
+                |_| {},
+            )
+            .await;
+            assert_eq!(*calls.borrow(), 2);
+            assert_eq!(
+                cmds(&written.borrow()),
+                vec![("twitch_connect".into(), "me".into())]
+            );
+        }
+    }
 
     #[test]
     fn default_config_matches_spec() {
@@ -773,12 +1438,14 @@ mod tests {
         assert!(!scan_sidecar_stdout(
             b"",
             |_| panic!("no bundle"),
-            |_| panic!("no result")
+            |_| panic!("no result"),
+            |_| panic!("no ban")
         ));
         assert!(!scan_sidecar_stdout(
             b"\n\n\n",
             |_| panic!("no bundle"),
-            |_| panic!("no result")
+            |_| panic!("no result"),
+            |_| panic!("no ban")
         ));
     }
 
@@ -788,7 +1455,8 @@ mod tests {
         assert!(scan_sidecar_stdout(
             line,
             |_| panic!("no bundle"),
-            |_| panic!("no result")
+            |_| panic!("no result"),
+            |_| panic!("no ban")
         ));
     }
 
@@ -803,7 +1471,8 @@ mod tests {
         assert!(scan_sidecar_stdout(
             &batch,
             |_| panic!("no bundle"),
-            |_| panic!("no result")
+            |_| panic!("no result"),
+            |_| panic!("no ban")
         ));
     }
 
@@ -815,7 +1484,8 @@ mod tests {
         assert!(!scan_sidecar_stdout(
             &batch,
             |_| panic!("no bundle"),
-            |_| panic!("no result")
+            |_| panic!("no result"),
+            |_| panic!("no ban")
         ));
     }
 
@@ -834,6 +1504,7 @@ mod tests {
                 bundles += 1;
             },
             |_| panic!("no result"),
+            |_| panic!("no ban"),
         );
 
         assert!(saw_heartbeat);
@@ -849,7 +1520,8 @@ mod tests {
         assert!(scan_sidecar_stdout(
             &batch,
             |_| panic!("no bundle"),
-            |_| panic!("no result")
+            |_| panic!("no result"),
+            |_| panic!("no ban")
         ));
     }
 
@@ -857,12 +1529,30 @@ mod tests {
     fn scan_sidecar_stdout_dispatches_send_chat_result() {
         let line = br#"{"type":"send_chat_result","payload":{"request_id":7,"ok":true,"message_id":"m1"}}"#;
         let mut got = None;
-        let saw_heartbeat = scan_sidecar_stdout(line, |_| panic!("no bundle"), |r| got = Some(r));
+        let saw_heartbeat = scan_sidecar_stdout(
+            line,
+            |_| panic!("no bundle"),
+            |r| got = Some(r),
+            |_| panic!("no ban"),
+        );
         assert!(!saw_heartbeat);
         let r = got.expect("result dispatched");
         assert_eq!(r.request_id, 7);
         assert!(r.ok);
         assert_eq!(r.message_id, "m1");
+    }
+
+    #[test]
+    fn scan_sidecar_stdout_dispatches_chat_banned() {
+        let line = br#"{"type":"chat_banned","payload":{"broadcaster_id":"9","detail":"chat_user_banned"}}"#;
+        let mut got = None;
+        scan_sidecar_stdout(
+            line,
+            |_| panic!("no bundle"),
+            |_| panic!("no result"),
+            |b| got = Some(b),
+        );
+        assert_eq!(got.expect("ban dispatched").broadcaster_id, "9");
     }
 
     // -- run_event_loop tests --------------------------------------------
@@ -1023,7 +1713,7 @@ mod tests {
             |bytes| {
                 stdout_calls.set(stdout_calls.get() + 1);
                 // Forward to the pure scanner so heartbeat detection is real.
-                scan_sidecar_stdout(bytes, |_| {}, |_| {})
+                scan_sidecar_stdout(bytes, |_| {}, |_| {}, |_| {})
             },
             || kill_calls.set(kill_calls.get() + 1),
             || {},

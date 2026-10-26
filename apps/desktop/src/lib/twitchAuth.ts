@@ -12,7 +12,13 @@ export type AuthStatusState = "logged_out" | "logged_in";
 // a malformed payload ever slips through.
 export type AuthStatus =
   | { state: "logged_out" }
-  | { state: "logged_in"; login: string };
+  | {
+      state: "logged_in";
+      login: string;
+      user_id: string;
+      /** Scopes the app asks for that the stored grant lacks. */
+      missing_scopes: string[];
+    };
 
 export interface DeviceCodeView {
   verification_uri: string;
@@ -97,6 +103,53 @@ export interface SendMessageOk {
   message_id: string;
 }
 
-export function sendMessage(text: string): Promise<SendMessageOk> {
-  return invoke("twitch_send_message", { text });
+// Every command names its channel so a tab switch mid-flight can never
+// send a message or a mod action to the wrong room.
+
+export function sendMessage(
+  channelId: string,
+  text: string,
+  replyTo?: string,
+): Promise<SendMessageOk> {
+  return invoke("twitch_send_message", {
+    channelId,
+    text,
+    replyTo: replyTo ?? null,
+  });
+}
+
+export function banUser(
+  channelId: string,
+  targetUserId: string,
+  reason?: string,
+): Promise<void> {
+  return invoke("twitch_ban_user", { channelId, targetUserId, reason });
+}
+
+export function unbanUser(
+  channelId: string,
+  targetUserId: string,
+): Promise<void> {
+  return invoke("twitch_unban_user", { channelId, targetUserId });
+}
+
+export function timeoutUser(
+  channelId: string,
+  targetUserId: string,
+  durationSeconds: number,
+  reason?: string,
+): Promise<void> {
+  return invoke("twitch_timeout_user", {
+    channelId,
+    targetUserId,
+    durationSeconds,
+    reason,
+  });
+}
+
+export function deleteMessage(
+  channelId: string,
+  messageId: string,
+): Promise<void> {
+  return invoke("twitch_delete_message", { channelId, messageId });
 }

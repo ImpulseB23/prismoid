@@ -1,3 +1,6 @@
+pub mod backlog;
+pub mod browser_follow;
+pub mod chat_history;
 mod host;
 mod message;
 pub mod oauth_pkce;
@@ -5,6 +8,9 @@ pub mod ringbuf;
 mod sidecar_commands;
 mod sidecar_supervisor;
 pub mod twitch_auth;
+pub mod twitch_channel;
+pub mod twitch_chat_settings;
+pub mod twitch_irc;
 pub mod youtube_auth;
 
 pub mod emote_index;
@@ -47,7 +53,9 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             get_platform,
             twitch_auth::commands::twitch_auth_status,
@@ -61,7 +69,28 @@ pub fn run() {
             youtube_auth::commands::youtube_cancel_login,
             youtube_auth::commands::youtube_logout,
             sidecar_commands::twitch_send_message,
+            sidecar_commands::twitch_ban_user,
+            sidecar_commands::twitch_unban_user,
+            sidecar_commands::twitch_timeout_user,
+            sidecar_commands::twitch_delete_message,
             sidecar_commands::youtube_send_message,
+            twitch_channel::twitch_join_channel,
+            twitch_channel::twitch_leave_channel,
+            twitch_channel::twitch_focus_channel,
+            twitch_channel::twitch_rejoin_channel,
+            browser_follow::set_browser_follow,
+            backlog::set_chat_backlog,
+            twitch_channel::twitch_get_channel,
+            twitch_channel::twitch_search_channels,
+            twitch_channel::twitch_get_stream_info,
+            twitch_channel::twitch_lookup_user,
+            twitch_channel::twitch_moderated_channels,
+            twitch_channel::twitch_users_info,
+            sidecar_supervisor::current_emote_bundle,
+            sidecar_supervisor::current_sidecar_status,
+            chat_history::chat_history,
+            twitch_chat_settings::twitch_get_chat_settings,
+            twitch_chat_settings::twitch_update_chat_settings,
         ])
         .setup(setup)
         .run(tauri::generate_context!())
@@ -77,6 +106,10 @@ pub fn run() {
 #[allow(clippy::unnecessary_wraps)]
 fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
+
+    #[cfg(desktop)]
+    app.handle()
+        .plugin(tauri_plugin_updater::Builder::new().build())?;
     use tokio::sync::Notify;
     use twitch_auth::{AuthManager, AuthState, KeychainStore, TWITCH_CLIENT_ID};
     use twitch_oauth2::Scope;
@@ -98,6 +131,21 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
         AuthManager::builder(TWITCH_CLIENT_ID)
             .scope(Scope::UserReadChat)
             .scope(Scope::UserWriteChat)
+            .scope(Scope::UserReadModeratedChannels)
+            .scope(Scope::UserReadFollows)
+            .scope(Scope::ModeratorManageBannedUsers)
+            .scope(Scope::ModeratorManageChatMessages)
+            // Chat settings are read and changed from the chat modes panel.
+            // The remaining read scopes are what channel.moderate v2 asks
+            // for, so moderators see every action in the channel with
+            // who took it and why.
+            .scope(Scope::ModeratorReadBlockedTerms)
+            .scope(Scope::ModeratorReadChatSettings)
+            .scope(Scope::ModeratorManageChatSettings)
+            .scope(Scope::ModeratorReadUnbanRequests)
+            .scope(Scope::ModeratorReadWarnings)
+            .scope(Scope::ModeratorReadModerators)
+            .scope(Scope::ModeratorReadVips)
             .build(KeychainStore, http_client),
     );
     let wakeup = Arc::new(Notify::new());
@@ -138,14 +186,45 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
 
     let sender = sidecar_commands::SidecarCommandSender::default();
     app.manage(sender.clone());
+    app.manage(sidecar_supervisor::EmoteBundleState::default());
+    app.manage(sidecar_supervisor::SidecarStatusState::default());
+
+    let (channel_state, channel_rx) = twitch_channel::ChannelState::new();
+    app.manage(channel_state);
+
+    let history = app
+        .path()
+        .app_data_dir()
+        .map_err(Into::into)
+        .and_then(|dir| chat_history::History::open(&dir))
+        .unwrap_or_else(|err| {
+            tracing::error!(error = %err, "chat history unavailable; running without a backlog");
+            chat_history::History::default()
+        });
+    app.manage(history.clone());
+    app.manage(backlog::BacklogSetting::default());
+
+    let follow = browser_follow::BrowserFollow::default();
+    app.manage(follow.clone());
+    #[cfg(windows)]
+    browser_follow::spawn(app.app_handle().clone(), follow);
+    #[cfg(not(windows))]
+    drop(follow);
 
     #[cfg(windows)]
     {
-        sidecar_supervisor::spawn(app.app_handle().clone(), auth, wakeup, sender);
+        sidecar_supervisor::spawn(
+            app.app_handle().clone(),
+            auth,
+            wakeup,
+            sender,
+            channel_rx,
+            history,
+        );
     }
     #[cfg(not(windows))]
     {
-        let _ = (auth, wakeup, sender);
+        let _ = (auth, wakeup, sender, channel_rx, history);
         tracing::warn!(
             "sidecar lifecycle is Windows-only for now; launching frontend without sidecar"
         );

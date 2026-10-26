@@ -1,47 +1,24 @@
-import { describe, expect, it } from "vitest";
-import { indicatorFor } from "./sidecarStatus";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-describe("indicatorFor", () => {
-  it("running → green connected", () => {
-    expect(indicatorFor("running")).toEqual({
-      label: "Connected",
-      color: "#3fb950",
-    });
-  });
+const invokeMock = vi.fn();
 
-  it("spawning and backoff share the amber connecting indicator", () => {
-    expect(indicatorFor("spawning")).toEqual({
-      label: "Connecting",
-      color: "#d29922",
-    });
-    expect(indicatorFor("backoff")).toEqual({
-      label: "Connecting",
-      color: "#d29922",
-    });
-  });
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: (...args: unknown[]) => invokeMock(...args),
+}));
 
-  it("waiting_for_auth surfaces a sign-in hint", () => {
-    expect(indicatorFor("waiting_for_auth")).toEqual({
-      label: "Waiting for sign-in",
-      color: "#d29922",
-    });
-  });
+import { currentSidecarStatus } from "./sidecarStatus";
 
-  it("unhealthy and terminated are distinct", () => {
-    expect(indicatorFor("unhealthy")).toEqual({
-      label: "Unhealthy",
-      color: "#db6d28",
-    });
-    expect(indicatorFor("terminated")).toEqual({
-      label: "Disconnected",
-      color: "#f85149",
-    });
-  });
+afterEach(() => {
+  invokeMock.mockReset();
+});
 
-  it("null before any event reports a starting state", () => {
-    expect(indicatorFor(null)).toEqual({
-      label: "Starting",
-      color: "#6e7681",
+describe("currentSidecarStatus", () => {
+  it("asks the host for its latest status", async () => {
+    invokeMock.mockResolvedValueOnce({ state: "running", attempt: 1 });
+    await expect(currentSidecarStatus()).resolves.toEqual({
+      state: "running",
+      attempt: 1,
     });
+    expect(invokeMock).toHaveBeenCalledWith("current_sidecar_status");
   });
 });

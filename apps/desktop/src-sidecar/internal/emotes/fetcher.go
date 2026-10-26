@@ -19,6 +19,9 @@ import (
 // message the sidecar emits to the Rust host; changes here must be mirrored
 // in `src-tauri/src/emote_index.rs` deserialization.
 type Bundle struct {
+	// BroadcasterID is the channel the bundle was fetched for, so the host
+	// can keep one bundle per joined channel.
+	BroadcasterID       string          `json:"broadcaster_id"`
 	TwitchGlobalEmotes  EmoteSet        `json:"twitch_global_emotes"`
 	TwitchChannelEmotes EmoteSet        `json:"twitch_channel_emotes"`
 	TwitchGlobalBadges  BadgeSet        `json:"twitch_global_badges"`

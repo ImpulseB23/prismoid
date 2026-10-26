@@ -5,14 +5,16 @@ import {
   openVerificationUri,
   startLogin,
   type AuthCommandError,
+  type AuthStatus,
   type DeviceCodeView,
 } from "../lib/twitchAuth";
+import logo from "../assets/logo.svg";
 
 export interface SignInProps {
-  onAuthenticated: (login: string) => void;
+  onAuthenticated: (status: AuthStatus) => void;
 }
 
-function isAuthError(e: unknown): e is AuthCommandError {
+export function isAuthError(e: unknown): e is AuthCommandError {
   return (
     typeof e === "object" &&
     e !== null &&
@@ -48,7 +50,7 @@ const SignIn: Component<SignInProps> = (props) => {
       const status = await completeLogin();
       if (gen !== generation) return;
       if (status.state === "logged_in" && status.login) {
-        props.onAuthenticated(status.login);
+        props.onAuthenticated(status);
       } else {
         setError("Sign-in returned without a login. Please try again.");
       }
@@ -76,71 +78,37 @@ const SignIn: Component<SignInProps> = (props) => {
   };
 
   return (
-    <div
-      style={{
-        display: "flex",
-        "flex-direction": "column",
-        "align-items": "center",
-        "justify-content": "center",
-        height: "100%",
-        gap: "16px",
-        padding: "24px",
-        "text-align": "center",
-        "font-family": "system-ui, sans-serif",
-      }}
-    >
-      <h1 style={{ margin: 0, "font-size": "20px" }}>Sign in to Twitch</h1>
-      <p style={{ margin: 0, "max-width": "440px", color: "#888" }}>
-        Prismoid needs your Twitch account to read chat and let you moderate and
-        reply. We never see your password — Twitch handles authorization in your
-        browser.
+    <div class="signin">
+      <img class="signin__logo" src={logo} alt="" />
+      <h1>
+        prismoid<span>.</span>
+      </h1>
+      <p class="signin__lede">
+        Any Twitch chat in one clean window, with 7TV, BTTV and FFZ emotes.
+        Twitch handles the sign-in in your browser; prismoid never sees your
+        password.
       </p>
       <Show
         when={pending()}
         fallback={
           <button
+            type="button"
+            class="btn btn--primary"
             onClick={beginFlow}
             disabled={busy()}
-            style={{
-              padding: "10px 20px",
-              "font-size": "15px",
-              "border-radius": "6px",
-              border: "none",
-              background: "#9146ff",
-              color: "white",
-              cursor: busy() ? "default" : "pointer",
-            }}
           >
             Sign in with Twitch
           </button>
         }
       >
         {(p) => (
-          <div
-            style={{
-              display: "flex",
-              "flex-direction": "column",
-              "align-items": "center",
-              gap: "12px",
-            }}
-          >
-            <p style={{ margin: 0 }}>
-              A browser window opened. Confirm the code below, then click{" "}
-              <strong>Authorize</strong>.
+          <div class="code-card">
+            <p>
+              A browser tab opened. Check the code matches, then choose
+              Authorize.
             </p>
-            <code
-              style={{
-                "font-size": "24px",
-                "letter-spacing": "4px",
-                padding: "8px 16px",
-                background: "#222",
-                color: "white",
-                "border-radius": "4px",
-              }}
-            >
-              {p().user_code}
-            </code>
-            <p style={{ margin: 0, "font-size": "12px", color: "#888" }}>
+            <code>{p().user_code}</code>
+            <small>
               No browser?{" "}
               <a
                 href={p().verification_uri}
@@ -150,23 +118,11 @@ const SignIn: Component<SignInProps> = (props) => {
                     () => {},
                   );
                 }}
-                style={{ color: "#9146ff" }}
               >
                 {p().verification_uri}
               </a>
-            </p>
-            <button
-              onClick={startOver}
-              style={{
-                padding: "6px 12px",
-                "font-size": "13px",
-                background: "transparent",
-                color: "#888",
-                border: "1px solid #444",
-                "border-radius": "4px",
-                cursor: "pointer",
-              }}
-            >
+            </small>
+            <button type="button" class="btn btn--outline" onClick={startOver}>
               Start over
             </button>
           </div>
@@ -174,7 +130,7 @@ const SignIn: Component<SignInProps> = (props) => {
       </Show>
       <Show when={error()}>
         {(e) => (
-          <p style={{ color: "#ff6b6b", margin: 0, "max-width": "440px" }}>
+          <p class="signin__error" role="alert">
             {e()}
           </p>
         )}
@@ -183,7 +139,7 @@ const SignIn: Component<SignInProps> = (props) => {
   );
 };
 
-function authErrorMessage(e: AuthCommandError): string {
+export function authErrorMessage(e: AuthCommandError): string {
   switch (e.kind) {
     case "user_denied":
       return "Authorization was denied. Try again to grant access.";

@@ -41,6 +41,9 @@ export function formatSendError(err: SendMessageError): string {
     case "json":
       return `Encoding error: ${err.message}`;
     case "helix":
+      if (err.code === "unauthorized") {
+        return "Twitch rejected the session. Reconnect in Settings.";
+      }
       return err.code
         ? `Twitch rejected message (${err.code}): ${err.message}`
         : `Twitch rejected message: ${err.message}`;
