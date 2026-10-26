@@ -34,6 +34,8 @@ const visitorPlatform = query(async (): Promise<Platform> => {
 // Visitors we cannot place get the Windows button, since that is the only
 // installer there is. Everyone else sees their own platform, with a plain
 // "not yet" where no build exists instead of a Windows exe they cannot run.
+// rel="external" keeps the router from treating /download as a page, so the
+// click is a real request and the installer starts downloading.
 function Download(props: { platform: Platform | undefined }) {
   const target = () =>
     props.platform === undefined || props.platform === "unknown"
@@ -46,7 +48,11 @@ function Download(props: { platform: Platform | undefined }) {
         <span class="no-build">No {PLATFORM_NAMES[target()]} build yet</span>
       }
     >
-      <a href={`/download/${target()}`} class="btn btn-primary btn-hero">
+      <a
+        href={`/download/${target()}`}
+        rel="external"
+        class="btn btn-primary btn-hero"
+      >
         <WindowsIcon /> Download for {PLATFORM_NAMES[target()]}
       </a>
     </Show>
@@ -67,7 +73,7 @@ function DownloadNote(props: { platform: Platform | undefined }) {
         </Match>
         <Match when={otherDesktop()}>
           Windows only for now, macOS and Linux later. Got a Windows PC too?{" "}
-          <a href="/download/windows" class="inline-link">
+          <a href="/download/windows" rel="external" class="inline-link">
             Download for Windows
           </a>
           .
