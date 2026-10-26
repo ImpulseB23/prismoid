@@ -1,6 +1,6 @@
 # <picture><source srcset="assets/icon-white.svg" media="(prefers-color-scheme: dark)" /><img src="assets/icon.svg" alt="prismoid" width="20" /></picture> prismoid
 
-unified live chat for streamers
+a better chat for Twitch, for viewers, mods and streamers
 
 [![website](https://img.shields.io/badge/website-prismoid.org-2ea043?style=for-the-badge&logo=googlechrome&logoColor=white)](https://prismoid.org)
 [![download](https://img.shields.io/badge/download-latest%20release-2ea043?style=for-the-badge&logo=github&logoColor=white)](https://github.com/ImpulseB23/Prismoid/releases/latest)
@@ -9,13 +9,13 @@ unified live chat for streamers
 
 ---
 
-merges Twitch, YouTube, and Kick chat into a single window with cross-platform moderation and universal emote rendering.
+a desktop chat client for Twitch that keeps several channels open as tabs, remembers what was said, and shows moderation as it happens. YouTube and Kick are wired in but switched off until they match Twitch; the goal is one window for all three.
 
-- **one feed** from all platforms in a single stream
-- **mod from one place** - ban, timeout, delete regardless of source platform
-- **emotes everywhere** - 7TV, BTTV, FFZ render in all chats, including YouTube
-- **OBS overlay** - browser source for clean unified chat on stream
-- **no cloud backend** - talks directly to platform APIs from your machine
+- **tabs and history** - open channels side by side, every message kept locally, backlog when a channel opens
+- **moderation you can see** - timeouts, bans and deletions in chat; who did it and why in channels you moderate, with the tools to act
+- **emotes everywhere** - 7TV, BTTV and FFZ next to Twitch's own, with an inspect card
+- **follows your browser** - switch to the channel in your front browser window automatically
+- **no cloud backend** - talks directly to platform APIs from your machine, no account with us
 
 ## stack
 

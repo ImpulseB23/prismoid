@@ -81,73 +81,26 @@
   font-size: 0.9375rem;
 }
 
-.btn-teaser {
-  position: relative;
-  cursor: pointer;
-  overflow: hidden;
+.download-note {
+  margin-top: var(--space-lg);
+  max-width: 34rem;
+  font-size: 0.8125rem;
+  font-weight: 300;
+  color: var(--text-faint);
+  line-height: 1.5;
 }
 
-/* The ::before reserves the natural width of "Download" so the button
-   size never changes when the hover label swaps in. */
-.btn-teaser::before {
-  content: "Download";
-  visibility: hidden;
-  white-space: nowrap;
+.platform.soon {
+  opacity: 0.55;
 }
 
-.btn-label {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  will-change: transform, opacity;
-}
-
-.btn-teaser.is-animated .btn-label {
-  animation: label-swap 0.22s cubic-bezier(0.2, 0.85, 0.3, 1.05);
-}
-
-@keyframes label-swap {
-  from {
-    transform: translateY(55%);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.btn-teaser.is-shaking {
-  animation: btn-shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
-}
-
-@keyframes btn-shake {
-  10%,
-  90% {
-    transform: translateX(-1px);
-  }
-  20%,
-  80% {
-    transform: translateX(2px);
-  }
-  30%,
-  50%,
-  70% {
-    transform: translateX(-4px);
-  }
-  40%,
-  60% {
-    transform: translateX(4px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .btn-teaser.is-shaking,
-  .btn-label {
-    animation: none;
-  }
+.platform.soon em {
+  font-style: normal;
+  font-size: 0.6875rem;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-faint);
 }
 
 /* about */
@@ -253,6 +206,19 @@
   color: var(--text-muted);
   font-weight: 300;
   line-height: 1.5;
+}
+
+/* roadmap */
+.roadmap {
+  padding: var(--space-3xl) 0;
+  border-top: 1px solid var(--border);
+}
+
+.roadmap p {
+  color: var(--text-muted);
+  font-weight: 300;
+  line-height: 1.6;
+  max-width: 40rem;
 }
 
 /* cta */

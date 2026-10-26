@@ -1,70 +1,16 @@
 import { Title, Meta } from "@solidjs/meta";
-import { createSignal, onCleanup, onMount, Show } from "solid-js";
-import { isServer } from "solid-js/web";
 import GithubPreview from "~/components/GithubPreview";
 import "./index.css";
-
-function DownloadButton() {
-  const [label, setLabel] = createSignal("Download");
-  const [shake, setShake] = createSignal(false);
-  // Skip the keyed-swap remount animation on the very first paint so the
-  // button doesn't fade its default label in on page load.
-  const [animate, setAnimate] = createSignal(false);
-
-  const reset = () => {
-    setLabel("Download");
-  };
-
-  const onEnter = () => {
-    setAnimate(true);
-    setLabel("compiling");
-  };
-
-  const onClick = () => {
-    setAnimate(true);
-    setLabel("nuh uh");
-    setShake(false);
-    requestAnimationFrame(() => setShake(true));
-  };
-
-  onMount(() => {
-    if (isServer) return;
-    // Tabbing out/in or window blur doesn't always fire mouseleave on the
-    // button. Reset to the default label whenever the page loses focus.
-    const onVisibility = () => {
-      if (document.visibilityState === "hidden") reset();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("blur", reset);
-    onCleanup(() => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("blur", reset);
-    });
-  });
-
-  return (
-    <button
-      type="button"
-      class="btn btn-primary btn-hero btn-teaser"
-      classList={{ "is-shaking": shake(), "is-animated": animate() }}
-      onMouseEnter={onEnter}
-      onMouseLeave={reset}
-      onFocus={onEnter}
-      onBlur={reset}
-      onClick={onClick}
-      onAnimationEnd={() => setShake(false)}
-      aria-label="Download (not yet released)"
-    >
-      <Show when={label()} keyed>
-        {(l) => <span class="btn-label">{l}</span>}
-      </Show>
-    </button>
-  );
-}
 
 const GitHubIcon = () => (
   <svg viewBox="0 0 16 16" fill="currentColor">
     <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+  </svg>
+);
+
+const WindowsIcon = () => (
+  <svg viewBox="0 0 16 16" fill="currentColor">
+    <path d="M0 2.3 6.5 1.4v6.3H0V2.3Zm7.3-1 8.7-1.3v7.7H7.3V1.3ZM0 8.3h6.5v6.3L0 13.7V8.3Zm7.3 0H16V16l-8.7-1.2V8.3Z" />
   </svg>
 );
 
@@ -89,18 +35,15 @@ const KickIcon = () => (
 export default function Home() {
   return (
     <>
-      <Title>prismoid - unified live chat for streamers</Title>
+      <Title>prismoid - a better chat for Twitch</Title>
       <Meta
         name="description"
-        content="Merge Twitch, YouTube, and Kick chat into one window. Cross-platform moderation, universal emotes, no cloud backend."
+        content="A fast desktop chat client for Twitch viewers, moderators and streamers. Tabs, chat history, full moderation visibility and 7TV, BTTV and FFZ emotes. Runs on your machine, no account with us."
       />
-      <Meta
-        property="og:title"
-        content="prismoid - unified live chat for streamers"
-      />
+      <Meta property="og:title" content="prismoid - a better chat for Twitch" />
       <Meta
         property="og:description"
-        content="Merge Twitch, YouTube, and Kick chat into one window."
+        content="Tabs, chat history, moderation you can see, and your emotes everywhere. Free and open source."
       />
       <Meta property="og:image" content="/icons/icon-512.png" />
       <Meta property="og:url" content="https://prismoid.org" />
@@ -109,22 +52,25 @@ export default function Home() {
       <section class="hero">
         <h1>prismoid</h1>
         <p class="tagline">
-          One chat feed from Twitch, YouTube, and Kick. Built for streamers who
-          don't want three windows open.
+          Twitch chat, done properly. Tabs for every channel, history that
+          survives a restart, moderation you can actually see, and your emotes
+          everywhere. For viewers, mods and streamers alike.
         </p>
         <div class="platforms">
           <span class="platform tw">
             <TwitchIcon /> Twitch
           </span>
-          <span class="platform yt">
-            <YouTubeIcon /> YouTube
+          <span class="platform yt soon">
+            <YouTubeIcon /> YouTube <em>soon</em>
           </span>
-          <span class="platform kk">
-            <KickIcon /> Kick
+          <span class="platform kk soon">
+            <KickIcon /> Kick <em>soon</em>
           </span>
         </div>
         <div class="hero-actions">
-          <DownloadButton />
+          <a href="/download/windows" class="btn btn-primary btn-hero">
+            <WindowsIcon /> Download for Windows
+          </a>
           <GithubPreview
             href="https://github.com/ImpulseB23/Prismoid"
             class="btn btn-outline btn-hero"
@@ -133,18 +79,23 @@ export default function Home() {
             <GitHubIcon /> View source
           </GithubPreview>
         </div>
+        <p class="download-note">
+          Windows 10 and 11. Early build: it is not code signed yet, so Windows
+          asks once before the first run. macOS and Linux follow.
+        </p>
       </section>
 
       <section class="about">
         <p>
-          prismoid is an open-source desktop app that merges live chat from
-          Twitch, YouTube, and Kick into a single window. Moderate across all
-          platforms from one place, with full emote support including 7TV, BTTV,
-          and FFZ rendering everywhere.
+          prismoid is a free, open-source desktop client for live chat. Open any
+          Twitch channel in a tab, read what was said before you arrived, keep
+          up at any speed, and if you moderate, see every timeout, ban and
+          deletion with who did it and why.
         </p>
         <p>
-          No cloud backend, no subscription. Runs entirely on your machine and
-          talks directly to platform APIs. Built with Rust, Go, and TypeScript.
+          No cloud, no account with us, no subscription. It runs entirely on
+          your machine and talks to Twitch directly. Built with Rust, Go and
+          TypeScript.
         </p>
       </section>
 
@@ -152,34 +103,48 @@ export default function Home() {
         <div class="section-label">Features</div>
         <div class="feature-grid">
           <div class="feature">
-            <h3>Unified feed</h3>
+            <h3>Tabs and history</h3>
             <p>
-              Messages from all platforms in a single stream. No tab switching,
-              no missed messages.
+              Keep several channels open and switch with a click or Ctrl+Tab.
+              Every message is kept locally, so a channel opens with its recent
+              chat instead of an empty window, even after a restart.
             </p>
           </div>
           <div class="feature">
-            <h3>Cross-platform mod</h3>
+            <h3>Moderation you can see</h3>
             <p>
-              Ban, timeout, and delete from one interface regardless of which
-              platform the message came from.
+              Timeouts, bans and deletions show up in chat as they happen. In
+              channels you moderate you also get who did it and why, plus the
+              tools to act from the message itself.
             </p>
           </div>
           <div class="feature">
-            <h3>Universal emotes</h3>
+            <h3>Emotes everywhere</h3>
             <p>
-              7TV, BTTV, and FFZ emotes render in all chats. Even in YouTube
-              where they normally don't exist.
+              7TV, BTTV and FFZ emotes next to Twitch's own, with a card for any
+              emote you right-click. Badges, replies and notices render the way
+              you expect.
             </p>
           </div>
           <div class="feature">
-            <h3>OBS overlay</h3>
+            <h3>Follows your browser</h3>
             <p>
-              Browser source URL for clean unified chat on stream. No platform
-              indicators visible to viewers.
+              Turn on follow mode and the app switches to whichever Twitch
+              channel is in your front browser window. Pin it on top and it
+              behaves like the chat the stream should have had.
             </p>
           </div>
         </div>
+      </section>
+
+      <section class="roadmap">
+        <div class="section-label">Coming later</div>
+        <p>
+          YouTube and Kick chat in the same window, including one feed that
+          mixes all three for people who stream to more than one platform. The
+          plumbing is in the app already; it is switched off in this release
+          until it is as solid as Twitch.
+        </p>
       </section>
 
       <section class="stack">
@@ -208,19 +173,18 @@ export default function Home() {
       </section>
 
       <section class="cta">
-        <h2>Early development</h2>
+        <h2>Built in the open</h2>
         <p>
-          prismoid is being built in the open. Not ready for use yet, but you
-          can follow progress,{" "}
+          prismoid is GPL-3.0 and early. If something is off, say so:{" "}
           <a
             href="https://github.com/ImpulseB23/Prismoid/issues"
             class="inline-link"
             target="_blank"
             rel="noopener"
           >
-            open issues
-          </a>
-          , or{" "}
+            open an issue
+          </a>{" "}
+          or{" "}
           <a href="/contributing" class="inline-link">
             contribute
           </a>

@@ -97,3 +97,17 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      # prismoid.org/download/windows points at a fixed file name under
+      # releases/latest/download, so the versioned installer is uploaded a
+      # second time under that name.
+      - name: Upload fixed-name Windows installer
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $setup = Get-ChildItem -Path apps/desktop/src-tauri/target/release/bundle/nsis -Filter "*-setup.exe" | Select-Object -First 1
+          if (-not $setup) { throw "no NSIS installer found" }
+          Copy-Item $setup.FullName Prismoid-Setup-x64.exe
+          gh release upload "${{ github.ref_name }}" Prismoid-Setup-x64.exe --clobber
