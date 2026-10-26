@@ -1,66 +1,6 @@
 import { Title, Meta } from "@solidjs/meta";
-import { createSignal, onCleanup, onMount, Show } from "solid-js";
-import { isServer } from "solid-js/web";
 import GithubPreview from "~/components/GithubPreview";
 import "./index.css";
-
-function DownloadButton() {
-  const [label, setLabel] = createSignal("Download");
-  const [shake, setShake] = createSignal(false);
-  // Skip the keyed-swap remount animation on the very first paint so the
-  // button doesn't fade its default label in on page load.
-  const [animate, setAnimate] = createSignal(false);
-
-  const reset = () => {
-    setLabel("Download");
-  };
-
-  const onEnter = () => {
-    setAnimate(true);
-    setLabel("compiling");
-  };
-
-  const onClick = () => {
-    setAnimate(true);
-    setLabel("nuh uh");
-    setShake(false);
-    requestAnimationFrame(() => setShake(true));
-  };
-
-  onMount(() => {
-    if (isServer) return;
-    // Tabbing out/in or window blur doesn't always fire mouseleave on the
-    // button. Reset to the default label whenever the page loses focus.
-    const onVisibility = () => {
-      if (document.visibilityState === "hidden") reset();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("blur", reset);
-    onCleanup(() => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("blur", reset);
-    });
-  });
-
-  return (
-    <button
-      type="button"
-      class="btn btn-primary btn-hero btn-teaser"
-      classList={{ "is-shaking": shake(), "is-animated": animate() }}
-      onMouseEnter={onEnter}
-      onMouseLeave={reset}
-      onFocus={onEnter}
-      onBlur={reset}
-      onClick={onClick}
-      onAnimationEnd={() => setShake(false)}
-      aria-label="Download (not yet released)"
-    >
-      <Show when={label()} keyed>
-        {(l) => <span class="btn-label">{l}</span>}
-      </Show>
-    </button>
-  );
-}
 
 const GitHubIcon = () => (
   <svg viewBox="0 0 16 16" fill="currentColor">
@@ -68,164 +8,230 @@ const GitHubIcon = () => (
   </svg>
 );
 
-const TwitchIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor">
-    <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
+const WindowsIcon = () => (
+  <svg viewBox="0 0 16 16" fill="currentColor">
+    <path d="M0 2.3 6.5 1.4v6.3H0V2.3Zm7.3-1 8.7-1.3v7.7H7.3V1.3ZM0 8.3h6.5v6.3L0 13.7V8.3Zm7.3 0H16V16l-8.7-1.2V8.3Z" />
   </svg>
 );
 
-const YouTubeIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor">
-    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
-  </svg>
-);
-
-const KickIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor">
-    <path d="M1.333 0h8v5.333H12V2.667h2.667V0h8v8H20v2.667h-2.667v2.666H20V16h2.667v8h-8v-2.667H12v-2.666H9.333V24h-8Z" />
-  </svg>
-);
+// A still of the app, drawn in markup so it stays sharp at any size and
+// never goes stale next to a screenshot of an older build.
+function AppMock() {
+  return (
+    <div class="mock" aria-hidden="true">
+      <div class="mock__bar">
+        <span class="mock__logo" />
+        <span class="mock__channel">xqc</span>
+        <span class="mock__dot" />
+      </div>
+      <div class="mock__tabs">
+        <span class="mock__tab mock__tab--active">xqc</span>
+        <span class="mock__tab">
+          forsen <b>12</b>
+        </span>
+        <span class="mock__tab">your_mod_channel</span>
+        <span class="mock__tab mock__tab--add">+</span>
+      </div>
+      <div class="mock__stream">
+        <b>Live</b> 41.2k viewers 3:12:08 <i>Just Chatting</i>
+      </div>
+      <div class="mock__feed">
+        <div class="mock__msg mock__msg--old">
+          <span class="mock__badge mock__badge--sub" />
+          <span class="mock__name" style="color:#1e90ff">
+            Tricklord
+          </span>
+          <span>
+            he is NOT reading chat <span class="mock__emote" />
+          </span>
+        </div>
+        <div class="mock__msg mock__msg--old">
+          <span class="mock__badge mock__badge--vip" />
+          <span class="mock__name" style="color:#ff69b4">
+            supibot
+          </span>
+          <span>@brayanx2, reminder from yourself (1m, 5s ago): $fish</span>
+        </div>
+        <div class="mock__divider">
+          <span>earlier, before you opened the tab</span>
+        </div>
+        <div class="mock__msg">
+          <span class="mock__badge mock__badge--mod" />
+          <span class="mock__name" style="color:#00ff7f">
+            nymn
+          </span>
+          <span>
+            pepeLaugh <span class="mock__emote mock__emote--b" /> he found the
+            setting
+          </span>
+        </div>
+        <div class="mock__notice">
+          <b>nymn</b> timed out <b>spammer_4421</b> for 10m: links
+        </div>
+        <div class="mock__msg">
+          <span class="mock__badge mock__badge--sub" />
+          <span class="mock__name" style="color:#daa520">
+            kebabloverr
+          </span>
+          <span>
+            how is chat this fast <span class="mock__emote mock__emote--c" />
+          </span>
+        </div>
+        <div class="mock__msg mock__msg--deleted">
+          <span class="mock__name" style="color:#8f8f8f">
+            spammer_4421
+          </span>
+          <span>FREE FOLLOWERS at bit dot ly slash</span>
+        </div>
+        <div class="mock__msg">
+          <span class="mock__badge mock__badge--mod" />
+          <span class="mock__name" style="color:#8b5fc8">
+            you
+          </span>
+          <span>
+            <span class="mock__mention">@kebabloverr</span> it skips the website
+          </span>
+        </div>
+      </div>
+      <div class="mock__composer">
+        <span>Message xqc</span>
+        <span class="mock__send" />
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   return (
     <>
-      <Title>prismoid - unified live chat for streamers</Title>
+      <Title>
+        prismoid - the Twitch chat window the site should have shipped
+      </Title>
       <Meta
         name="description"
-        content="Merge Twitch, YouTube, and Kick chat into one window. Cross-platform moderation, universal emotes, no cloud backend."
+        content="A desktop chat client for Twitch. Tabs, chat history that survives a restart, mod actions you can see, 7TV, BTTV and FFZ emotes. Free, open source, 12 MB."
       />
       <Meta
         property="og:title"
-        content="prismoid - unified live chat for streamers"
+        content="prismoid - the Twitch chat window the site should have shipped"
       />
       <Meta
         property="og:description"
-        content="Merge Twitch, YouTube, and Kick chat into one window."
+        content="Tabs, history, mod actions you can see, your emotes. Free, open source, 12 MB."
       />
       <Meta property="og:image" content="/icons/icon-512.png" />
       <Meta property="og:url" content="https://prismoid.org" />
       <Meta name="twitter:card" content="summary" />
 
       <section class="hero">
-        <h1>prismoid</h1>
-        <p class="tagline">
-          One chat feed from Twitch, YouTube, and Kick. Built for streamers who
-          don't want three windows open.
-        </p>
-        <div class="platforms">
-          <span class="platform tw">
-            <TwitchIcon /> Twitch
-          </span>
-          <span class="platform yt">
-            <YouTubeIcon /> YouTube
-          </span>
-          <span class="platform kk">
-            <KickIcon /> Kick
-          </span>
+        <div class="hero__copy">
+          <h1>prismoid</h1>
+          <p class="tagline">
+            Twitch chat is the best part of Twitch and the worst part of the
+            Twitch website.
+          </p>
+          <p class="lede">
+            prismoid is the chat window the site should have shipped. Tabs,
+            history, mod actions you can see, your emotes. Free, open source,
+            about 12 MB.
+          </p>
+          <div class="hero-actions">
+            <a href="/download/windows" class="btn btn-primary btn-hero">
+              <WindowsIcon /> Download for Windows
+            </a>
+            <GithubPreview
+              href="https://github.com/ImpulseB23/Prismoid"
+              class="btn btn-outline btn-hero"
+              target="_blank"
+            >
+              <GitHubIcon /> View source
+            </GithubPreview>
+          </div>
+          <p class="download-note">
+            Windows 10 and 11. Early build, not code signed yet, so Windows will
+            ask once. macOS and Linux later.
+          </p>
         </div>
-        <div class="hero-actions">
-          <DownloadButton />
-          <GithubPreview
-            href="https://github.com/ImpulseB23/Prismoid"
-            class="btn btn-outline btn-hero"
-            target="_blank"
-          >
-            <GitHubIcon /> View source
-          </GithubPreview>
+        <AppMock />
+      </section>
+
+      <section class="moments">
+        <div class="moment">
+          <h2>You tab back and chat is 400 messages ahead.</h2>
+          <p>
+            Scroll up as far as you like. prismoid keeps every channel's chat on
+            your disk and puts it back when you open the channel, restart or
+            not. First time in a channel? It pulls the last few hundred lines
+            anyway, so you never arrive to an empty window.
+          </p>
+        </div>
+        <div class="moment">
+          <h2>Someone got timed out and nobody knows why.</h2>
+          <p>
+            Timeouts, bans and deletions show up in chat as they happen, in
+            every channel. Where you moderate, you also get who did it and the
+            reason, and you can act straight from the message: timeout, ban,
+            delete, done.
+          </p>
+        </div>
+        <div class="moment">
+          <h2>Five channels, five windows.</h2>
+          <p>
+            Tabs. Ctrl+Tab between them, unread counts on the ones you're not
+            looking at, and all of it on one connection so Twitch never cuts you
+            off for having too many open.
+          </p>
+        </div>
+        <div class="moment">
+          <h2>Your emotes, in your chat.</h2>
+          <p>
+            7TV, BTTV and FFZ next to Twitch's own, badges and replies drawn the
+            way you expect. Right-click any emote to see what it is and where it
+            came from.
+          </p>
+        </div>
+        <div class="moment">
+          <h2>Watching in the browser anyway?</h2>
+          <p>
+            Turn on follow mode and prismoid switches to whatever Twitch channel
+            is in your front browser window. Pin it on top of the stream and
+            forget the site's chat exists.
+          </p>
         </div>
       </section>
 
-      <section class="about">
+      <section class="facts">
+        <span>about 12 MB</span>
+        <span>no cloud, no account with us</span>
+        <span>GPL-3.0</span>
+        <span>Windows now, macOS and Linux later</span>
+      </section>
+
+      <section class="aside">
         <p>
-          prismoid is an open-source desktop app that merges live chat from
-          Twitch, YouTube, and Kick into a single window. Moderate across all
-          platforms from one place, with full emote support including 7TV, BTTV,
-          and FFZ rendering everywhere.
+          YouTube and Kick are in the code and switched off in this build until
+          they are as good as Twitch. If you stream to all three at once, one
+          window for everything is where this is going.
         </p>
-        <p>
-          No cloud backend, no subscription. Runs entirely on your machine and
-          talks directly to platform APIs. Built with Rust, Go, and TypeScript.
-        </p>
-      </section>
-
-      <section class="features">
-        <div class="section-label">Features</div>
-        <div class="feature-grid">
-          <div class="feature">
-            <h3>Unified feed</h3>
-            <p>
-              Messages from all platforms in a single stream. No tab switching,
-              no missed messages.
-            </p>
-          </div>
-          <div class="feature">
-            <h3>Cross-platform mod</h3>
-            <p>
-              Ban, timeout, and delete from one interface regardless of which
-              platform the message came from.
-            </p>
-          </div>
-          <div class="feature">
-            <h3>Universal emotes</h3>
-            <p>
-              7TV, BTTV, and FFZ emotes render in all chats. Even in YouTube
-              where they normally don't exist.
-            </p>
-          </div>
-          <div class="feature">
-            <h3>OBS overlay</h3>
-            <p>
-              Browser source URL for clean unified chat on stream. No platform
-              indicators visible to viewers.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section class="stack">
-        <div class="section-label">Stack</div>
-        <div class="stack-grid">
-          <div class="stack-item">
-            <h3>Rust</h3>
-            <p>
-              Tauri 2 shell, message processing, emote scanning via aho-corasick
-            </p>
-          </div>
-          <div class="stack-item">
-            <h3>Go</h3>
-            <p>
-              Sidecar for network I/O, WebSocket connections, OAuth, platform
-              APIs
-            </p>
-          </div>
-          <div class="stack-item">
-            <h3>TypeScript</h3>
-            <p>
-              SolidJS frontend with virtual scrolling, emote rendering, mod UI
-            </p>
-          </div>
-        </div>
       </section>
 
       <section class="cta">
-        <h2>Early development</h2>
+        <h2>Try it on tonight's stream.</h2>
         <p>
-          prismoid is being built in the open. Not ready for use yet, but you
-          can follow progress,{" "}
+          Install, sign in with Twitch, open a channel. If something is off,{" "}
           <a
             href="https://github.com/ImpulseB23/Prismoid/issues"
             class="inline-link"
             target="_blank"
             rel="noopener"
           >
-            open issues
-          </a>
-          , or{" "}
-          <a href="/contributing" class="inline-link">
-            contribute
+            say so
           </a>
           .
         </p>
+        <a href="/download/windows" class="btn btn-primary btn-hero">
+          <WindowsIcon /> Download for Windows
+        </a>
       </section>
     </>
   );
