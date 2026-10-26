@@ -137,7 +137,7 @@ img {
   flex-shrink: 0;
 }
 
-@media.header__spacer {
+.header__spacer {
   flex: 1;
 }
 
