@@ -5,15 +5,10 @@
 // visitor lands on the releases page instead.
 
 import type { APIEvent } from "@solidjs/start/server";
-
-const RELEASES = "https://github.com/ImpulseB23/Prismoid/releases";
-
-const INSTALLERS: Record<string, string> = {
-  windows: `${RELEASES}/latest/download/Prismoid-Setup-x64.exe`,
-};
+import { INSTALLERS, RELEASES, type Platform } from "~/lib/platform";
 
 export async function GET({ params }: APIEvent) {
-  const installer = INSTALLERS[params.platform ?? ""];
+  const installer = INSTALLERS[(params.platform ?? "") as Platform];
   if (installer && (await published(installer))) {
     return Response.redirect(installer, 302);
   }

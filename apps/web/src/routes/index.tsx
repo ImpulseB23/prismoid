@@ -1,5 +1,14 @@
+import { Match, Show, Switch } from "solid-js";
+import { getRequestEvent } from "solid-js/web";
+import { createAsync, query } from "@solidjs/router";
 import { Title, Meta } from "@solidjs/meta";
 import GithubPreview from "~/components/GithubPreview";
+import {
+  detectPlatform,
+  INSTALLERS,
+  PLATFORM_NAMES,
+  type Platform,
+} from "~/lib/platform";
 import "./index.css";
 
 const GitHubIcon = () => (
@@ -13,6 +22,60 @@ const WindowsIcon = () => (
     <path d="M0 2.3 6.5 1.4v6.3H0V2.3Zm7.3-1 8.7-1.3v7.7H7.3V1.3ZM0 8.3h6.5v6.3L0 13.7V8.3Zm7.3 0H16V16l-8.7-1.2V8.3Z" />
   </svg>
 );
+
+// Detected on the server from the request headers, so the first paint
+// already shows the right button and nothing flickers after hydration.
+const visitorPlatform = query(async (): Promise<Platform> => {
+  "use server";
+  const event = getRequestEvent();
+  return event ? detectPlatform(event.request.headers) : "unknown";
+}, "visitorPlatform");
+
+// Visitors we cannot place get the Windows button, since that is the only
+// installer there is. Everyone else sees their own platform, with a plain
+// "not yet" where no build exists instead of a Windows exe they cannot run.
+function Download(props: { platform: Platform | undefined }) {
+  const target = () =>
+    props.platform === undefined || props.platform === "unknown"
+      ? "windows"
+      : props.platform;
+  return (
+    <Show
+      when={INSTALLERS[target()]}
+      fallback={
+        <span class="no-build">No {PLATFORM_NAMES[target()]} build yet</span>
+      }
+    >
+      <a href={`/download/${target()}`} class="btn btn-primary btn-hero">
+        <WindowsIcon /> Download for {PLATFORM_NAMES[target()]}
+      </a>
+    </Show>
+  );
+}
+
+function DownloadNote(props: { platform: Platform | undefined }) {
+  const target = () => props.platform ?? "unknown";
+  const phone = () => target() === "ios" || target() === "android";
+  const otherDesktop = () =>
+    target() === "macos" || target() === "linux" || target() === "chromeos";
+  return (
+    <p class="download-note">
+      <Switch fallback="Windows 10 and 11. Early build, not code signed yet, so Windows will ask once. macOS and Linux later.">
+        <Match when={phone()}>
+          There is no {PLATFORM_NAMES[target()]} app. prismoid is a chat window
+          for your PC, so open prismoid.org on Windows to download it.
+        </Match>
+        <Match when={otherDesktop()}>
+          Windows only for now, macOS and Linux later. Got a Windows PC too?{" "}
+          <a href="/download/windows" class="inline-link">
+            Download for Windows
+          </a>
+          .
+        </Match>
+      </Switch>
+    </p>
+  );
+}
 
 // A still of the app, drawn in markup so it stays sharp at any size and
 // never goes stale next to a screenshot of an older build.
@@ -102,6 +165,7 @@ function AppMock() {
 }
 
 export default function Home() {
+  const platform = createAsync(() => visitorPlatform(), { deferStream: true });
   return (
     <>
       <Title>
@@ -136,9 +200,7 @@ export default function Home() {
             about 12 MB.
           </p>
           <div class="hero-actions">
-            <a href="/download/windows" class="btn btn-primary btn-hero">
-              <WindowsIcon /> Download for Windows
-            </a>
+            <Download platform={platform()} />
             <GithubPreview
               href="https://github.com/ImpulseB23/Prismoid"
               class="btn btn-outline btn-hero"
@@ -147,10 +209,7 @@ export default function Home() {
               <GitHubIcon /> View source
             </GithubPreview>
           </div>
-          <p class="download-note">
-            Windows 10 and 11. Early build, not code signed yet, so Windows will
-            ask once. macOS and Linux later.
-          </p>
+          <DownloadNote platform={platform()} />
         </div>
         <AppMock />
       </section>
@@ -229,9 +288,7 @@ export default function Home() {
           </a>
           .
         </p>
-        <a href="/download/windows" class="btn btn-primary btn-hero">
-          <WindowsIcon /> Download for Windows
-        </a>
+        <Download platform={platform()} />
       </section>
     </>
   );
