@@ -27,6 +27,7 @@ import {
   zoomReset,
 } from "../stores/settingsStore";
 import { formatSeconds } from "../lib/slashCommands";
+import { openLogDir } from "../lib/log";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getVersion } from "@tauri-apps/api/app";
 import {
@@ -405,6 +406,24 @@ const Settings: Component<SettingsProps> = (props) => {
 
           <div class="dialog__label">Updates</div>
           <UpdateRow />
+
+          <div class="dialog__label">Logs</div>
+          <div class="settings__row">
+            <div class="settings__text">
+              <span class="settings__name">Log file</span>
+              <span class="settings__hint">
+                Connection and error details. Attach the newest file to a bug
+                report.
+              </span>
+            </div>
+            <button
+              type="button"
+              class="btn btn--outline"
+              onClick={() => run(openLogDir())}
+            >
+              Open folder
+            </button>
+          </div>
 
           <Show when={error()}>
             {(e) => (
