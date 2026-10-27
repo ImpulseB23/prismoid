@@ -1228,6 +1228,10 @@ img {
 
 .msg__user {
   cursor: pointer;
+  font-weight: 600;
+  /* Keep DOM in lockstep with Pretext's `break: "never"` on the username
+     segment so heights stay accurate even for very long display names. */
+  white-space: nowrap;
 }
 
 .msg__user:hover {
@@ -1835,8 +1839,35 @@ img {
 /* Emote inspect */
 
 .msg__emote {
+  display: inline-block;
+  position: relative;
+  vertical-align: middle;
   cursor: pointer;
   border-radius: 3px;
+}
+
+.msg__emote-img {
+  display: block;
+}
+
+.msg__emote-overlay {
+  position: absolute;
+  pointer-events: none;
+}
+
+.msg__badge {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.feed__canvas {
+  position: relative;
+  width: 100%;
+}
+
+.icon-btn--small {
+  width: 24px;
+  height: 24px;
 }
 
 .msg__emote:hover,

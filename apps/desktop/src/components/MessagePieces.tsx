@@ -39,11 +39,8 @@ const Piece: Component<{ piece: MessagePiece }> = (props) => {
       title={title}
       aria-label={`${title} emote`}
       style={{
-        display: "inline-block",
-        position: "relative",
         width: `${primary.width}px`,
         height: `${primary.height}px`,
-        "vertical-align": "middle",
       }}
       onClick={(e) => {
         e.stopPropagation();
@@ -68,7 +65,7 @@ const Piece: Component<{ piece: MessagePiece }> = (props) => {
         width={primary.width}
         height={primary.height}
         draggable={false}
-        style={{ display: "block" }}
+        class="msg__emote-img"
       />
       <For each={overlays}>
         {(overlay) => (
@@ -78,11 +75,10 @@ const Piece: Component<{ piece: MessagePiece }> = (props) => {
             width={overlay.width}
             height={overlay.height}
             draggable={false}
+            class="msg__emote-overlay"
             style={{
-              position: "absolute",
               left: `${(primary.width - overlay.width) / 2}px`,
               top: `${(primary.height - overlay.height) / 2}px`,
-              "pointer-events": "none",
             }}
           />
         )}

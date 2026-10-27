@@ -197,10 +197,9 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
         <Show when={row.kind === "recent"}>
           <button
             type="button"
-            class="icon-btn"
             title="Remove from recent"
             aria-label={`Remove ${c.display_name} from recent`}
-            style={{ width: "24px", height: "24px" }}
+            class="icon-btn icon-btn--small"
             onClick={(e) => {
               e.stopPropagation();
               forgetRecentChannel(c.login);
