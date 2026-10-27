@@ -664,11 +664,8 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
         onScroll={handleScroll}
       >
         <div
-          style={{
-            position: "relative",
-            height: `${layout().totalHeight}px`,
-            width: "100%",
-          }}
+          class="feed__canvas"
+          style={{ height: `${layout().totalHeight}px` }}
         >
           <For each={visibleMonos()}>
             {(mono) => {
@@ -920,6 +917,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                         <For each={row().prepared.badges}>
                           {(b) => (
                             <img
+                              class="msg__badge"
                               src={b.badge.url_1x}
                               srcset={
                                 b.badge.url_2x
@@ -935,11 +933,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                               width={BADGE_SIZE_PX}
                               height={BADGE_SIZE_PX}
                               draggable={false}
-                              style={{
-                                display: "inline-block",
-                                "vertical-align": "middle",
-                                "margin-right": `${BADGE_GAP_PX}px`,
-                              }}
+                              style={{ "margin-right": `${BADGE_GAP_PX}px` }}
                             />
                           )}
                         </For>
@@ -954,14 +948,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                                 ? settings().userNotes[row().msg.username]
                                 : undefined
                           }
-                          style={{
-                            color: normalizeUserColor(row().msg.color),
-                            "font-weight": 600,
-                            // Keep DOM in lockstep with Pretext's `break: "never"`
-                            // on the username segment so heights stay accurate even
-                            // for very long display names.
-                            "white-space": "nowrap",
-                          }}
+                          style={{ color: normalizeUserColor(row().msg.color) }}
                           onClick={(e) => {
                             e.stopPropagation();
                             openCard(row().msg);
