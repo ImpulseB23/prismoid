@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/ImpulseB23/prismoid/compare/v0.2.0...v0.2.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* sidecar dies with the app so the updater can overwrite it ([#186](https://github.com/ImpulseB23/prismoid/issues/186)) ([f320432](https://github.com/ImpulseB23/prismoid/commit/f320432abcc8694b4ef8410db04e50e894862f82))
+
 ## [0.2.0](https://github.com/ImpulseB23/prismoid/compare/v0.1.1...v0.2.0) (2026-10-27)
 
 
