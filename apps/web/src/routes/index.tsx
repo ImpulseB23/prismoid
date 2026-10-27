@@ -450,28 +450,39 @@ export default function Home() {
         <ul class="roadmap__list">
           <li>
             <Icon name="layers" class="roadmap__icon" />
-            <strong>YouTube and Kick in the same window.</strong> Stream to all
-            three, read one chat. Time someone out and it happens where they
-            are.
+            <p>
+              <strong>YouTube and Kick in the same window.</strong> Stream to
+              all three, read one chat. Time someone out and it happens where
+              they are.
+            </p>
           </li>
           <li>
             <Icon name="cast" class="roadmap__icon" />
-            <strong>Chat on your stream.</strong> Drop it into OBS straight from
-            the app, every platform in one feed, no widget service needed.
+            <p>
+              <strong>Chat on your stream.</strong> Drop it into OBS straight
+              from the app, every platform in one feed, no widget service
+              needed.
+            </p>
           </li>
           <li>
             <Icon name="sliders" class="roadmap__icon" />
-            <strong>Run the stream from here.</strong> Title, category and going
-            live, from the window you already moderate in.
+            <p>
+              <strong>Run the stream from here.</strong> Title, category and
+              going live, from the window you already moderate in.
+            </p>
           </li>
           <li>
             <Icon name="puzzle" class="roadmap__icon" />
-            <strong>Your own additions.</strong> Plugins for the things we did
-            not think of.
+            <p>
+              <strong>Your own additions.</strong> Plugins for the things we did
+              not think of.
+            </p>
           </li>
           <li>
             <Icon name="laptop" class="roadmap__icon" />
-            <strong>Mac and Linux.</strong> Same app, same download page.
+            <p>
+              <strong>Mac and Linux.</strong> Same app, same download page.
+            </p>
           </li>
         </ul>
       </section>

@@ -554,6 +554,10 @@
   align-items: start;
 }
 
+.roadmap__list li p {
+  margin: 0;
+}
+
 .roadmap__icon {
   width: 22px;
   height: 22px;
