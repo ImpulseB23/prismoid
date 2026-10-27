@@ -20,7 +20,7 @@ export function screenFor(state: UpdateState): ScreenView | null {
         ? Math.round((state.received / state.total) * 100)
         : null;
       return {
-        title: `Updating to ${state.version}`,
+        title: "Updating prismoid",
         detail: progress === null ? "Downloading" : `Downloading ${progress}%`,
         progress,
         failed: false,
@@ -28,7 +28,7 @@ export function screenFor(state: UpdateState): ScreenView | null {
     }
     case "ready":
       return {
-        title: `Updating to ${state.version}`,
+        title: "Updating prismoid",
         detail: "Restarting",
         progress: 100,
         failed: false,
