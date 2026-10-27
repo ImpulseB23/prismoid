@@ -36,7 +36,7 @@ aho-corasick = "1.1"
 arc-swap = "1.7"
 rustc-hash = "2.1"
 sha2 = "0.11"
-base64 = "0.22"
+base64 = "0.23"
 getrandom = "0.4"
 url = "2"
 tauri-plugin-window-state = "2.5.0"
@@ -46,7 +46,7 @@ tauri-plugin-process = "2.4"
 
 [dev-dependencies]
 criterion = "0.8"
-httpmock = "0.8"
+httpmock = "0.9"
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time", "test-util"] }
 
 [target.'cfg(windows)'.dependencies]
