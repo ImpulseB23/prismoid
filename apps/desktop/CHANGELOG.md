@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/ImpulseB23/prismoid/compare/v0.3.1...v0.4.0) (2026-10-27)
+
+
+### Features
+
+* always show twitch's authorize page on sign-in ([#198](https://github.com/ImpulseB23/prismoid/issues/198)) ([d0e2f5d](https://github.com/ImpulseB23/prismoid/commit/d0e2f5de83d63e277d51f46457355f890800ea33))
+
 ## [0.3.1](https://github.com/ImpulseB23/prismoid/compare/v0.3.0...v0.3.1) (2026-10-27)
 
 
