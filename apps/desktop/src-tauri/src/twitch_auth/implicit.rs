@@ -70,7 +70,12 @@ pub struct PendingLogin {
 impl PendingLogin {
     pub fn start(client_id: ClientId, scopes: Vec<Scope>) -> (Self, Url) {
         let redirect = Url::parse(TWITCH_REDIRECT_URL).expect("redirect url is well formed");
-        let mut builder = ImplicitUserTokenBuilder::new(client_id, redirect).set_scopes(scopes);
+        // Always show Twitch's Authorize page, even when the browser is
+        // already signed in and has approved prismoid before, so the user
+        // sees Twitch do the sign-in and can pick another account.
+        let mut builder = ImplicitUserTokenBuilder::new(client_id, redirect)
+            .set_scopes(scopes)
+            .force_verify(true);
         let (authorize_url, _csrf) = builder.generate_url();
         (Self { builder }, authorize_url)
     }
@@ -179,6 +184,7 @@ mod tests {
         assert_eq!(pairs["response_type"], "token");
         assert_eq!(pairs["redirect_uri"], TWITCH_REDIRECT_URL);
         assert_eq!(pairs["scope"], "user:read:chat");
+        assert_eq!(pairs["force_verify"], "true");
         assert!(pending.builder.csrf_is_valid(&pairs["state"]));
     }
 
