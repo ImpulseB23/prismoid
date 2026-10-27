@@ -2,6 +2,7 @@ pub mod backlog;
 pub mod browser_follow;
 pub mod chat_history;
 mod host;
+pub mod logging;
 mod message;
 pub mod oauth_pkce;
 pub mod ringbuf;
@@ -25,7 +26,6 @@ pub use host::parse_batch;
 pub use message::UnifiedMessage;
 
 use tauri::{Manager, Runtime};
-use tracing_subscriber::EnvFilter;
 
 #[tauri::command]
 fn get_platform() -> &'static str {
@@ -45,12 +45,6 @@ pub fn run() {
         Err(err) => eprintln!("failed to load .env.local: {err}"),
     }
 
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::from_default_env().add_directive("prismoid=debug".parse().unwrap()),
-        )
-        .init();
-
     let builder = tauri::Builder::default();
     // Registered first, as the plugin requires: a second launch hands off
     // to the running instance, which brings its window forward, and exits.
@@ -63,12 +57,14 @@ pub fn run() {
         }
     }));
     builder
+        .plugin(logging::plugin())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             get_platform,
+            logging::open_log_dir,
             twitch_auth::commands::twitch_auth_status,
             twitch_auth::commands::twitch_start_login,
             twitch_auth::commands::twitch_complete_login,
