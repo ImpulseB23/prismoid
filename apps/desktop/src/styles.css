@@ -961,6 +961,83 @@ img {
   opacity: 0.8;
 }
 
+.update-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px;
+  background: var(--bg);
+  text-align: center;
+}
+
+.update-screen img {
+  width: 56px;
+  height: 56px;
+  margin-bottom: 6px;
+}
+
+.update-screen h1 {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.update-screen p {
+  color: var(--text-muted);
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+.update-screen--error p {
+  color: var(--color-red-light);
+}
+
+.update-screen__bar {
+  width: min(260px, 80%);
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.update-screen__bar div {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-purple);
+  transition: width 0.2s;
+}
+
+.update-screen__bar--busy div {
+  animation: update-busy 1.2s ease-in-out infinite;
+}
+
+@keyframes update-busy {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(340%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .update-screen__bar--busy div {
+    animation: none;
+  }
+}
+
+.update-screen__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
 .icon-btn--active {
   color: var(--color-purple-light);
   border-color: var(--border);

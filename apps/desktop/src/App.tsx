@@ -16,6 +16,7 @@ import StreamBar from "./components/StreamBar";
 import logo from "./assets/logo.svg";
 import SignIn from "./components/SignIn";
 import UpdateNotice from "./components/UpdateNotice";
+import UpdateScreen from "./components/UpdateScreen";
 import { getAuthStatus, logout } from "./lib/twitchAuth";
 import {
   authStatus,
@@ -31,6 +32,7 @@ import { clearMessages } from "./stores/chatStore";
 import { clearRoles, loadModeratedChannels } from "./stores/roleStore";
 import { trackActiveStream } from "./stores/streamStore";
 import {
+  dismissUpdate,
   installUpdate,
   scheduleUpdateChecks,
   updateState,
@@ -106,6 +108,11 @@ const App: Component = () => {
           )}
         </Match>
       </Switch>
+      <UpdateScreen
+        state={updateState}
+        onRetry={() => void installUpdate()}
+        onDismiss={dismissUpdate}
+      />
     </div>
   );
 };

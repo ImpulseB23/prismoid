@@ -48,6 +48,7 @@ describe("UpdateNotice", () => {
     const [state] = createSignal<UpdateState>({
       kind: "error",
       message: "signature mismatch",
+      during: "install",
     });
     render(() => <UpdateNotice state={state} onInstall={onInstall} />);
     expect(screen.getByRole("alert").textContent).toContain(
