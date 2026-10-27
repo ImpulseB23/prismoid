@@ -190,7 +190,7 @@ export default function Home() {
       </Title>
       <Meta
         name="description"
-        content="A desktop chat client for Twitch. Tabs, chat history that survives a restart, mod actions you can see, 7TV, BTTV and FFZ emotes. Free, open source, 14 MB."
+        content="A desktop chat client for Twitch. Tabs, chat history that survives a restart, mod actions you can see, 7TV, BTTV and FFZ emotes. Free, open source, ultra lightweight."
       />
       <Meta
         property="og:title"
@@ -198,7 +198,7 @@ export default function Home() {
       />
       <Meta
         property="og:description"
-        content="Tabs, history, mod actions you can see, your emotes. Free, open source, 14 MB."
+        content="Tabs, history, mod actions you can see, your emotes. Free, open source, ultra lightweight."
       />
       <Meta property="og:image" content="/icons/icon-512.png" />
       <Meta property="og:url" content="https://prismoid.org" />
@@ -214,7 +214,7 @@ export default function Home() {
           <p class="lede">
             prismoid is the chat window the site should have shipped. Tabs,
             history, mod actions you can see, your emotes. Free, open source,
-            about 14 MB.
+            ultra lightweight.
           </p>
           <div class="hero-actions">
             <Download platform={platform()} />
@@ -277,71 +277,76 @@ export default function Home() {
       </section>
 
       <section class="facts">
-        <span>about 14 MB</span>
-        <span>no bundled browser</span>
-        <span>no cloud, no account with us</span>
-        <span>GPL-3.0</span>
-        <span>Windows now, macOS and Linux later</span>
+        <span>ultra lightweight</span>
+        <span>hyper fast</span>
+        <span>no account, no cloud</span>
+        <span>free and open source</span>
+        <span>Windows now, Mac and Linux next</span>
       </section>
 
       <section class="why">
-        <h2>Small on purpose.</h2>
+        <h2>Light enough to forget it is open.</h2>
         <div class="why__grid">
           <div class="why__item">
-            <h3>14 MB, not 300.</h3>
+            <h3>Ultra lightweight.</h3>
             <p>
-              prismoid draws its window with the WebView2 that Windows already
-              ships, so there is no second copy of a browser on your disk and
-              the download is the size of a few photos.
+              Installs in seconds and sits next to your stream without eating
+              into it. No browser hidden inside the download, nothing running
+              that you did not ask for.
             </p>
           </div>
           <div class="why__item">
-            <h3>Three small parts.</h3>
+            <h3>Hyper fast.</h3>
             <p>
-              The window, a Rust core that parses and scans every message, and a
-              separate process that holds the network connections. If a
-              connection dies, the core restarts that process in seconds and the
-              window never notices.
+              Opens instantly and keeps up with the busiest chats on Twitch
+              without a stutter. Scrolling stays smooth when everyone is
+              spamming at once.
+            </p>
+          </div>
+          <div class="why__item">
+            <h3>Hard to knock over.</h3>
+            <p>
+              The connection lives in its own little box. If it hiccups, it
+              comes back on its own in seconds while you keep reading, and the
+              window never goes with it.
             </p>
           </div>
           <div class="why__item">
             <h3>Nothing in between.</h3>
             <p>
-              Your machine talks to Twitch directly. No relay, no account with
-              us, nothing to subscribe to, and your sign-in stays in Windows
-              Credential Manager where it belongs.
+              Your PC talks to Twitch directly. No account with us, no cloud in
+              the middle, nothing to subscribe to, and your sign-in never leaves
+              your machine.
             </p>
           </div>
         </div>
       </section>
 
       <section class="roadmap">
-        <h2>Where this is going.</h2>
+        <h2>What is next.</h2>
         <p class="roadmap__lede">
-          Twitch first, until it is right. These are planned, not promised, and
-          they land one at a time.
+          Twitch first, until it is right. Then this, one piece at a time.
         </p>
         <ul class="roadmap__list">
           <li>
-            <strong>Twitch, YouTube and Kick in one feed.</strong> Both are in
-            the code and switched off until they are as good as Twitch. One
-            window, one scroll, and a timeout on a YouTube message hits YouTube.
+            <strong>YouTube and Kick in the same window.</strong> Stream to all
+            three, read one chat. Time someone out and it happens where they
+            are.
           </li>
           <li>
-            <strong>A chat overlay for OBS.</strong> A browser source served by
-            the app on your own machine, with every platform in one feed and no
-            widget service in the middle.
+            <strong>Chat on your stream.</strong> Drop it into OBS straight from
+            the app, every platform in one feed, no widget service needed.
           </li>
           <li>
-            <strong>Stream controls.</strong> Title, category and going live
-            from the same window you moderate in.
+            <strong>Run the stream from here.</strong> Title, category and going
+            live, from the window you already moderate in.
           </li>
           <li>
-            <strong>Extensions.</strong> A plugin API for the things we did not
-            think of.
+            <strong>Your own additions.</strong> Plugins for the things we did
+            not think of.
           </li>
           <li>
-            <strong>macOS and Linux.</strong> Same app, same download page.
+            <strong>Mac and Linux.</strong> Same app, same download page.
           </li>
         </ul>
       </section>
