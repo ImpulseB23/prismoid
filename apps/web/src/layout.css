@@ -1,8 +1,11 @@
 /* sticky footer layout */
+/* The hero beam reaches past the viewport; clip it here so phones never
+   get a sideways scroll. */
 .site-wrapper {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  overflow-x: clip;
 }
 
 main {
