@@ -45,6 +45,7 @@ export interface SettingsProps {
 }
 
 const RECENT_MESSAGES_URL = "https://recent-messages.robotty.de/";
+const PRIVACY_URL = "https://prismoid.org/privacy";
 
 // Current version, the result of the last check, and the one button that
 // does whatever comes next: check, install, or try again.
@@ -422,6 +423,23 @@ const Settings: Component<SettingsProps> = (props) => {
               onClick={() => run(openLogDir())}
             >
               Open folder
+            </button>
+          </div>
+
+          <div class="dialog__label">About</div>
+          <div class="settings__row">
+            <div class="settings__text">
+              <span class="settings__name">Privacy</span>
+              <span class="settings__hint">
+                What stays on this computer and which services the app talks to.
+              </span>
+            </div>
+            <button
+              type="button"
+              class="btn btn--outline"
+              onClick={() => run(openUrl(PRIVACY_URL))}
+            >
+              Read policy
             </button>
           </div>
 
