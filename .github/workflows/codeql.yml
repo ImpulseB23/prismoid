@@ -26,7 +26,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [go, javascript-typescript, rust]
+        # The Rust analysis takes eight minutes, most of it query evaluation
+        # that no cache can shorten, so it runs on main and on the weekly
+        # schedule while the one-minute Go and JS analyses stay on PRs.
+        language: ${{ fromJSON(github.event_name == 'pull_request' && '["go", "javascript-typescript"]' || '["go", "javascript-typescript", "rust"]') }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
