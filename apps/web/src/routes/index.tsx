@@ -66,7 +66,18 @@ function DownloadNote(props: { platform: Platform | undefined }) {
     target() === "macos" || target() === "linux" || target() === "chromeos";
   return (
     <p class="download-note">
-      <Switch fallback="Windows 10 and 11. Early build, not code signed yet, so Windows will ask once. macOS and Linux later.">
+      <Switch
+        fallback={
+          <>
+            Windows 10 and 11. Early build, not code signed yet, so Windows
+            shows a warning once.{" "}
+            <a href="/install" class="inline-link">
+              Here is what to click
+            </a>
+            . macOS and Linux later.
+          </>
+        }
+      >
         <Match when={phone()}>
           There is no {PLATFORM_NAMES[target()]} app. prismoid is a chat window
           for your PC, so open prismoid.org on Windows to download it.
