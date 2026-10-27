@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CHECK_EVERY_MS,
-  FIRST_CHECK_MS,
+  LAUNCH_WINDOW_MS,
   createUpdateStore,
   type DownloadEvent,
   type PendingUpdate,
@@ -69,7 +69,11 @@ describe("updateStore", () => {
     await store.check(false);
     expect(store.state()).toEqual({ kind: "idle" });
     await store.check(true);
-    expect(store.state()).toEqual({ kind: "error", message: "offline" });
+    expect(store.state()).toEqual({
+      kind: "error",
+      message: "offline",
+      during: "check",
+    });
   });
 
   it("surfaces an install failure", async () => {
@@ -87,15 +91,15 @@ describe("updateStore", () => {
     expect(store.state()).toEqual({
       kind: "error",
       message: "signature mismatch",
+      during: "install",
     });
   });
 
-  it("checks after the launch delay and on the interval", async () => {
+  it("checks at launch and on the interval", async () => {
     const lookup = vi.fn(async () => null);
     const store = createUpdateStore(lookup);
     const stop = store.schedule();
-    expect(lookup).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(FIRST_CHECK_MS);
+    await vi.advanceTimersByTimeAsync(0);
     expect(lookup).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(CHECK_EVERY_MS);
     expect(lookup).toHaveBeenCalledTimes(2);
@@ -120,5 +124,52 @@ describe("updateStore", () => {
     expect(store.state().kind).toBe("downloading");
     release();
     await installing;
+  });
+
+  it("installs on its own when the launch check finds an update", async () => {
+    const restarted = vi.fn(async () => {});
+    const store = createUpdateStore(async () => update("0.3.0"), restarted);
+    const stop = store.schedule();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.state()).toEqual({ kind: "ready", version: "0.3.0" });
+    expect(restarted).toHaveBeenCalledOnce();
+    stop();
+  });
+
+  it("only nudges when the launch check answers late", async () => {
+    const store = createUpdateStore(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve(update("0.3.0")), LAUNCH_WINDOW_MS + 1),
+        ),
+    );
+    const stop = store.schedule();
+    await vi.advanceTimersByTimeAsync(LAUNCH_WINDOW_MS + 1);
+    expect(store.state()).toMatchObject({
+      kind: "available",
+      version: "0.3.0",
+    });
+    stop();
+  });
+
+  it("goes back to available when a failed install is dismissed", async () => {
+    const store = createUpdateStore(
+      async () => ({
+        version: "0.3.0",
+        downloadAndInstall: async () => {
+          throw new Error("disk full");
+        },
+      }),
+      async () => {},
+    );
+    await store.check(true);
+    await store.install();
+    expect(store.state().kind).toBe("error");
+    store.dismiss();
+    expect(store.state()).toEqual({
+      kind: "available",
+      version: "0.3.0",
+      notes: null,
+    });
   });
 });

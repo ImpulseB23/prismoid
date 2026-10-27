@@ -14,9 +14,10 @@ Windows is the primary target. CI builds and tests Windows first.
 
 Tauri's built-in auto-updater checks GitHub Releases for new versions.
 
-- Update check on launch and every 6 hours while running
-- User prompted before install (no silent updates)
-- Delta updates where possible (Tauri handles this)
+- Check at launch; an update found within the first seconds installs on its own behind a full-window update screen, then the app restarts
+- Checks every 6 hours while running only nudge from the header and Settings; the install happens when the user asks for it
+- The NSIS installer runs silently, so the app never shows an installer window
+- Installers are signed with the updater key and the app refuses unsigned ones
 
 ## Build Pipeline
 

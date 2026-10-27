@@ -57,7 +57,7 @@
         "https://github.com/ImpulseB23/Prismoid/releases/latest/download/latest.json"
       ],
       "windows": {
-        "installMode": "passive"
+        "installMode": "quiet"
       }
     }
   }
