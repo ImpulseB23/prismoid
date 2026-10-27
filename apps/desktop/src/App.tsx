@@ -15,6 +15,7 @@ import MessageInput from "./components/MessageInput";
 import StreamBar from "./components/StreamBar";
 import logo from "./assets/logo.svg";
 import SignIn from "./components/SignIn";
+import UpdateNotice from "./components/UpdateNotice";
 import { getAuthStatus, logout } from "./lib/twitchAuth";
 import {
   authStatus,
@@ -29,7 +30,11 @@ import {
 import { clearMessages } from "./stores/chatStore";
 import { clearRoles, loadModeratedChannels } from "./stores/roleStore";
 import { trackActiveStream } from "./stores/streamStore";
-import { scheduleUpdateChecks } from "./stores/updateStore";
+import {
+  installUpdate,
+  scheduleUpdateChecks,
+  updateState,
+} from "./stores/updateStore";
 
 const App: Component = () => {
   // `null` = still loading initial status; the splash avoids a flash of
@@ -46,6 +51,10 @@ const App: Component = () => {
       setAuthStatus({ state: "logged_out" });
     }
   });
+
+  // Runs for the whole session, sign-in screen included, so a release that
+  // fixes a sign-in bug still reaches whoever is stuck there.
+  onMount(() => onCleanup(scheduleUpdateChecks()));
 
   // The moderated-channel list needs its own scope, so it is fetched once
   // the session has it: at sign-in, and again after a reconnect that
@@ -81,6 +90,10 @@ const App: Component = () => {
         </Match>
         <Match when={auth()?.state === "logged_out"}>
           <SignIn onAuthenticated={setAuthStatus} />
+          <UpdateNotice
+            state={updateState}
+            onInstall={() => void installUpdate()}
+          />
         </Match>
         <Match
           when={(() => {
@@ -101,7 +114,6 @@ const ChatShell: Component<{ login: string; onSignOut: () => void }> = (
   props,
 ) => {
   trackActiveStream();
-  onMount(() => onCleanup(scheduleUpdateChecks()));
 
   onMount(() => {
     // Reopen last session's tabs, or the user's own chat on a fresh
