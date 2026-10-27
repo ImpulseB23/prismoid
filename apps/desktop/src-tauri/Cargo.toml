@@ -30,8 +30,7 @@ serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "time", "net", "io-util", "sync"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing = { version = "0.1", features = ["log"] }
 aho-corasick = "1.1"
 arc-swap = "1.7"
 rustc-hash = "2.1"
@@ -43,6 +42,8 @@ tauri-plugin-window-state = "2.5.0"
 futures-util = "0.3"
 rusqlite = { version = "0.41", features = ["bundled"] }
 tauri-plugin-process = "2.4"
+tauri-plugin-log = "2"
+log = "0.4"
 
 [dev-dependencies]
 criterion = "0.8"
