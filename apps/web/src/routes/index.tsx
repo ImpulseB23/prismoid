@@ -12,6 +12,7 @@ import { getRequestEvent } from "solid-js/web";
 import { createAsync, query } from "@solidjs/router";
 import { Title, Meta } from "@solidjs/meta";
 import GithubPreview from "~/components/GithubPreview";
+import Icon from "~/components/Icons";
 import {
   detectPlatform,
   INSTALLERS,
@@ -353,6 +354,7 @@ export default function Home() {
         <h2>Light enough to forget it is open.</h2>
         <div class="why__grid">
           <div class="why__item">
+            <Icon name="feather" class="why__icon" />
             <h3>Ultra lightweight.</h3>
             <p>
               Installs in seconds and sits next to your stream without eating
@@ -361,6 +363,7 @@ export default function Home() {
             </p>
           </div>
           <div class="why__item">
+            <Icon name="bolt" class="why__icon" />
             <h3>Hyper fast.</h3>
             <p>
               Opens instantly and keeps up with the busiest chats on Twitch
@@ -369,6 +372,7 @@ export default function Home() {
             </p>
           </div>
           <div class="why__item">
+            <Icon name="shield" class="why__icon" />
             <h3>Hard to knock over.</h3>
             <p>
               The connection lives in its own little box. If it hiccups, it
@@ -377,6 +381,7 @@ export default function Home() {
             </p>
           </div>
           <div class="why__item">
+            <Icon name="direct" class="why__icon" />
             <h3>Nothing in between.</h3>
             <p>
               Your PC talks to Twitch directly. No account with us, no cloud in
@@ -389,6 +394,7 @@ export default function Home() {
 
       <section class="moments">
         <div class="moment">
+          <Icon name="history" class="moment__icon" />
           <h2>You tab back and chat is 400 messages ahead.</h2>
           <p>
             Scroll up as far as you like. prismoid keeps every channel's chat on
@@ -398,6 +404,7 @@ export default function Home() {
           </p>
         </div>
         <div class="moment">
+          <Icon name="gavel" class="moment__icon" />
           <h2>Someone got timed out and nobody knows why.</h2>
           <p>
             Timeouts, bans and deletions show up in chat as they happen, in
@@ -407,6 +414,7 @@ export default function Home() {
           </p>
         </div>
         <div class="moment">
+          <Icon name="tabs" class="moment__icon" />
           <h2>Five channels, five windows.</h2>
           <p>
             Tabs. Ctrl+Tab between them, unread counts on the ones you're not
@@ -415,6 +423,7 @@ export default function Home() {
           </p>
         </div>
         <div class="moment">
+          <Icon name="smile" class="moment__icon" />
           <h2>Your emotes, in your chat.</h2>
           <p>
             7TV, BTTV and FFZ next to Twitch's own, badges and replies drawn the
@@ -423,6 +432,7 @@ export default function Home() {
           </p>
         </div>
         <div class="moment">
+          <Icon name="browser" class="moment__icon" />
           <h2>Watching in the browser anyway?</h2>
           <p>
             Turn on follow mode and prismoid switches to whatever Twitch channel
@@ -439,23 +449,28 @@ export default function Home() {
         </p>
         <ul class="roadmap__list">
           <li>
+            <Icon name="layers" class="roadmap__icon" />
             <strong>YouTube and Kick in the same window.</strong> Stream to all
             three, read one chat. Time someone out and it happens where they
             are.
           </li>
           <li>
+            <Icon name="cast" class="roadmap__icon" />
             <strong>Chat on your stream.</strong> Drop it into OBS straight from
             the app, every platform in one feed, no widget service needed.
           </li>
           <li>
+            <Icon name="sliders" class="roadmap__icon" />
             <strong>Run the stream from here.</strong> Title, category and going
             live, from the window you already moderate in.
           </li>
           <li>
+            <Icon name="puzzle" class="roadmap__icon" />
             <strong>Your own additions.</strong> Plugins for the things we did
             not think of.
           </li>
           <li>
+            <Icon name="laptop" class="roadmap__icon" />
             <strong>Mac and Linux.</strong> Same app, same download page.
           </li>
         </ul>

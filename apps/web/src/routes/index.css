@@ -530,3 +530,33 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* icons */
+.why__icon {
+  width: 30px;
+  height: 30px;
+  color: var(--gold);
+  margin-bottom: var(--space-sm);
+  filter: drop-shadow(0 0 10px rgba(255, 207, 90, 0.4));
+}
+
+.moment__icon {
+  width: 26px;
+  height: 26px;
+  color: var(--color-purple-light);
+  margin-bottom: var(--space-sm);
+}
+
+.roadmap__list li {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  column-gap: 12px;
+  align-items: start;
+}
+
+.roadmap__icon {
+  width: 22px;
+  height: 22px;
+  color: var(--color-purple-light);
+  margin-top: 2px;
+}
