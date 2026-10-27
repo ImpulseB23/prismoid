@@ -15,6 +15,9 @@ suite("describe", () => {
     expect(describe("plain")).toBe("plain");
     const err = new Error("boom");
     expect(describe(err)).toBe(err.stack);
+    const bare = new Error("no stack");
+    bare.stack = undefined;
+    expect(describe(bare)).toBe("Error: no stack");
     expect(describe({ kind: "oauth", message: "nope" })).toBe(
       '{"kind":"oauth","message":"nope"}',
     );
