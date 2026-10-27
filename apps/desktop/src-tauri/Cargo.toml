@@ -85,8 +85,10 @@ name = "drain_throughput"
 harness = false
 required-features = ["__bench"]
 
+# Thin LTO with parallel codegen cuts the release compile by well over
+# half for about ten percent more binary; fat LTO re-optimised every crate
+# at the final link on each release.
 [profile.release]
-lto = true
-codegen-units = 1
+lto = "thin"
 strip = true
 opt-level = "s"
