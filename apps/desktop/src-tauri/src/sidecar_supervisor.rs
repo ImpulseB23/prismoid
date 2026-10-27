@@ -50,6 +50,8 @@ use crate::ringbuf::{RawHandle, RingBufReader, WaitOutcome, DEFAULT_CAPACITY};
 #[cfg(windows)]
 use crate::sidecar_commands::SidecarCommandSender;
 #[cfg(windows)]
+use crate::sidecar_job::SidecarJob;
+#[cfg(windows)]
 use crate::twitch_auth::{AuthError, AuthManager, TWITCH_CLIENT_ID};
 #[cfg(windows)]
 use crate::twitch_channel::{Channel, ChannelSelection};
@@ -150,6 +152,9 @@ async fn supervise<R: Runtime>(
     // `arrival_seq` to 0 and break `(effective_ts, arrival_seq)` as a
     // stable sort key across the boundary.
     let arrival_seq = Arc::new(AtomicU64::new(0));
+    // One job for every sidecar this supervisor ever spawns; Windows ends
+    // whatever is in it when this process exits, however it exits.
+    let job = SidecarJob::new().expect("create the sidecar job object");
 
     loop {
         attempt += 1;
@@ -190,6 +195,7 @@ async fn supervise<R: Runtime>(
             auth: &auth,
             arrival_seq: &arrival_seq,
             history: &history,
+            job: &job,
         };
         match run_once(
             &ctx,
@@ -282,6 +288,7 @@ struct RunContext<'a, R: Runtime> {
     auth: &'a Arc<AuthManager>,
     arrival_seq: &'a Arc<AtomicU64>,
     history: &'a History,
+    job: &'a SidecarJob,
 }
 
 #[cfg(windows)]
@@ -299,6 +306,7 @@ async fn run_once<R: Runtime>(
         auth,
         arrival_seq,
         history,
+        job,
     } = *ctx;
     let reader = RingBufReader::create_owner(DEFAULT_CAPACITY)?;
     let handle = reader.raw_handle();
@@ -347,6 +355,9 @@ async fn run_once<R: Runtime>(
     // Wrap the child so any `?` return between here and the event loop
     // kills it instead of leaking a zombie across respawn iterations.
     let mut child = ChildGuard::new(child);
+    // Bound before the bootstrap line, so a child that never gets one
+    // still goes with us.
+    job.assign(child.pid())?;
 
     let bootstrap_line = build_bootstrap_line(handle, event_handle, size)?;
     child.write(&bootstrap_line)?;
