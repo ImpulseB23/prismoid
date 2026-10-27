@@ -1,0 +1,64 @@
+name: Release Cache
+
+# Release builds run on tags, and GitHub only lets a run restore caches from
+# its own ref or the default branch, so a cache saved by one release is
+# invisible to the next. This builds the release profile on main whenever
+# the Rust side changes, leaving a cache every tag can restore.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/desktop/src-tauri/**"
+      - ".github/workflows/release-cache.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-cache
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.26"
+
+jobs:
+  warm:
+    name: Warm release cache
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
+        with:
+          workspaces: "./apps/desktop/src-tauri -> target"
+          shared-key: release
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: apps/desktop/src-sidecar/go.sum
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install dependencies
+        working-directory: apps/desktop
+        run: bun install --frozen-lockfile
+
+      - name: Build Go sidecar
+        working-directory: apps/desktop/src-sidecar
+        run: go build -o ../src-tauri/binaries/sidecar-x86_64-pc-windows-msvc.exe ./cmd/sidecar
+
+      # Same command the release runs, minus the installer, so the features
+      # and profile match and the cached crates are the ones it needs.
+      - name: Build release binary
+        working-directory: apps/desktop
+        run: bunx tauri build --no-bundle
