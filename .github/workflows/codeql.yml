@@ -7,12 +7,14 @@ on:
       - "apps/desktop/src-tauri/**"
       - "apps/desktop/src-sidecar/**"
       - "apps/desktop/src/**"
+      - ".github/workflows/codeql.yml"
   pull_request:
     branches: [main]
     paths:
       - "apps/desktop/src-tauri/**"
       - "apps/desktop/src-sidecar/**"
       - "apps/desktop/src/**"
+      - ".github/workflows/codeql.yml"
   schedule:
     - cron: "0 6 * * 1"
 
