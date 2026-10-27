@@ -1,4 +1,13 @@
-import { Match, Show, Switch } from "solid-js";
+import {
+  For,
+  Match,
+  Show,
+  Switch,
+  createSignal,
+  onCleanup,
+  onMount,
+  type JSX,
+} from "solid-js";
 import { getRequestEvent } from "solid-js/web";
 import { createAsync, query } from "@solidjs/router";
 import { Title, Meta } from "@solidjs/meta";
@@ -94,9 +103,130 @@ function DownloadNote(props: { platform: Platform | undefined }) {
   );
 }
 
-// A still of the app, drawn in markup so it stays sharp at any size and
-// never goes stale next to a screenshot of an older build.
+// The app, drawn in markup so it stays sharp at any size and never goes
+// stale next to a screenshot of an older build. Messages keep arriving so
+// the still reads as what it is: a live chat window.
+type Line =
+  | {
+      kind: "msg";
+      badge?: "sub" | "vip" | "mod";
+      name: string;
+      color: string;
+      text: () => JSX.Element;
+      deleted?: boolean;
+    }
+  | { kind: "notice"; text: () => JSX.Element };
+
+const FEED: Line[] = [
+  {
+    kind: "msg",
+    badge: "sub",
+    name: "Tricklord",
+    color: "#4fa3ff",
+    text: () => (
+      <>
+        he is NOT reading chat <span class="mock__emote" />
+      </>
+    ),
+  },
+  {
+    kind: "msg",
+    badge: "vip",
+    name: "supibot",
+    color: "#ff69b4",
+    text: () => <>@brayanx2, reminder from yourself (1m, 5s ago): $fish</>,
+  },
+  {
+    kind: "msg",
+    badge: "mod",
+    name: "nymn",
+    color: "#3ddc84",
+    text: () => (
+      <>
+        pepeLaugh <span class="mock__emote mock__emote--b" /> he found the
+        setting
+      </>
+    ),
+  },
+  {
+    kind: "notice",
+    text: () => (
+      <>
+        <b>nymn</b> timed out <b>spammer_4421</b> for 10m: links
+      </>
+    ),
+  },
+  {
+    kind: "msg",
+    badge: "sub",
+    name: "kebabloverr",
+    color: "#ffb020",
+    text: () => (
+      <>
+        how is chat this fast <span class="mock__emote mock__emote--c" />
+      </>
+    ),
+  },
+  {
+    kind: "msg",
+    name: "spammer_4421",
+    color: "#8f8f8f",
+    deleted: true,
+    text: () => <>FREE FOLLOWERS at bit dot ly slash</>,
+  },
+  {
+    kind: "msg",
+    badge: "mod",
+    name: "you",
+    color: "#a78bfa",
+    text: () => (
+      <>
+        <span class="mock__mention">@kebabloverr</span> it skips the website
+      </>
+    ),
+  },
+  {
+    kind: "msg",
+    name: "ramen_dev",
+    color: "#ff4d8d",
+    text: () => <>wait it remembers the chat from before I opened it??</>,
+  },
+  {
+    kind: "msg",
+    badge: "vip",
+    name: "xqcL",
+    color: "#4fa3ff",
+    text: () => (
+      <>
+        tabs AND history <span class="mock__emote" /> finally
+      </>
+    ),
+  },
+  {
+    kind: "notice",
+    text: () => (
+      <>
+        <b>you</b> deleted a message from <b>spammer_4421</b>
+      </>
+    ),
+  },
+];
+
+const SHOWN = 7;
+
 function AppMock() {
+  const [head, setHead] = createSignal(SHOWN - 1);
+  onMount(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const id = setInterval(() => setHead((h) => h + 1), 1700);
+    onCleanup(() => clearInterval(id));
+  });
+  const visible = () =>
+    Array.from({ length: SHOWN }, (_, i) => {
+      const at = head() - SHOWN + 1 + i;
+      return FEED[((at % FEED.length) + FEED.length) % FEED.length];
+    });
+
   return (
     <div class="mock" aria-hidden="true">
       <div class="mock__bar">
@@ -116,62 +246,43 @@ function AppMock() {
         <b>Live</b> 41.2k viewers 3:12:08 <i>Just Chatting</i>
       </div>
       <div class="mock__feed">
-        <div class="mock__msg mock__msg--old">
-          <span class="mock__badge mock__badge--sub" />
-          <span class="mock__name" style="color:#1e90ff">
-            Tricklord
-          </span>
-          <span>
-            he is NOT reading chat <span class="mock__emote" />
-          </span>
-        </div>
-        <div class="mock__msg mock__msg--old">
-          <span class="mock__badge mock__badge--vip" />
-          <span class="mock__name" style="color:#ff69b4">
-            supibot
-          </span>
-          <span>@brayanx2, reminder from yourself (1m, 5s ago): $fish</span>
-        </div>
-        <div class="mock__divider">
-          <span>earlier, before you opened the tab</span>
-        </div>
-        <div class="mock__msg">
-          <span class="mock__badge mock__badge--mod" />
-          <span class="mock__name" style="color:#00ff7f">
-            nymn
-          </span>
-          <span>
-            pepeLaugh <span class="mock__emote mock__emote--b" /> he found the
-            setting
-          </span>
-        </div>
-        <div class="mock__notice">
-          <b>nymn</b> timed out <b>spammer_4421</b> for 10m: links
-        </div>
-        <div class="mock__msg">
-          <span class="mock__badge mock__badge--sub" />
-          <span class="mock__name" style="color:#daa520">
-            kebabloverr
-          </span>
-          <span>
-            how is chat this fast <span class="mock__emote mock__emote--c" />
-          </span>
-        </div>
-        <div class="mock__msg mock__msg--deleted">
-          <span class="mock__name" style="color:#8f8f8f">
-            spammer_4421
-          </span>
-          <span>FREE FOLLOWERS at bit dot ly slash</span>
-        </div>
-        <div class="mock__msg">
-          <span class="mock__badge mock__badge--mod" />
-          <span class="mock__name" style="color:#8b5fc8">
-            you
-          </span>
-          <span>
-            <span class="mock__mention">@kebabloverr</span> it skips the website
-          </span>
-        </div>
+        <For each={visible()}>
+          {(line, i) => (
+            <Switch>
+              <Match when={line.kind === "notice" && line}>
+                {(n) => (
+                  <div
+                    class="mock__notice"
+                    classList={{ "mock__line--new": i() === SHOWN - 1 }}
+                  >
+                    {n().text()}
+                  </div>
+                )}
+              </Match>
+              <Match when={line.kind === "msg" && line}>
+                {(m) => (
+                  <div
+                    class="mock__msg"
+                    classList={{
+                      "mock__msg--deleted": m().deleted,
+                      "mock__line--new": i() === SHOWN - 1,
+                    }}
+                  >
+                    <Show when={m().badge}>
+                      {(b) => (
+                        <span class={`mock__badge mock__badge--${b()}`} />
+                      )}
+                    </Show>
+                    <span class="mock__name" style={{ color: m().color }}>
+                      {m().name}
+                    </span>
+                    <span>{m().text()}</span>
+                  </div>
+                )}
+              </Match>
+            </Switch>
+          )}
+        </For>
       </div>
       <div class="mock__composer">
         <span>Message xqc</span>
@@ -185,16 +296,14 @@ export default function Home() {
   const platform = createAsync(() => visitorPlatform(), { deferStream: true });
   return (
     <>
-      <Title>
-        prismoid - the Twitch chat window the site should have shipped
-      </Title>
+      <Title>prismoid - Twitch chat, the way it should feel</Title>
       <Meta
         name="description"
-        content="A desktop chat client for Twitch. Tabs, chat history that survives a restart, mod actions you can see, 7TV, BTTV and FFZ emotes. Free, open source, ultra lightweight."
+        content="A desktop chat window for Twitch. Tabs, chat history that survives a restart, mod actions you can see, your emotes. Free, open source, ultra lightweight."
       />
       <Meta
         property="og:title"
-        content="prismoid - the Twitch chat window the site should have shipped"
+        content="prismoid - Twitch chat, the way it should feel"
       />
       <Meta
         property="og:description"
@@ -205,16 +314,17 @@ export default function Home() {
       <Meta name="twitter:card" content="summary" />
 
       <section class="hero">
+        <div class="hero__beam" aria-hidden="true" />
         <div class="hero__copy">
-          <h1>prismoid</h1>
-          <p class="tagline">
-            Twitch chat is the best part of Twitch and the worst part of the
-            Twitch website.
-          </p>
+          <h1>
+            Twitch chat,
+            <br />
+            the way it should feel.
+          </h1>
           <p class="lede">
-            prismoid is the chat window the site should have shipped. Tabs,
-            history, mod actions you can see, your emotes. Free, open source,
-            ultra lightweight.
+            prismoid is a chat window for your desktop. Every channel in a tab,
+            history that survives a restart, mod actions you can actually see,
+            and your emotes. Free, open source, ultra lightweight.
           </p>
           <div class="hero-actions">
             <Download platform={platform()} />
@@ -274,14 +384,6 @@ export default function Home() {
             forget the site's chat exists.
           </p>
         </div>
-      </section>
-
-      <section class="facts">
-        <span>ultra lightweight</span>
-        <span>hyper fast</span>
-        <span>no account, no cloud</span>
-        <span>free and open source</span>
-        <span>Windows now, Mac and Linux next</span>
       </section>
 
       <section class="why">
@@ -352,6 +454,7 @@ export default function Home() {
       </section>
 
       <section class="cta">
+        <div class="cta__beam" aria-hidden="true" />
         <h2>Try it on tonight's stream.</h2>
         <p>
           Install, sign in with Twitch, open a channel. If something is off,{" "}

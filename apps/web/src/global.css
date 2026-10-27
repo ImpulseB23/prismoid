@@ -37,21 +37,29 @@
   --color-base-50: #ffffff;
 
   /* accent - from logo refraction colors, also platform brand colors */
-  --color-purple: #6f38c9;
-  --color-purple-light: #8b5fc8;
+  --color-purple: #7c3aed;
+  --color-purple-light: #a78bfa;
   --color-red: #ea3247;
   --color-red-light: #f0566a;
   --color-green: #4db332;
   --color-green-light: #6bc955;
 
-  /* semantic */
-  --bg: var(--color-base-900);
-  --bg-raised: var(--color-base-800);
-  --bg-surface: var(--color-base-700);
-  --border: var(--color-base-700);
-  --text: var(--color-base-100);
-  --text-muted: var(--color-base-300);
-  --text-faint: var(--color-base-400);
+  /* the prism: one beam split into the platform colours */
+  --band-purple: #7c3aed;
+  --band-purple-light: #a78bfa;
+  --band-magenta: #ff4d8d;
+  --band-amber: #ffb020;
+  --band-green: #3ddc84;
+
+  /* semantic - a violet black, not a neutral grey */
+  --bg: #0c0a14;
+  --bg-raised: #15121f;
+  --bg-surface: #1f1b2e;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text: #f3f0fa;
+  --text-muted: #b1abc4;
+  --text-faint: #7e7794;
 
   /* platform colors */
   --twitch: var(--color-purple);
@@ -91,7 +99,13 @@ html {
 }
 
 body {
-  background: var(--bg);
+  background:
+    radial-gradient(
+      55% 35% at 15% 0%,
+      rgba(124, 58, 237, 0.22),
+      transparent 70%
+    ),
+    var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
   line-height: 1.6;
@@ -103,21 +117,33 @@ a {
   text-decoration: none;
 }
 
+h1,
+h2,
+h3 {
+  font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-purple-light);
+  outline-offset: 3px;
+}
+
 /* buttons */
 .btn {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  font-family: var(--font-mono);
-  font-size: 0.875rem;
-  font-weight: 600;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  font-weight: 500;
   line-height: 1.25;
-  padding: 0.75rem 1.5rem;
-  border-radius: var(--radius-md);
+  padding: 0.8rem 1.5rem;
+  border-radius: 10px;
   border: 1px solid transparent;
   cursor: pointer;
   transition:
-    opacity 0.15s,
+    transform 0.15s,
+    box-shadow 0.2s,
     border-color 0.2s,
     color 0.2s;
 }
@@ -129,13 +155,15 @@ a {
 }
 
 .btn-primary {
-  color: var(--color-base-50);
+  color: #fff;
   background: var(--color-purple);
   border-color: var(--color-purple);
+  box-shadow: 0 10px 30px rgba(124, 58, 237, 0.35);
 }
 
 .btn-primary:hover {
-  opacity: 0.85;
+  transform: translateY(-1px);
+  box-shadow: 0 14px 36px rgba(124, 58, 237, 0.45);
 }
 
 .btn-disabled {
@@ -147,7 +175,7 @@ a {
 .btn-outline {
   color: var(--text-muted);
   background: transparent;
-  border-color: var(--border);
+  border-color: var(--border-strong);
 }
 
 .btn-outline:hover {
@@ -157,7 +185,7 @@ a {
 
 /* layout */
 .container {
-  max-width: 60rem;
+  max-width: 66rem;
   margin: 0 auto;
   padding: 0 var(--space-lg);
 }
