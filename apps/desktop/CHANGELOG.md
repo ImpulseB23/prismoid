@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/ImpulseB23/prismoid/compare/v0.3.0...v0.3.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* constant inline styles the csp was blocking move into classes ([#195](https://github.com/ImpulseB23/prismoid/issues/195)) ([f292ab0](https://github.com/ImpulseB23/prismoid/commit/f292ab0012b6b76f7bec7162e29655965359a479))
+
 ## [0.3.0](https://github.com/ImpulseB23/prismoid/compare/v0.2.1...v0.3.0) (2026-10-27)
 
 
