@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0](https://github.com/ImpulseB23/prismoid/compare/v0.1.1...v0.2.0) (2026-10-27)
+
+
+### Features
+
+* log file with an open folder button in settings ([#174](https://github.com/ImpulseB23/prismoid/issues/174)) ([c93e32a](https://github.com/ImpulseB23/prismoid/commit/c93e32abf11bfe7f031a2e5fe3f8e75183a728c0))
+* one app instance at a time ([#169](https://github.com/ImpulseB23/prismoid/issues/169)) ([6870b4b](https://github.com/ImpulseB23/prismoid/commit/6870b4bd83f60ef33119e50633cecff46e471114))
+
+
+### Bug Fixes
+
+* offer updates on the sign-in screen too ([#172](https://github.com/ImpulseB23/prismoid/issues/172)) ([9192064](https://github.com/ImpulseB23/prismoid/commit/91920641b0d2d7ed98fd777004e7a11cafd5ecc0))
+
 ## [0.1.1](https://github.com/ImpulseB23/prismoid/compare/v0.1.0...v0.1.1) (2026-10-26)
 
 
