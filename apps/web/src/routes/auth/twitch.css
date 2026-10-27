@@ -1,0 +1,25 @@
+.handoff {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 60vh;
+}
+
+.handoff h1 {
+  font-family: var(--font-mono);
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin-bottom: var(--space-sm);
+}
+
+.handoff p {
+  color: var(--text-muted);
+  font-weight: 300;
+  max-width: 26rem;
+  line-height: 1.6;
+  margin-bottom: var(--space-xl);
+}

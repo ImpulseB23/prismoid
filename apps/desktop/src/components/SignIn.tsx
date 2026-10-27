@@ -2,11 +2,11 @@ import { Component, Show, createSignal, onMount } from "solid-js";
 import {
   cancelLogin,
   completeLogin,
-  openVerificationUri,
+  openTwitchUrl,
   startLogin,
   type AuthCommandError,
   type AuthStatus,
-  type DeviceCodeView,
+  type LoginView,
 } from "../lib/twitchAuth";
 import logo from "../assets/logo.svg";
 
@@ -23,13 +23,12 @@ export function isAuthError(e: unknown): e is AuthCommandError {
 }
 
 const SignIn: Component<SignInProps> = (props) => {
-  const [pending, setPending] = createSignal<DeviceCodeView | null>(null);
+  const [pending, setPending] = createSignal<LoginView | null>(null);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
-  // Tauri commands have no cancellation token, so an in-flight
-  // completeLogin() Promise keeps polling Twitch even after the user
-  // hits "Start over". The generation counter lets us ignore stale
-  // resolutions/rejections from the previous attempt.
+  // Cancelling tells the host to stop listening, but the in-flight
+  // completeLogin() Promise still settles. The generation counter lets us
+  // ignore that stale result.
   let generation = 0;
 
   onMount(() => {
@@ -42,10 +41,10 @@ const SignIn: Component<SignInProps> = (props) => {
     setError(null);
     setBusy(true);
     try {
-      const details = await startLogin();
+      const view = await startLogin();
       if (gen !== generation) return;
-      setPending(details);
-      void openVerificationUri(details.verification_uri).catch(() => {});
+      setPending(view);
+      void openTwitchUrl(view.authorize_url).catch(() => {});
 
       const status = await completeLogin();
       if (gen !== generation) return;
@@ -69,7 +68,7 @@ const SignIn: Component<SignInProps> = (props) => {
     }
   };
 
-  const startOver = async () => {
+  const cancel = async () => {
     generation += 1;
     setPending(null);
     setBusy(false);
@@ -102,28 +101,25 @@ const SignIn: Component<SignInProps> = (props) => {
         }
       >
         {(p) => (
-          <div class="code-card">
+          <div class="waiting-card">
             <p>
-              A browser tab opened. Check the code matches, then choose
-              Authorize.
+              A browser tab opened. Choose Authorize there, let the browser open
+              prismoid, and this window carries on by itself.
             </p>
-            <code>{p().user_code}</code>
             <small>
-              No browser?{" "}
+              Nothing opened?{" "}
               <a
-                href={p().verification_uri}
+                href={p().authorize_url}
                 onClick={(e) => {
                   e.preventDefault();
-                  void openVerificationUri(p().verification_uri).catch(
-                    () => {},
-                  );
+                  void openTwitchUrl(p().authorize_url).catch(() => {});
                 }}
               >
-                {p().verification_uri}
+                Open Twitch again
               </a>
             </small>
-            <button type="button" class="btn btn--outline" onClick={startOver}>
-              Start over
+            <button type="button" class="btn btn--outline" onClick={cancel}>
+              Cancel
             </button>
           </div>
         )}
@@ -142,9 +138,11 @@ const SignIn: Component<SignInProps> = (props) => {
 export function authErrorMessage(e: AuthCommandError): string {
   switch (e.kind) {
     case "user_denied":
-      return "Authorization was denied. Try again to grant access.";
-    case "device_code_expired":
-      return "The code expired before you confirmed. Try again.";
+      return "Authorization was declined. Try again to grant access.";
+    case "login_timed_out":
+      return "Twitch did not answer within ten minutes. Try again.";
+    case "login_cancelled":
+      return "Sign-in was cancelled.";
     case "keychain":
       return `Could not access the OS credential store: ${e.message}`;
     case "oauth":

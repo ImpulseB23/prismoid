@@ -16,7 +16,7 @@ import {
   sendMessage,
   timeoutUser,
   unbanUser,
-  openVerificationUri,
+  openTwitchUrl,
   MAX_CHAT_MESSAGE_BYTES,
 } from "./twitchAuth";
 
@@ -94,28 +94,28 @@ describe("moderation commands", () => {
   });
 });
 
-describe("openVerificationUri", () => {
-  it("allows a valid Twitch verification URL", async () => {
+describe("openTwitchUrl", () => {
+  it("allows the Twitch authorize URL", async () => {
     await expect(
-      openVerificationUri("https://www.twitch.tv/activate"),
+      openTwitchUrl(
+        "https://id.twitch.tv/oauth2/authorize?response_type=token&client_id=x",
+      ),
     ).resolves.toBeUndefined();
   });
 
   it("rejects non-Twitch hosts", async () => {
-    await expect(openVerificationUri("https://evil.com/phish")).rejects.toThrow(
-      "verification URL not on a Twitch domain",
+    await expect(openTwitchUrl("https://evil.com/phish")).rejects.toThrow(
+      "URL not on a Twitch domain",
     );
   });
 
   it("rejects http URLs", async () => {
     await expect(
-      openVerificationUri("http://www.twitch.tv/activate"),
-    ).rejects.toThrow("verification URL not on a Twitch domain");
+      openTwitchUrl("http://id.twitch.tv/oauth2/authorize"),
+    ).rejects.toThrow("URL not on a Twitch domain");
   });
 
   it("rejects invalid URLs", async () => {
-    await expect(openVerificationUri("not-a-url")).rejects.toThrow(
-      "invalid verification URL",
-    );
+    await expect(openTwitchUrl("not-a-url")).rejects.toThrow("invalid URL");
   });
 });

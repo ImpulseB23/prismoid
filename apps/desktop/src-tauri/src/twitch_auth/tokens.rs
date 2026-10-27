@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 /// A persisted Twitch OAuth credential set. Single-account per ADR 30:
 /// one blob per app under service `prismoid.twitch`, account
 /// `KEYCHAIN_ACCOUNT` (see `storage.rs`). `user_id` and `login` are the
-/// authenticated Twitch user's identifiers (from the DCF response) —
+/// authenticated Twitch user's identifiers (from token validation),
 /// carried with the token so the supervisor doesn't need to prompt the
 /// user for their own broadcaster ID.
 ///
@@ -29,8 +29,8 @@ pub struct TwitchTokens {
     /// Scopes granted. Carried so a scope-expansion feature can prompt
     /// re-auth when needed without speculative re-auth on every launch.
     pub scopes: Vec<String>,
-    /// Twitch user_id of the authenticated account, from the DCF
-    /// response. Used as `broadcaster_user_id` in EventSub subscriptions.
+    /// Twitch user_id of the authenticated account, from token
+    /// validation. Used as `broadcaster_user_id` in EventSub subscriptions.
     /// Stable across token refreshes.
     pub user_id: String,
     /// Twitch login (handle) of the authenticated account. Used for UI

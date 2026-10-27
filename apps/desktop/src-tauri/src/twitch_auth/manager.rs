@@ -1,26 +1,30 @@
-//! `AuthManager` — the façade callers interact with.
+//! `AuthManager`, the facade callers interact with.
 //!
-//! Wraps the `twitch_oauth2` crate's Twitch-aware OAuth types + a
-//! [`TokenStore`] for keychain persistence. ADR 37 (DCF public client)
-//! and ADR 29 (proactive 5-min refresh) are enforced here.
+//! Wraps the `twitch_oauth2` crate's Twitch-aware OAuth types plus a
+//! [`TokenStore`] for keychain persistence. ADR 43 (implicit grant over a
+//! hosted redirect and deep link) and ADR 29 (proactive 5-min refresh) are
+//! enforced here.
 //!
-//! Single-account per ADR 30: `load_or_refresh` / `complete_device_flow`
-//! take no broadcaster_id argument — the store holds exactly one entry.
-//! The user_id + login land on the returned `TwitchTokens` (sourced from
-//! the DCF response's `UserToken.user_id` / `UserToken.login`).
+//! Single-account per ADR 30: `load_or_refresh` and `complete_login` take
+//! no broadcaster_id argument because the store holds exactly one entry.
+//! The user_id and login land on the returned `TwitchTokens`, sourced from
+//! Twitch's token validation.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
-use twitch_oauth2::id::DeviceCodeResponse;
-use twitch_oauth2::tokens::errors::{RefreshTokenError, RetrieveTokenError};
-use twitch_oauth2::tokens::{DeviceUserTokenBuilder, UserToken};
+use tokio::sync::{mpsc, Notify};
+use twitch_oauth2::tokens::errors::{
+    CreationError, RefreshTokenError, RetrieveTokenError, ValidationError,
+};
+use twitch_oauth2::tokens::UserToken;
 use twitch_oauth2::types::{AccessToken, ClientId, RefreshToken};
-use twitch_oauth2::RequestParseError;
-use twitch_oauth2::{Scope, TwitchToken};
+use twitch_oauth2::url::Url;
+use twitch_oauth2::{RequestParseError, Scope, TwitchToken};
 
-use super::errors::AuthError;
+use super::errors::{error_chain, AuthError};
+use super::implicit::{CallbackParams, PendingLogin};
 use super::storage::TokenStore;
 use super::tokens::TwitchTokens;
 
@@ -121,42 +125,26 @@ impl AuthManager {
         handle_refresh_result(self.refresh_tokens(&stored).await, self.store.as_ref())
     }
 
-    /// Scopes the device flow asks for. Stored tokens granted before a
-    /// scope was added lack it until the user signs in again.
+    /// Scopes the sign-in asks for. Stored tokens granted before a scope
+    /// was added lack it until the user signs in again.
     #[must_use]
     pub fn scopes(&self) -> &[Scope] {
         &self.scopes
     }
 
-    /// Requests a device code from Twitch. The returned response has
-    /// `verification_uri` which the caller should open in a browser,
-    /// and a `device_code` that [`AuthManager::complete_device_flow`]
-    /// needs to pair with.
-    ///
-    /// The returned builder is consumed on the next call, so start and
-    /// complete must happen in order on the same instance.
-    pub async fn start_device_flow(&self) -> Result<PendingDeviceFlow, AuthError> {
-        let mut builder = DeviceUserTokenBuilder::new(self.client_id.clone(), self.scopes.clone());
-        let details = builder
-            .start(&self.http_client)
-            .await
-            .map_err(|e| AuthError::OAuth(e.to_string()))?
-            .clone();
-        Ok(PendingDeviceFlow { builder, details })
+    /// Returns the login to wait on and the Twitch authorize URL the
+    /// browser should open.
+    pub fn start_login(&self) -> (PendingLogin, Url) {
+        PendingLogin::start(self.client_id.clone(), self.scopes.clone())
     }
 
-    /// Polls the Twitch token endpoint until the user authorizes the
-    /// device code. On success, the resulting tokens (with user_id and
-    /// login populated from the DCF response) are persisted.
-    pub async fn complete_device_flow(
+    pub async fn complete_login(
         &self,
-        mut pending: PendingDeviceFlow,
+        pending: PendingLogin,
+        incoming: &mut mpsc::UnboundedReceiver<CallbackParams>,
+        cancel: &Notify,
     ) -> Result<TwitchTokens, AuthError> {
-        let user_token = pending
-            .builder
-            .wait_for_code(&self.http_client, tokio::time::sleep)
-            .await
-            .map_err(classify_device_flow_error)?;
+        let user_token = pending.wait(&self.http_client, incoming, cancel).await?;
         let tokens = tokens_from_user_token(&user_token)?;
         self.store.save(&tokens)?;
         Ok(tokens)
@@ -183,11 +171,23 @@ impl AuthManager {
     }
 
     async fn refresh_tokens(&self, stored: &TwitchTokens) -> Result<TwitchTokens, AuthError> {
-        // Validates the stored access token and, when Twitch no longer
-        // accepts it, goes straight to the refresh grant. That is the
-        // normal path after the app sat closed past the token's lifetime;
-        // validating alone used to fail there and the supervisor backed
-        // off forever. Public client per ADR 37, so no secret.
+        // Implicit grant tokens carry no refresh token (ADR 43): validation
+        // either confirms the token for another stretch or ends the session.
+        if stored.refresh_token.is_empty() {
+            let token = UserToken::from_token(
+                &self.http_client,
+                AccessToken::new(stored.access_token.clone()),
+            )
+            .await
+            .map_err(classify_validation_error)?;
+            return tokens_from_user_token(&token);
+        }
+
+        // Grants made before ADR 43 still hold a refresh token. Validates
+        // the stored access token and, when Twitch no longer accepts it,
+        // goes straight to the refresh grant. That is the normal path
+        // after the app sat closed past the token's lifetime; validating
+        // alone used to fail there and the supervisor backed off forever.
         let mut token = UserToken::from_existing_or_refresh_token(
             &self.http_client,
             AccessToken::new(stored.access_token.clone()),
@@ -208,22 +208,6 @@ impl AuthManager {
         }
 
         tokens_from_user_token(&token)
-    }
-}
-
-/// Opaque handle returned by [`AuthManager::start_device_flow`], carrying
-/// the device code response (for UX: show verification URI) and the
-/// builder state (for [`AuthManager::complete_device_flow`] to resume
-/// polling). A single flow is consumed exactly once.
-pub struct PendingDeviceFlow {
-    builder: DeviceUserTokenBuilder,
-    details: DeviceCodeResponse,
-}
-
-impl PendingDeviceFlow {
-    #[must_use]
-    pub fn details(&self) -> &DeviceCodeResponse {
-        &self.details
     }
 }
 
@@ -264,9 +248,7 @@ fn compute_expires_at_ms(now_ms: i64, expires_in: Duration) -> i64 {
 /// a known-dead token every tick), propagates other errors unchanged.
 ///
 /// Extracted as a pure function over `&dyn TokenStore` so the behavior
-/// is testable without mocking the HTTP refresh itself (the
-/// `twitch_oauth2` side of that is covered manually via the
-/// `prismoid_dcf` E2E, with a proper mock harness tracked in PRI-14).
+/// is testable without mocking the HTTP exchange itself.
 fn handle_refresh_result(
     result: Result<TwitchTokens, AuthError>,
     store: &dyn TokenStore,
@@ -301,14 +283,15 @@ fn validate_identity(user_id: &str, login: &str) -> Result<(), AuthError> {
     Ok(())
 }
 
-fn classify_device_flow_error<E: std::fmt::Display>(err: E) -> AuthError {
-    let s = err.to_string();
-    if s.contains("access_denied") {
-        AuthError::UserDenied
-    } else if s.contains("expired_token") {
-        AuthError::DeviceCodeExpired
-    } else {
-        AuthError::OAuth(s)
+// A token Twitch no longer recognises cannot be revived without a
+// refresh token, so the only way forward is a new sign-in.
+fn classify_validation_error<RE>(err: CreationError<RE>) -> AuthError
+where
+    RE: std::error::Error + Send + Sync + 'static,
+{
+    match err.error {
+        ValidationError::NotAuthorized => AuthError::RefreshTokenInvalid,
+        other => AuthError::OAuth(error_chain(&other)),
     }
 }
 
@@ -341,25 +324,11 @@ where
     }
 }
 
-// The library's Display stops at the outer variant ("creation of token
-// failed"); the useful part is in the source chain.
-fn error_chain(err: &dyn std::error::Error) -> String {
-    let mut out = err.to_string();
-    let mut cur = err.source();
-    while let Some(e) = cur {
-        out.push_str(": ");
-        out.push_str(&e.to_string());
-        cur = e.source();
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     use twitch_oauth2::id::TwitchTokenErrorResponse;
-    use twitch_oauth2::tokens::errors::ValidationError;
 
     use crate::twitch_auth::storage::MemoryStore;
 
@@ -370,26 +339,26 @@ mod tests {
             .expect("reqwest client")
     }
 
-    #[test]
-    fn classify_device_flow_error_maps_access_denied() {
-        match classify_device_flow_error("access_denied") {
-            AuthError::UserDenied => {}
-            other => panic!("expected UserDenied, got {other:?}"),
+    fn creation_error(
+        error: ValidationError<std::convert::Infallible>,
+    ) -> CreationError<std::convert::Infallible> {
+        CreationError {
+            access_token: AccessToken::new("at".into()),
+            refresh_token: None,
+            error,
         }
     }
 
     #[test]
-    fn classify_device_flow_error_maps_expired_token() {
-        match classify_device_flow_error("expired_token while polling") {
-            AuthError::DeviceCodeExpired => {}
-            other => panic!("expected DeviceCodeExpired, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn classify_device_flow_error_falls_through_to_oauth() {
-        match classify_device_flow_error("some other failure") {
-            AuthError::OAuth(s) => assert!(s.contains("some other failure")),
+    fn classify_validation_error_ends_the_session_when_twitch_says_no() {
+        assert!(matches!(
+            classify_validation_error(creation_error(ValidationError::NotAuthorized)),
+            AuthError::RefreshTokenInvalid
+        ));
+        match classify_validation_error(creation_error(ValidationError::InvalidToken(
+            "expires_in is 0",
+        ))) {
+            AuthError::OAuth(s) => assert!(s.contains("expires_in is 0"), "{s}"),
             other => panic!("expected OAuth, got {other:?}"),
         }
     }

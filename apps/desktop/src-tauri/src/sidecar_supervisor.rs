@@ -141,10 +141,9 @@ async fn supervise<R: Runtime>(
 ) {
     // `client_id` lives in the shared AuthManager; broadcaster/user
     // identifiers ride inside the persisted [`TwitchTokens`] itself
-    // (populated from the DCF response, stable across refresh).
-    // Tokens live in the OS keychain, seeded via the SignIn overlay or
-    // `cargo run --bin prismoid_dcf` and rotated automatically below
-    // (ADR 29).
+    // (populated from token validation, stable across refresh).
+    // Tokens live in the OS keychain, seeded via the SignIn overlay and
+    // rotated automatically below (ADR 29).
     let mut attempt: u32 = 0;
     let mut backoff = cfg.initial_backoff;
     // Per-process monotonic arrival counter. Owned by `supervise` so it

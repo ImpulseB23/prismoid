@@ -263,7 +263,7 @@ fn hex_digit(b: u8) -> Option<u8> {
 
 /// HTML body shown to the user after a successful redirect. Kept small
 /// and self-contained — no external assets, no framework, no JS. The
-/// tone matches the Twitch DCF flow's "switch back to the app" prompt.
+/// tone matches the Twitch sign-in's "switch back to the app" prompt.
 const SUCCESS_PAGE: &str = include_str!("success_page.html");
 
 async fn write_success_page<W: AsyncWriteExt + Unpin>(w: &mut W) -> std::io::Result<()> {

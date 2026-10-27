@@ -3,7 +3,7 @@
 //!
 //! Mirrors `twitch_auth::AuthManager` shape but the underlying flow is
 //! Authorization Code + PKCE (RFC 7636) over a loopback redirect (RFC
-//! 8252 §7.3) instead of the Device Code Grant. Single-account per
+//! 8252 §7.3) instead of the implicit grant. Single-account per
 //! ADR 30, proactive refresh per ADR 29, eager re-auth on
 //! `invalid_grant` per ADR 31.
 
