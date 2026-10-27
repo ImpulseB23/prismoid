@@ -113,6 +113,7 @@ img {
 }
 
 .app {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -920,6 +921,31 @@ img {
   color: var(--color-red-light);
   max-width: 340px;
   line-height: 1.5;
+}
+
+.update-notice {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  font-size: 13px;
+}
+
+.update-notice p {
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.update-notice--error p {
+  color: var(--color-red-light);
 }
 
 .splash {
