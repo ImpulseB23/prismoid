@@ -70,6 +70,7 @@ export default function App() {
                 <footer>
                   <span>&copy; {new Date().getFullYear()} prismoid</span>
                   <span>GPL-3.0</span>
+                  <a href="/privacy">Privacy</a>
                 </footer>
               </div>
             </div>

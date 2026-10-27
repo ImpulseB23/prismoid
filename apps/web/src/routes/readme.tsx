@@ -2,7 +2,7 @@ import { Title } from "@solidjs/meta";
 import { query, createAsync } from "@solidjs/router";
 import { Suspense } from "solid-js";
 import { parseReadmeMarkdown } from "~/lib/markdown";
-import "./contributing.css";
+import "./prose.css";
 
 const getReadme = query(async () => {
   "use server";
