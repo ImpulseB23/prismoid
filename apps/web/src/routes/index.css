@@ -335,9 +335,9 @@
   max-width: 34rem;
 }
 
-/* why: four claims, four bands of the prism */
+/* why: the four claims, lit in gold */
 .why {
-  padding: var(--space-4xl) 0;
+  padding: var(--space-3xl) 0 var(--space-4xl);
   border-top: 1px solid var(--border);
 }
 
@@ -369,20 +369,11 @@
   margin-bottom: var(--space-sm);
 }
 
-.why__item:nth-child(1) h3 {
-  color: var(--band-purple-light);
-}
-
-.why__item:nth-child(2) h3 {
-  color: var(--band-magenta);
-}
-
-.why__item:nth-child(3) h3 {
-  color: var(--band-amber);
-}
-
-.why__item:nth-child(4) h3 {
-  color: var(--band-green);
+.why__item h3 {
+  color: var(--gold);
+  text-shadow:
+    0 0 18px rgba(255, 207, 90, 0.45),
+    0 0 48px rgba(255, 176, 32, 0.25);
 }
 
 .why__item p {

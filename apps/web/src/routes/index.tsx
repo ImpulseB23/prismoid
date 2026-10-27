@@ -341,6 +341,44 @@ export default function Home() {
         <AppMock />
       </section>
 
+      <section class="why">
+        <h2>Light enough to forget it is open.</h2>
+        <div class="why__grid">
+          <div class="why__item">
+            <h3>Ultra lightweight.</h3>
+            <p>
+              Installs in seconds and sits next to your stream without eating
+              into it. No browser hidden inside the download, nothing running
+              that you did not ask for.
+            </p>
+          </div>
+          <div class="why__item">
+            <h3>Hyper fast.</h3>
+            <p>
+              Opens instantly and keeps up with the busiest chats on Twitch
+              without a stutter. Scrolling stays smooth when everyone is
+              spamming at once.
+            </p>
+          </div>
+          <div class="why__item">
+            <h3>Hard to knock over.</h3>
+            <p>
+              The connection lives in its own little box. If it hiccups, it
+              comes back on its own in seconds while you keep reading, and the
+              window never goes with it.
+            </p>
+          </div>
+          <div class="why__item">
+            <h3>Nothing in between.</h3>
+            <p>
+              Your PC talks to Twitch directly. No account with us, no cloud in
+              the middle, nothing to subscribe to, and your sign-in never leaves
+              your machine.
+            </p>
+          </div>
+        </div>
+      </section>
+
       <section class="moments">
         <div class="moment">
           <h2>You tab back and chat is 400 messages ahead.</h2>
@@ -383,44 +421,6 @@ export default function Home() {
             is in your front browser window. Pin it on top of the stream and
             forget the site's chat exists.
           </p>
-        </div>
-      </section>
-
-      <section class="why">
-        <h2>Light enough to forget it is open.</h2>
-        <div class="why__grid">
-          <div class="why__item">
-            <h3>Ultra lightweight.</h3>
-            <p>
-              Installs in seconds and sits next to your stream without eating
-              into it. No browser hidden inside the download, nothing running
-              that you did not ask for.
-            </p>
-          </div>
-          <div class="why__item">
-            <h3>Hyper fast.</h3>
-            <p>
-              Opens instantly and keeps up with the busiest chats on Twitch
-              without a stutter. Scrolling stays smooth when everyone is
-              spamming at once.
-            </p>
-          </div>
-          <div class="why__item">
-            <h3>Hard to knock over.</h3>
-            <p>
-              The connection lives in its own little box. If it hiccups, it
-              comes back on its own in seconds while you keep reading, and the
-              window never goes with it.
-            </p>
-          </div>
-          <div class="why__item">
-            <h3>Nothing in between.</h3>
-            <p>
-              Your PC talks to Twitch directly. No account with us, no cloud in
-              the middle, nothing to subscribe to, and your sign-in never leaves
-              your machine.
-            </p>
-          </div>
         </div>
       </section>
 
