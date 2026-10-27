@@ -30,23 +30,22 @@ nav {
 
 .nav-links {
   display: flex;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
 }
 
 .nav-link {
-  font-family: var(--font-mono);
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
   color: var(--text-muted);
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   transition:
-    border-color 0.2s,
+    background-color 0.2s,
     color 0.2s;
 }
 
 .nav-link:hover {
-  border-color: var(--color-purple);
+  background: var(--bg-raised);
   color: var(--text);
 }
 
