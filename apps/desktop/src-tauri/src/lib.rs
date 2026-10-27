@@ -7,6 +7,8 @@ mod message;
 pub mod oauth_pkce;
 pub mod ringbuf;
 mod sidecar_commands;
+#[cfg(windows)]
+mod sidecar_job;
 mod sidecar_supervisor;
 pub mod twitch_auth;
 pub mod twitch_channel;
