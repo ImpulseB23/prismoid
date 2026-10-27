@@ -324,7 +324,8 @@ export default function Home() {
           <p class="lede">
             prismoid is a chat window for your desktop. Every channel in a tab,
             history that survives a restart, mod actions you can actually see,
-            and your emotes. Free, open source, ultra lightweight.
+            and your 7TV, BTTV and FFZ emotes. Free, open source, ultra
+            lightweight.
           </p>
           <div class="hero-actions">
             <Download platform={platform()} />
@@ -337,6 +338,13 @@ export default function Home() {
             </GithubPreview>
           </div>
           <DownloadNote platform={platform()} />
+          <ul class="works-with" aria-label="Works with">
+            <li>Works with</li>
+            <li>Twitch</li>
+            <li>7TV</li>
+            <li>BetterTTV</li>
+            <li>FrankerFaceZ</li>
+          </ul>
         </div>
         <AppMock />
       </section>

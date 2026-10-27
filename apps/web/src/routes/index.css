@@ -83,6 +83,31 @@
   line-height: 1.5;
 }
 
+.works-with {
+  margin-top: var(--space-lg);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  font-size: 0.8125rem;
+}
+
+.works-with li {
+  padding: 4px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.works-with li:first-child {
+  padding: 0;
+  border: 0;
+  color: var(--text-faint);
+  font-weight: 300;
+}
+
 /* app mock */
 .mock {
   font-family: var(--font-mono);
