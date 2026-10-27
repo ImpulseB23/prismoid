@@ -56,15 +56,18 @@ export default function Privacy() {
         <ul>
           <li>
             <strong>Twitch.</strong> Sign-in happens on twitch.tv in your own
-            browser; prismoid never sees your password. The app then uses
-            Twitch's API to read chat, send messages and carry out moderation on
-            your behalf. It asks Twitch for permission to read and send chat,
-            read the channels you follow and moderate, read chat settings,
-            moderators, VIPs, blocked terms, unban requests and warnings, and to
-            ban, time out, delete messages and change chat settings where you
-            are a moderator. You can revoke all of it at any time under
-            Connections in your Twitch settings. Twitch's own privacy policy
-            applies to what Twitch does with your account.
+            browser; prismoid never sees your password. When you approve, Twitch
+            sends your browser to a page on prismoid.org that hands the sign-in
+            to the app through a link only the app answers. That page runs
+            entirely in your browser; nothing from it reaches a server of ours.
+            The app then uses Twitch's API to read chat, send messages and carry
+            out moderation on your behalf. It asks Twitch for permission to read
+            and send chat, read the channels you follow and moderate, read chat
+            settings, moderators, VIPs, blocked terms, unban requests and
+            warnings, and to ban, time out, delete messages and change chat
+            settings where you are a moderator. You can revoke all of it at any
+            time under Connections in your Twitch settings. Twitch's own privacy
+            policy applies to what Twitch does with your account.
           </li>
           <li>
             <strong>Google and YouTube.</strong> Only if you connect a YouTube
