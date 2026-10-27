@@ -37,7 +37,7 @@ describe("screenFor", () => {
 });
 
 describe("UpdateScreen", () => {
-  it("covers the app while installing and names the version", () => {
+  it("covers the app while installing", () => {
     const [state, setState] = createSignal<UpdateState>({ kind: "idle" });
     render(() => (
       <UpdateScreen state={state} onRetry={() => {}} onDismiss={() => {}} />
@@ -45,7 +45,7 @@ describe("UpdateScreen", () => {
     expect(screen.queryByRole("status")).toBeNull();
     setState({ kind: "downloading", version: "0.3.0", received: 1, total: 4 });
     expect(screen.getByRole("status").textContent).toContain(
-      "Updating to 0.3.0",
+      "Updating prismoid",
     );
     expect(screen.getByRole("status").textContent).toContain("25%");
     expect(screen.queryByRole("button")).toBeNull();
