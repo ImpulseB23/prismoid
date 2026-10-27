@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0](https://github.com/ImpulseB23/prismoid/compare/v0.2.1...v0.3.0) (2026-10-27)
+
+
+### Features
+
+* in-app update screen, silent install, auto update at launch ([#189](https://github.com/ImpulseB23/prismoid/issues/189)) ([0eb76ff](https://github.com/ImpulseB23/prismoid/commit/0eb76ff89a5dcd38944665ed22db0222c327db78))
+* one-click twitch sign-in ([#168](https://github.com/ImpulseB23/prismoid/issues/168)) ([fb57aa9](https://github.com/ImpulseB23/prismoid/commit/fb57aa944bd19494f3ffd34834f9fc670763ef56))
+* privacy policy link in settings ([#179](https://github.com/ImpulseB23/prismoid/issues/179)) ([0d085f7](https://github.com/ImpulseB23/prismoid/commit/0d085f78c32d07e5eb242c58cafc56987775e60e))
+
 ## [0.2.1](https://github.com/ImpulseB23/prismoid/compare/v0.2.0...v0.2.1) (2026-10-27)
 
 
