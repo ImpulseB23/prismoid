@@ -31,6 +31,7 @@ import {
 import { clearMessages } from "./stores/chatStore";
 import { clearRoles, loadModeratedChannels } from "./stores/roleStore";
 import { trackActiveStream } from "./stores/streamStore";
+import { initWhatsNew } from "./stores/whatsNewStore";
 import {
   dismissUpdate,
   installUpdate,
@@ -57,6 +58,9 @@ const App: Component = () => {
   // Runs for the whole session, sign-in screen included, so a release that
   // fixes a sign-in bug still reaches whoever is stuck there.
   onMount(() => onCleanup(scheduleUpdateChecks()));
+  onMount(() => {
+    initWhatsNew().catch((err: unknown) => console.error("whats new", err));
+  });
 
   // The moderated-channel list needs its own scope, so it is fetched once
   // the session has it: at sign-in, and again after a reconnect that
