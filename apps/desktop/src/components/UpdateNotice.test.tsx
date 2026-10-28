@@ -31,7 +31,7 @@ describe("UpdateNotice", () => {
 
     setState({ kind: "available", version: "0.2.0", notes: null });
     expect(screen.getByRole("status").textContent).toContain(
-      "Version 0.2.0 is ready.",
+      "Version 0.2 is ready.",
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Install and restart" }),

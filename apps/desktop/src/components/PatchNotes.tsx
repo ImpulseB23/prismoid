@@ -3,6 +3,7 @@
 
 import { Component, For, Show, createEffect } from "solid-js";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { displayVersion } from "../lib/version";
 import {
   closePatchNotes,
   patchNotes,
@@ -26,14 +27,16 @@ const PatchNotes: Component = () => {
             class="dialog notes"
             role="dialog"
             aria-modal="true"
-            aria-label={`What's new in ${n().version}`}
+            aria-label={`What's new in ${displayVersion(n().version)}`}
             onMouseDown={(e) => e.stopPropagation()}
             onKeyDown={(e) => {
               if (e.key === "Escape") closePatchNotes();
             }}
           >
             <div class="notes__hero">
-              <span class="notes__version">What's new in {n().version}</span>
+              <span class="notes__version">
+                What's new in {displayVersion(n().version)}
+              </span>
               <h2 class="notes__headline">{n().headline}</h2>
             </div>
             <ul class="notes__features">

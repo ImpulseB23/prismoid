@@ -40,7 +40,7 @@ export default function Privacy() {
             <code>%LOCALAPPDATA%\org.prismoid.app</code>.
           </li>
           <li>
-            <strong>Log file.</strong> From version 0.2.0 the app writes
+            <strong>Log file.</strong> From version 0.2 the app writes
             connection and error details to{" "}
             <code>%LOCALAPPDATA%\org.prismoid.app\logs</code>. It contains no
             chat text and no tokens, and it only leaves your machine if you
