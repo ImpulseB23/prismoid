@@ -13,7 +13,6 @@ use regex::Regex;
 use tauri::plugin::TauriPlugin;
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
-use tauri_plugin_opener::OpenerExt;
 
 /// Rotation point. A few rotated files stay behind so a report filed after
 /// a restart still has the run that went wrong.
@@ -36,15 +35,6 @@ pub fn plugin<R: Runtime>() -> TauriPlugin<R> {
     #[cfg(debug_assertions)]
     let builder = builder.target(Target::new(TargetKind::Stdout));
     builder.build()
-}
-
-#[tauri::command]
-pub fn open_log_dir<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
-    let dir = app.path().app_log_dir().map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    app.opener()
-        .open_path(dir.to_string_lossy(), None::<&str>)
-        .map_err(|e| e.to_string())
 }
 
 /// Version and platform details followed by the newest log lines, redacted,

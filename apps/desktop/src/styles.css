@@ -2638,7 +2638,7 @@ option::checkmark {
   gap: 4px;
 }
 
-/* A labelled group inside a Settings section, such as Stream bar. */
+/* A labelled group inside a Settings section, such as Troubleshooting. */
 .settings__group-label {
   margin-top: 18px;
   padding: 6px 0;
