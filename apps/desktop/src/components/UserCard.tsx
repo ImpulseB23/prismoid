@@ -38,6 +38,7 @@ import { describeModAction } from "../lib/modActions";
 import { formatSeconds } from "../lib/slashCommands";
 import { canModerate } from "../stores/roleStore";
 import { isIgnored, setIgnored, settings } from "../stores/settingsStore";
+import { isHighlighted } from "../lib/highlight";
 import {
   ensureUserInfo,
   formatJoined,
@@ -59,6 +60,8 @@ export interface CardUser {
 
 export interface UserCardProps {
   user: CardUser | null;
+  /** Signed-in login, so messages that mention it are highlighted. */
+  login: string;
   onClose: () => void;
 }
 
@@ -394,6 +397,11 @@ const UserCard: Component<UserCardProps> = (props) => {
                       class="user-card__msg"
                       classList={{
                         "user-card__msg--deleted": m.deleted === true,
+                        "user-card__msg--mention": isHighlighted(
+                          m.message_text,
+                          props.login,
+                          settings().highlightPhrases,
+                        ),
                       }}
                     >
                       <span class="msg__time">

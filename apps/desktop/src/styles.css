@@ -1738,6 +1738,15 @@ img {
   opacity: 0.45;
 }
 
+.user-card__msg--mention {
+  background: rgba(111, 56, 201, 0.14);
+  box-shadow: inset 2px 0 0 var(--color-purple-light);
+}
+
+.user-card__msg--mention:hover {
+  background: rgba(111, 56, 201, 0.22);
+}
+
 .user-card__msg-delete {
   position: absolute;
   right: 4px;
