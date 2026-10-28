@@ -30,6 +30,12 @@ import ChannelPicker from "./ChannelPicker";
 import ChatModes from "./ChatModes";
 import { modesOpen, setModesOpen } from "../stores/modesPanelStore";
 import { canModerate } from "../stores/roleStore";
+import {
+  openSettings,
+  settingsOpen,
+  setSettingsOpen,
+  type SettingsSection,
+} from "../stores/settingsPanelStore";
 import { pickerOpen, setPickerOpen } from "../stores/pickerStore";
 import { searchOpen, setSearchOpen } from "../stores/searchStore";
 import {
@@ -100,7 +106,6 @@ function animateIcon(
 
 const Header: Component<HeaderProps> = (props) => {
   const [state, setState] = createSignal<SidecarState | null>(null);
-  const [settingsOpen, setSettingsOpen] = createSignal(false);
   let unlisten: UnlistenFn | undefined;
   let unlistenResize: UnlistenFn | undefined;
   let unlistenScale: UnlistenFn | undefined;
@@ -255,14 +260,28 @@ const Header: Component<HeaderProps> = (props) => {
 
   // Something in Settings needs the user: a reconnect for new scopes, or a
   // chat connection that is not coming back on its own.
-  const attention = (): string | null => {
-    if (missingScopes().length > 0) return "Twitch needs new permissions";
+  // What the Settings dot is about, and the section that deals with it, so
+  // clicking the icon lands right there.
+  const attention = (): { text: string; section?: SettingsSection } | null => {
+    if (missingScopes().length > 0)
+      return { text: "Twitch needs new permissions", section: "account" };
     const u = updateState();
-    if (u.kind === "available") return `Update to ${u.version} is ready`;
+    if (u.kind === "available")
+      return {
+        text: `Update to ${u.version} is ready`,
+        section: "updates",
+      };
     const s = state();
-    if (s === "terminated" || s === "unhealthy") return "Chat is disconnected";
-    if (s === "waiting_for_auth") return "Waiting for sign-in";
-    if (whatsNewUnseen()) return `Updated to ${updatedTo()}`;
+    if (s === "terminated" || s === "unhealthy")
+      return { text: "Chat is disconnected" };
+    if (s === "waiting_for_auth")
+      return { text: "Waiting for sign-in", section: "account" };
+    const updated = updatedTo();
+    if (whatsNewUnseen() && updated)
+      return {
+        text: `Updated to ${updated}`,
+        section: "updates",
+      };
     return null;
   };
 
@@ -273,7 +292,7 @@ const Header: Component<HeaderProps> = (props) => {
         classList={{
           "header--chrome": customChrome(),
           "header--autohide": fullscreen(),
-          "header--shown": fullscreen() && chromeShown(),
+          "header--shown": fullscreen() && chromeShown() && !settingsOpen(),
         }}
         data-tauri-drag-region
         onPointerEnter={() => notePointerOnChrome(true)}
@@ -483,15 +502,16 @@ const Header: Component<HeaderProps> = (props) => {
           aria-haspopup="dialog"
           aria-expanded={settingsOpen()}
           data-tour="settings"
-          title={attention() ? `Settings: ${attention()}` : "Settings"}
+          title={attention() ? `Settings: ${attention()?.text}` : "Settings"}
           onClick={(e) => {
             animateIcon(
               e,
               [{ transform: "rotate(0)" }, { transform: "rotate(180deg)" }],
               600,
             );
+            const section = attention()?.section;
             markWhatsNewSeen();
-            setSettingsOpen(true);
+            openSettings(section);
           }}
         >
           <svg

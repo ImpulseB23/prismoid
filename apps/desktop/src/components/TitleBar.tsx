@@ -1,6 +1,6 @@
 // A bare draggable strip with the window buttons, for the screens that have
-// no header (splash, sign-in, the update screen). Slides away in fullscreen
-// like the header.
+// no header (splash, sign-in, the update screen, Settings). Slides away in
+// fullscreen like the header.
 
 import { Component, Show } from "solid-js";
 import {
