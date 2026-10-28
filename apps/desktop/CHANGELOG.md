@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/ImpulseB23/prismoid/compare/v0.4.0...v0.5.0) (2026-10-28)
+
+
+### Features
+
+* bigger chat text and zoom up to 300 percent ([#204](https://github.com/ImpulseB23/prismoid/issues/204)) ([5303dbf](https://github.com/ImpulseB23/prismoid/commit/5303dbfc784276d687a40b92c49c26f7ba2696ec))
+* cleaner user and emote cards ([#207](https://github.com/ImpulseB23/prismoid/issues/207)) ([d6390ff](https://github.com/ImpulseB23/prismoid/commit/d6390ff2e26f90af23d2f36260f01d566702a88a))
+* mod bar with one-tap chat modes under the composer ([#209](https://github.com/ImpulseB23/prismoid/issues/209)) ([bc9a2dc](https://github.com/ImpulseB23/prismoid/commit/bc9a2dc317c491a339c34d81e191b520dcdc3e25))
+* mod log panel for the open channel ([#210](https://github.com/ImpulseB23/prismoid/issues/210)) ([4966f3c](https://github.com/ImpulseB23/prismoid/commit/4966f3ca80e8f233b39eb7d5c28f0917bbceb93e))
+* settings icon lights up after an update with a what's new link ([#205](https://github.com/ImpulseB23/prismoid/issues/205)) ([897ac87](https://github.com/ImpulseB23/prismoid/commit/897ac8761d8e6b06091247dfb26cfa419eb6ded4))
+* welcome tour after first sign-in, replayable from settings ([#206](https://github.com/ImpulseB23/prismoid/issues/206)) ([6510198](https://github.com/ImpulseB23/prismoid/commit/651019819805ee74cdca98ad35bef35fc7530e76))
+
 ## [0.4.0](https://github.com/ImpulseB23/prismoid/compare/v0.3.1...v0.4.0) (2026-10-27)
 
 
