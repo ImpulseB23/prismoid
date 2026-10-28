@@ -1772,6 +1772,12 @@ option::checkmark {
   text-underline-offset: 2px;
 }
 
+@keyframes name-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
 /* 7TV paint: only the fill changes, so Pretext's measured width holds. The
    chat color shows through transparent stops, as in the 7TV extension. */
 .name--painted {
@@ -2553,6 +2559,12 @@ option::checkmark {
 
 /* Emote inspect */
 
+/* The clicked emote pulses while its card loads. */
+.msg__emote--loading {
+  cursor: progress;
+  animation: name-pulse 0.9s ease-in-out infinite;
+}
+
 .msg__emote {
   display: inline-block;
   position: relative;
@@ -2600,54 +2612,6 @@ option::checkmark {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text);
-}
-
-.emote-card {
-  width: min(320px, 100%);
-}
-
-.emote-card__preview {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 120px;
-  padding: 16px;
-  background: var(--bg);
-  border-radius: var(--radius-sm);
-}
-
-.emote-card__preview img {
-  max-width: 112px;
-  max-height: 112px;
-  image-rendering: auto;
-}
-
-.emote-card__meta {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 10px 10px 4px;
-}
-
-.emote-card__code {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.btn--small.btn--primary {
-  background: var(--prism) border-box no-repeat;
-  color: var(--color-base-50);
-}
-
-.btn--small.btn--primary:hover:not(:disabled) {
-  background: var(--prism) border-box no-repeat;
-  opacity: 0.85;
-}
-
-.emote-card__source {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-faint);
 }
 
 /* Right-click menu and transient notices */
@@ -2999,38 +2963,197 @@ option::checkmark {
   padding: 10px 10px 4px;
 }
 
-.emote-card .emote-card__preview {
-  min-height: 96px;
-  padding: 14px;
-  border-radius: var(--radius-md);
-  background:
-    radial-gradient(
-      circle at 50% 40%,
-      rgba(124, 58, 237, 0.12),
-      transparent 70%
-    ),
-    var(--bg);
+/* Emote card: the emote fills the top edge to edge, then its name and
+   creator, a short fact list and the actions. */
+
+.emote-card {
+  width: min(340px, 100%);
+  padding: 0;
+  overflow: hidden;
 }
 
-.emote-card .emote-card__preview img {
-  max-width: 84px;
-  max-height: 84px;
+.emote-card__hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 176px;
+  padding: 24px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
 }
 
-.emote-card .emote-card__meta {
-  gap: 8px;
-  padding: 12px 10px 0;
+.emote-card__hero img {
+  max-width: 100%;
+  max-height: 128px;
+  object-fit: contain;
 }
 
-.emote-card .emote-card__code {
-  font-size: 18px;
+.emote-card__close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+.emote-card__close:hover {
+  color: var(--text);
+}
+
+.emote-card__head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px 0;
+}
+
+.emote-card__code {
+  font-size: 19px;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 
-.emote-card__tags {
+.emote-card__by {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.emote-card__facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 14px 16px 16px;
+  font-size: 13px;
+}
+
+.emote-card__facts dt {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 18px;
+}
+
+.emote-card__facts dd {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text);
+  line-height: 18px;
+}
+
+/* Brand marks: Twitch in its purple, 7TV in the text color like its own
+   mono logo, BTTV and FFZ keep their icon colors. */
+.provider-icon {
+  flex-shrink: 0;
+  display: block;
+  object-fit: contain;
+}
+
+.provider-icon--twitch {
+  color: var(--chip-twitch);
+}
+
+.provider-icon--7tv {
+  color: var(--text);
+}
+
+.emote-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.emote-card__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 4px 2px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.emote-card__link:hover {
+  color: var(--text);
+}
+
+.btn--small.btn--primary {
+  background: var(--prism) border-box no-repeat;
+  color: var(--color-base-50);
+}
+
+.btn--small.btn--primary:hover:not(:disabled) {
+  background: var(--prism) border-box no-repeat;
+  opacity: 0.85;
+}
+
+/* Emote hover tooltip */
+
+.emote-tip {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 132px;
+  max-width: 240px;
+  padding: 12px 14px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  box-shadow: 0 12px 32px var(--shadow);
+  pointer-events: none;
+  text-align: center;
+  /* Revealed by EmoteTooltip once it is placed. */
+  visibility: hidden;
+  animation: card-in 0.12s ease;
+}
+
+.emote-tip__art {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 64px;
+  margin-bottom: 4px;
+}
+
+.emote-tip__art img {
+  max-height: 64px;
+  max-width: 200px;
+  object-fit: contain;
+}
+
+.emote-tip__art .emote-tip__overlay {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+}
+
+.emote-tip__code {
+  max-width: 100%;
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.emote-tip__set {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.emote-tip__by {
+  color: var(--text-faint);
+  font-size: 12px;
 }
 
 /* Mod bar */

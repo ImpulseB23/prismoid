@@ -4,7 +4,12 @@
 import { Component, For } from "solid-js";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { MessagePiece } from "../lib/emoteSpans";
-import { inspectEmote } from "../stores/emoteCardStore";
+import {
+  endEmoteHover,
+  hoverEmote,
+  inspectEmote,
+  inspectLoading,
+} from "../stores/emoteCardStore";
 
 const Piece: Component<{ piece: MessagePiece }> = (props) => {
   const p = props.piece;
@@ -34,10 +39,21 @@ const Piece: Component<{ piece: MessagePiece }> = (props) => {
   return (
     <span
       class="msg__emote"
+      classList={{
+        "msg__emote--loading": inspectLoading() === primary.emote.id,
+      }}
+      aria-busy={inspectLoading() === primary.emote.id}
       role="button"
       tabIndex={0}
-      title={title}
       aria-label={`${title} emote`}
+      onPointerEnter={(e) =>
+        hoverEmote(
+          e.currentTarget,
+          primary.emote,
+          overlays.map((o) => o.emote),
+        )
+      }
+      onPointerLeave={endEmoteHover}
       style={{
         width: `${primary.width}px`,
         height: `${primary.height}px`,
