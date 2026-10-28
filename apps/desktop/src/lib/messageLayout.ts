@@ -20,11 +20,11 @@ import { formatTimestamp } from "./messageStyle";
 // measures against — any drift here produces wrong heights.
 export const MESSAGE_FONT_FAMILY =
   '"Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-export const MESSAGE_FONT_SIZE_PX = 14;
+export const MESSAGE_FONT_SIZE_PX = 15;
 // Timestamps are set in the brand mono face at a smaller size; the DOM
 // applies the identical font via `.msg__time` so measurement matches.
 export const TIMESTAMP_FONT_FAMILY = '"JetBrains Mono", Consolas, monospace';
-export const TIMESTAMP_FONT_SIZE_PX = 11;
+export const TIMESTAMP_FONT_SIZE_PX = 12;
 
 const USERNAME_FONT = `600 ${MESSAGE_FONT_SIZE_PX}px ${MESSAGE_FONT_FAMILY}`;
 const SEPARATOR_FONT = `400 ${MESSAGE_FONT_SIZE_PX}px ${MESSAGE_FONT_FAMILY}`;
@@ -42,7 +42,7 @@ export const MEASURED_FONTS = [
   NOTICE_FONT,
 ];
 
-export const MESSAGE_LINE_HEIGHT = 20;
+export const MESSAGE_LINE_HEIGHT = 22;
 export const MESSAGE_PADDING_Y = 4;
 // Horizontal padding applied to every message row; Pretext must measure
 // against the container width minus both sides or the last-word-per-line

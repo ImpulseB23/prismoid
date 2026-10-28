@@ -125,7 +125,7 @@ describe("settingsStore", () => {
 
     const badZoom = createSettingsStore(
       appliers(),
-      memStorage({ "prismoid.settings": JSON.stringify({ zoom: 3 }) }),
+      memStorage({ "prismoid.settings": JSON.stringify({ zoom: 3.3 }) }),
     );
     expect(badZoom.settings().zoom).toBe(1);
 
