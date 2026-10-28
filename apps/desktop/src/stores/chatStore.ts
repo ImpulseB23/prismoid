@@ -15,6 +15,11 @@ export interface EmoteMeta {
   height: number;
   animated: boolean;
   zero_width: boolean;
+  /**
+   * Uploader, when the provider reports one (7TV, FFZ, BTTV shared emotes).
+   * `id` is the account id on that provider, not a Twitch id.
+   */
+  owner?: { id?: string; login?: string; display_name: string };
 }
 
 /**

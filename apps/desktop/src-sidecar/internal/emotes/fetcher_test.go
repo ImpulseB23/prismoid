@@ -141,6 +141,26 @@ func TestFetcher_NilSlicesSerializeAsEmptyArray(t *testing.T) {
 	}
 }
 
+func TestEmote_OwnerWireShape(t *testing.T) {
+	cases := []struct {
+		owner *EmoteOwner
+		want  string
+	}{
+		{nil, `{"id":"1","code":"A","provider":"ffz","url_1x":"u"}`},
+		{&EmoteOwner{DisplayName: "Forsen"}, `{"id":"1","code":"A","provider":"ffz","url_1x":"u","owner":{"display_name":"Forsen"}}`},
+		{&EmoteOwner{ID: "7", Login: "forsen", DisplayName: "Forsen"}, `{"id":"1","code":"A","provider":"ffz","url_1x":"u","owner":{"id":"7","login":"forsen","display_name":"Forsen"}}`},
+	}
+	for _, c := range cases {
+		raw, err := json.Marshal(Emote{ID: "1", Code: "A", Provider: ProviderFFZ, URL1x: "u", Owner: c.owner})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(raw) != c.want {
+			t.Errorf("got %s\nwant %s", raw, c.want)
+		}
+	}
+}
+
 func findSubstring(s, sub string) int {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {

@@ -2,6 +2,7 @@ package emotes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -25,6 +26,15 @@ const sevenTVSampleSet = `{
             {"name": "4x.webp", "width": 128, "height": 128, "format": "WEBP"},
             {"name": "1x.avif", "width": 32, "height": 32, "format": "AVIF"}
           ]
+        },
+        "owner": {
+          "id": "01F6MTQK0R0000QWQEJTQA0MJ7",
+          "username": "bodybuffalo28",
+          "display_name": "BodyBuffalo28",
+          "avatar_url": "https://static-cdn.jtvnw.net/x.png",
+          "style": {},
+          "role_ids": [],
+          "connections": []
         }
       }
     },
@@ -69,6 +79,33 @@ func TestSevenTV_FetchGlobal(t *testing.T) {
 	}
 	if e.Width != 32 || e.Height != 32 {
 		t.Errorf("dims = %dx%d, want 32x32", e.Width, e.Height)
+	}
+	want := EmoteOwner{ID: "01F6MTQK0R0000QWQEJTQA0MJ7", Login: "bodybuffalo28", DisplayName: "BodyBuffalo28"}
+	if e.Owner == nil || *e.Owner != want {
+		t.Errorf("owner = %+v", e.Owner)
+	}
+}
+
+func TestSevenTV_OwnerFallbacks(t *testing.T) {
+	var set sevenTVEmoteSet
+	files := `"host":{"url":"//cdn.7tv.app/emote/x","files":[{"name":"1x.webp","format":"WEBP"}]}`
+	raw := `{"emotes":[
+		{"id":"a","name":"NoName","data":{` + files + `,"owner":{"id":"01FD0D0E5800048TJ1B00V3DRD","username":"mzntori","display_name":""}}},
+		{"id":"b","name":"Blank","data":{` + files + `,"owner":{"id":"01FD0D0E5800048TJ1B00V3DRD","username":"","display_name":""}}},
+		{"id":"c","name":"Null","data":{` + files + `,"owner":null}}
+	]}`
+	if err := json.Unmarshal([]byte(raw), &set); err != nil {
+		t.Fatal(err)
+	}
+	got := set.toEmotes()
+	if len(got) != 3 {
+		t.Fatalf("emotes = %d", len(got))
+	}
+	if o := got[0].Owner; o == nil || o.DisplayName != "mzntori" || o.Login != "mzntori" {
+		t.Errorf("display name fallback: %+v", o)
+	}
+	if got[1].Owner != nil || got[2].Owner != nil {
+		t.Errorf("want no owner: %+v %+v", got[1].Owner, got[2].Owner)
 	}
 }
 

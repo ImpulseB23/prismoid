@@ -41,6 +41,29 @@ type Emote struct {
 	// ZeroWidth is the 7TV/BTTV "overlay" flag. True for emotes like
 	// `cvMask`, `RainTime` that render on top of the previous emote.
 	ZeroWidth bool `json:"zero_width,omitempty"`
+	// Owner is who uploaded the emote, nil when the provider does not say.
+	Owner *EmoteOwner `json:"owner,omitempty"`
+}
+
+// EmoteOwner identifies an emote's uploader. ID is the account id on the
+// emote's own provider (a 7TV, BTTV or FFZ user id), not a Twitch id.
+type EmoteOwner struct {
+	ID          string `json:"id,omitempty"`
+	Login       string `json:"login,omitempty"`
+	DisplayName string `json:"display_name"`
+}
+
+// newEmoteOwner returns nil when the provider gave no usable name, and uses
+// the login when the display name is blank (7TV leaves it empty on some
+// accounts).
+func newEmoteOwner(id, login, displayName string) *EmoteOwner {
+	if displayName == "" {
+		displayName = login
+	}
+	if displayName == "" {
+		return nil
+	}
+	return &EmoteOwner{ID: id, Login: login, DisplayName: displayName}
 }
 
 // EmoteSet groups emotes by provider and scope. Channel sets carry the
