@@ -11,6 +11,50 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.7.0",
+    headline: "A fresh coat of prism",
+    features: [
+      {
+        title: "A new look",
+        body: "Prismoid has its own title bar and window buttons now, a deeper purple and a bigger window that follows your display scale.",
+      },
+      {
+        title: "Command center",
+        body: "Chat modes, the AutoMod queue and the mod log live together in one panel. Clear chat sits at the bottom and asks twice.",
+      },
+      {
+        title: "Chat pulse",
+        body: "The stream bar shows messages per minute and how many people are chatting, counted for every open tab. Turn each stat on or off in Settings.",
+      },
+      {
+        title: "Followed channels that are live",
+        body: "The channel picker lists the people you follow who are live right now, with the ones you opened recently on top. Prismoid asks you to reconnect Twitch once to turn it on.",
+      },
+      {
+        title: "Emotes up close",
+        body: "Hover an emote to see its name, where it comes from and who made it. Click it for a bigger card that shows who added it. The emote picker got a rail to jump between sets.",
+      },
+      {
+        title: "Fullscreen that gets out of the way",
+        body: "In fullscreen the header slides away when your mouse leaves it and comes back when you move to the top.",
+      },
+      {
+        title: "Settings, all in one place",
+        body: "Settings opens as a full page with sections. Copy logs, reset or uninstall from Troubleshooting when something goes wrong.",
+      },
+    ],
+    fixes: [
+      "Right-click menus that fit the app, everywhere it makes sense.",
+      "Mods can delete their own messages, and a More button on each message holds the rest.",
+      "Search, mentions, threads and user cards share one cleaner popup style, and they wait for their data before opening.",
+      "Mentions now come from chat history across all your tabs.",
+      "The tab underline slides between tabs, and header icons react when you click them.",
+      "First message tags stay put after a reload and sit to the right of the message.",
+      "The setup tour walks you through Settings too.",
+      "Versions like 0.7.0 show as 0.7.",
+    ],
+  },
+  {
     version: "0.6.0",
     headline: "Your chat, run your way",
     features: [
