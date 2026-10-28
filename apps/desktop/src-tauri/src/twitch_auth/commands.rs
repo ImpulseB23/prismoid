@@ -20,9 +20,19 @@
 //! 4. `twitch_logout` wipes the keychain entry and re-shows the overlay
 //!    on the next supervisor iteration.
 
-use tauri::State;
+use tauri::{AppHandle, Emitter, Runtime, State};
 
 use super::auth_state::{AuthCommandError, AuthState, AuthStatus, LoginView};
+
+/// Sent to every window after a sign-in, reconnect or sign-out, so the
+/// windows besides the one that started it follow the account too.
+pub const AUTH_CHANGED: &str = "twitch_auth_changed";
+
+fn announce<R: Runtime>(app: &AppHandle<R>, status: &AuthStatus) {
+    if let Err(e) = app.emit(AUTH_CHANGED, status) {
+        tracing::warn!(error = %e, "auth change not announced");
+    }
+}
 
 #[tauri::command]
 pub async fn twitch_auth_status(
@@ -39,10 +49,13 @@ pub async fn twitch_start_login(
 }
 
 #[tauri::command]
-pub async fn twitch_complete_login(
+pub async fn twitch_complete_login<R: Runtime>(
+    app: AppHandle<R>,
     state: State<'_, AuthState>,
 ) -> Result<AuthStatus, AuthCommandError> {
-    state.complete_login().await
+    let status = state.complete_login().await?;
+    announce(&app, &status);
+    Ok(status)
 }
 
 #[tauri::command]
@@ -52,6 +65,11 @@ pub async fn twitch_cancel_login(state: State<'_, AuthState>) -> Result<(), Auth
 }
 
 #[tauri::command]
-pub async fn twitch_logout(state: State<'_, AuthState>) -> Result<(), AuthCommandError> {
-    state.logout().await
+pub async fn twitch_logout<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AuthState>,
+) -> Result<(), AuthCommandError> {
+    state.logout().await?;
+    announce(&app, &state.status()?);
+    Ok(())
 }
