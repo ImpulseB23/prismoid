@@ -9,12 +9,16 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { invoke } from "@tauri-apps/api/core";
 import type { StorageLike } from "./channelStore";
 import { parseDuration } from "../lib/slashCommands";
+import { DEFAULT_TEXT_SIZE, TEXT_SIZES } from "../lib/messageLayout";
 
 const SETTINGS_KEY = "prismoid.settings";
 
 export interface Settings {
   alwaysOnTop: boolean;
+  /** Whole-window zoom. */
   zoom: number;
+  /** Chat message size in px, one of TEXT_SIZES. */
+  textSize: number;
   showTimestamps: boolean;
   /** Logins whose messages are hidden from the feed. */
   ignoredLogins: string[];
@@ -47,6 +51,7 @@ export const MAX_TIMEOUT_PRESETS = 8;
 export const DEFAULT_SETTINGS: Settings = {
   alwaysOnTop: false,
   zoom: 1,
+  textSize: DEFAULT_TEXT_SIZE,
   showTimestamps: false,
   ignoredLogins: [],
   highlightPhrases: [],
@@ -79,6 +84,9 @@ export interface SettingsStore {
   zoomIn: () => Promise<void>;
   zoomOut: () => Promise<void>;
   zoomReset: () => Promise<void>;
+  textBigger: () => Promise<void>;
+  textSmaller: () => Promise<void>;
+  textReset: () => Promise<void>;
   /** Re-applies persisted preferences to the live window. Call once at boot. */
   apply: () => Promise<void>;
 }
@@ -125,12 +133,16 @@ export function createSettingsStore(
     write(storage, SETTINGS_KEY, JSON.stringify(next));
   }
 
-  function step(direction: 1 | -1): Promise<void> {
-    const i = ZOOM_LEVELS.indexOf(settings().zoom);
-    const idx = i === -1 ? ZOOM_LEVELS.indexOf(1) : i;
-    const next = ZOOM_LEVELS[idx + direction];
+  function step(
+    key: "zoom" | "textSize",
+    ladder: number[],
+    direction: 1 | -1,
+  ): Promise<void> {
+    const i = ladder.indexOf(settings()[key]);
+    const idx = i === -1 ? ladder.indexOf(DEFAULT_SETTINGS[key]) : i;
+    const next = ladder[idx + direction];
     if (next === undefined) return Promise.resolve();
-    return update({ zoom: next });
+    return update({ [key]: next });
   }
 
   async function apply(): Promise<void> {
@@ -145,9 +157,12 @@ export function createSettingsStore(
   return {
     settings,
     update,
-    zoomIn: () => step(1),
-    zoomOut: () => step(-1),
+    zoomIn: () => step("zoom", ZOOM_LEVELS, 1),
+    zoomOut: () => step("zoom", ZOOM_LEVELS, -1),
     zoomReset: () => update({ zoom: 1 }),
+    textBigger: () => step("textSize", TEXT_SIZES, 1),
+    textSmaller: () => step("textSize", TEXT_SIZES, -1),
+    textReset: () => update({ textSize: DEFAULT_TEXT_SIZE }),
     apply,
   };
 }
@@ -168,6 +183,10 @@ function readSettings(storage: StorageLike | null): Settings {
         typeof p.zoom === "number" && ZOOM_LEVELS.includes(p.zoom)
           ? p.zoom
           : DEFAULT_SETTINGS.zoom,
+      textSize:
+        typeof p.textSize === "number" && TEXT_SIZES.includes(p.textSize)
+          ? p.textSize
+          : DEFAULT_SETTINGS.textSize,
       showTimestamps:
         typeof p.showTimestamps === "boolean"
           ? p.showTimestamps
@@ -282,6 +301,9 @@ export const updateSettings = defaultStore.update;
 export const zoomIn = defaultStore.zoomIn;
 export const zoomOut = defaultStore.zoomOut;
 export const zoomReset = defaultStore.zoomReset;
+export const textBigger = defaultStore.textBigger;
+export const textSmaller = defaultStore.textSmaller;
+export const textReset = defaultStore.textReset;
 export const applyWindowSettings = defaultStore.apply;
 
 /** Splits a comma or newline separated list into trimmed, deduped entries. */

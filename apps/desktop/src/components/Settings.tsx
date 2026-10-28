@@ -24,11 +24,15 @@ import {
   parseList,
   settings,
   updateSettings,
+  textBigger,
+  textReset,
+  textSmaller,
   zoomIn,
   zoomOut,
   zoomReset,
   type Theme,
 } from "../stores/settingsStore";
+import { DEFAULT_TEXT_SIZE } from "../lib/messageLayout";
 import { formatSeconds } from "../lib/slashCommands";
 import { openLogDir } from "../lib/log";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -235,10 +239,42 @@ const Settings: Component<SettingsProps> = (props) => {
           </div>
           <div class="settings__row">
             <div class="settings__text">
-              <span class="settings__name">Zoom</span>
+              <span class="settings__name">Chat text size</span>
               <span class="settings__hint">
                 Ctrl + scroll, or Ctrl with + − 0
               </span>
+            </div>
+            <div class="settings__zoom">
+              <button
+                type="button"
+                class="icon-btn"
+                aria-label="Smaller text"
+                onClick={() => run(textSmaller())}
+              >
+                −
+              </button>
+              <button
+                type="button"
+                class="settings__zoom-value"
+                title="Reset text size"
+                onClick={() => run(textReset())}
+              >
+                {Math.round((settings().textSize / DEFAULT_TEXT_SIZE) * 100)}%
+              </button>
+              <button
+                type="button"
+                class="icon-btn"
+                aria-label="Bigger text"
+                onClick={() => run(textBigger())}
+              >
+                +
+              </button>
+            </div>
+          </div>
+          <div class="settings__row">
+            <div class="settings__text">
+              <span class="settings__name">Zoom</span>
+              <span class="settings__hint">Makes the whole window bigger</span>
             </div>
             <div class="settings__zoom">
               <button

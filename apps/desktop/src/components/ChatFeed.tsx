@@ -92,15 +92,14 @@ import {
 import { requestMention, requestReply } from "../stores/composerStore";
 import {
   BADGE_GAP_PX,
-  BADGE_SIZE_PX,
   MESSAGE_FONT_FAMILY,
-  MESSAGE_FONT_SIZE_PX,
   MEASURED_FONTS,
-  MESSAGE_LINE_HEIGHT,
   MESSAGE_PADDING_X,
   MESSAGE_PADDING_Y,
   measureMessageHeight,
   prepareMessage,
+  textMetrics,
+  type TextMetrics,
   type PreparedMessage,
 } from "../lib/messageLayout";
 import { normalizeUserColor } from "../lib/messageStyle";
@@ -177,6 +176,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
   let lastBadgeRev = 0;
   let lastMessageRev = 0;
   let lastTimestamps: boolean | undefined;
+  let lastMetrics: TextMetrics | undefined;
 
   const [width, setWidth] = createSignal(0);
   const [viewportHeight, setViewportHeight] = createSignal(0);
@@ -290,6 +290,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     // pending entries re-render with their new content.
     const msgRev = messageRevision();
     const timestamps = settings().showTimestamps;
+    const metrics = textMetrics(settings().textSize);
     if (!fontsLoaded() || w <= 0 || v.count === 0) {
       return { messages: [], byMono: new Map(), totalHeight: 0 };
     }
@@ -312,6 +313,10 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       entryCache.clear();
       lastTimestamps = timestamps;
     }
+    if (metrics !== lastMetrics) {
+      entryCache.clear();
+      lastMetrics = metrics;
+    }
 
     const messages: PositionedMessage[] = new Array(v.count);
     const byMono = new Map<number, PositionedMessage>();
@@ -325,7 +330,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
         const prepared =
           entry !== undefined
             ? entry.prepared
-            : prepareMessage(msg, resolveBadge, { timestamps });
+            : prepareMessage(msg, resolveBadge, { timestamps, metrics });
         const height = measureMessageHeight(prepared, w);
         entry = { prepared, height, measuredWidth: w };
         entryCache.set(mono, entry);
@@ -765,9 +770,9 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                     transform: `translateY(${row().top}px)`,
                     height: `${row().height}px`,
                     padding: `${MESSAGE_PADDING_Y / 2}px ${MESSAGE_PADDING_X}px`,
-                    "line-height": `${MESSAGE_LINE_HEIGHT}px`,
+                    "line-height": `${row().prepared.metrics.lineHeight}px`,
                     "font-family": MESSAGE_FONT_FAMILY,
-                    "font-size": `${MESSAGE_FONT_SIZE_PX}px`,
+                    "font-size": `${row().prepared.metrics.fontSize}px`,
                   }}
                   title={
                     status() === "failed"
@@ -974,7 +979,9 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                     {(r) => (
                       <div
                         class="msg__reply"
-                        style={{ height: `${MESSAGE_LINE_HEIGHT}px` }}
+                        style={{
+                          height: `${row().prepared.metrics.lineHeight}px`,
+                        }}
                       >
                         <svg
                           width="12"
@@ -999,7 +1006,14 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                     )}
                   </Show>
                   <Show when={row().prepared.timestamp}>
-                    <span class="msg__time">{row().prepared.timestamp}</span>
+                    <span
+                      class="msg__time"
+                      style={{
+                        "font-size": `${row().prepared.metrics.timestampSize}px`,
+                      }}
+                    >
+                      {row().prepared.timestamp}
+                    </span>
                   </Show>
                   <Show
                     when={row().prepared.notice}
@@ -1021,8 +1035,8 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                               }
                               alt={b.badge.title}
                               title={b.badge.title}
-                              width={BADGE_SIZE_PX}
-                              height={BADGE_SIZE_PX}
+                              width={row().prepared.metrics.badgeSize}
+                              height={row().prepared.metrics.badgeSize}
                               draggable={false}
                               style={{ "margin-right": `${BADGE_GAP_PX}px` }}
                             />
