@@ -22,6 +22,7 @@ use tokio::sync::watch;
 
 use crate::chat_history::History;
 use crate::twitch_auth::{AuthError, AuthState, TWITCH_CLIENT_ID};
+use crate::twitch_channel_info::fetch_channel_info;
 
 pub const HELIX_BASE: &str = "https://api.twitch.tv/helix";
 
@@ -185,7 +186,8 @@ pub enum ChannelError {
         status: u16,
         message: String,
     },
-    /// A chat setting value outside what Twitch accepts.
+    /// A value outside what Twitch accepts: a chat setting, a stream
+    /// title, a poll or a prediction.
     InvalidSetting {
         message: String,
     },
@@ -206,6 +208,14 @@ impl From<AuthError> for ChannelError {
 
 impl From<reqwest::Error> for ChannelError {
     fn from(err: reqwest::Error) -> Self {
+        Self::Http {
+            message: err.to_string(),
+        }
+    }
+}
+
+impl From<crate::message::ParseError> for ChannelError {
+    fn from(err: crate::message::ParseError) -> Self {
         Self::Http {
             message: err.to_string(),
         }
@@ -823,17 +833,49 @@ struct HelixStream {
     started_at: String,
 }
 
-#[derive(Deserialize)]
-struct ChannelsResponse {
-    data: Vec<HelixChannelInfo>,
+/// Sends `body` as JSON with `method` and returns the response once Helix
+/// accepted it, for the caller to decode or drop (204 endpoints).
+pub(crate) async fn helix_write<B: Serialize + ?Sized>(
+    http: &reqwest::Client,
+    method: reqwest::Method,
+    url: String,
+    query: &[(&str, &str)],
+    access_token: &str,
+    body: &B,
+) -> Result<reqwest::Response, ChannelError> {
+    let resp = http
+        .request(method, url)
+        .query(query)
+        .header("Client-Id", TWITCH_CLIENT_ID)
+        .bearer_auth(access_token)
+        .json(body)
+        .send()
+        .await?;
+    let status = resp.status();
+    if !status.is_success() {
+        let message = resp.text().await.unwrap_or_default();
+        return Err(ChannelError::Helix {
+            status: status.as_u16(),
+            message,
+        });
+    }
+    Ok(resp)
 }
 
-#[derive(Deserialize)]
-struct HelixChannelInfo {
-    #[serde(default)]
-    game_name: String,
-    #[serde(default)]
-    title: String,
+/// Rejects text Helix would answer 400 to: blank, or longer than `max`
+/// characters.
+pub(crate) fn check_text(field: &str, value: &str, max: usize) -> Result<(), ChannelError> {
+    if value.trim().is_empty() {
+        return Err(ChannelError::InvalidSetting {
+            message: format!("{field} cannot be empty"),
+        });
+    }
+    if value.chars().count() > max {
+        return Err(ChannelError::InvalidSetting {
+            message: format!("{field} must be at most {max} characters"),
+        });
+    }
+    Ok(())
 }
 
 pub(crate) async fn helix_get<T: serde::de::DeserializeOwned>(
@@ -870,20 +912,14 @@ pub async fn fetch_stream_info(
     broadcaster_id: &str,
 ) -> Result<StreamInfo, ChannelError> {
     let stream_query = [("user_id", broadcaster_id)];
-    let channel_query = [("broadcaster_id", broadcaster_id)];
     let streams = helix_get::<StreamsResponse>(
         http,
         format!("{helix_base}/streams"),
         &stream_query,
         access_token,
     );
-    let channels = helix_get::<ChannelsResponse>(
-        http,
-        format!("{helix_base}/channels"),
-        &channel_query,
-        access_token,
-    );
-    let (streams, channels) = tokio::try_join!(streams, channels)?;
+    let channel = fetch_channel_info(http, helix_base, access_token, broadcaster_id);
+    let (streams, channel) = tokio::try_join!(streams, channel)?;
 
     if let Some(live) = streams.data.into_iter().next() {
         return Ok(StreamInfo {
@@ -894,11 +930,11 @@ pub async fn fetch_stream_info(
             started_at: Some(live.started_at),
         });
     }
-    let info = channels.data.into_iter().next();
+    let info = channel.unwrap_or_default();
     Ok(StreamInfo {
         is_live: false,
-        title: info.as_ref().map(|c| c.title.clone()).unwrap_or_default(),
-        game_name: info.map(|c| c.game_name).unwrap_or_default(),
+        title: info.title,
+        game_name: info.game_name,
         viewer_count: None,
         started_at: None,
     })

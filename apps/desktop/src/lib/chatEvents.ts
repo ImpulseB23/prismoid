@@ -1,6 +1,8 @@
 // Moderation events from the Rust host (`chat_events`). Mirrors
 // `message::ChatEvent` in src-tauri.
 
+import type { Poll, Prediction } from "./streamManager";
+
 export interface ModAction {
   kind: "mod_action";
   channel_id: string;
@@ -65,8 +67,16 @@ export type PublicModerationEvent =
     }
   | { kind: "chat_cleared"; channel_id: string };
 
+/** A poll on the user's own channel began, got votes or ended. */
+export type PollUpdate = Poll & { kind: "poll_update" };
+
+/** A prediction on the user's own channel changed. */
+export type PredictionUpdate = Prediction & { kind: "prediction_update" };
+
 export type ChatEvent =
   | PublicModerationEvent
   | ModAction
   | HeldMessage
-  | HeldMessageResolved;
+  | HeldMessageResolved
+  | PollUpdate
+  | PredictionUpdate;

@@ -243,6 +243,16 @@ func (s *Session) subscribeMissing(sessionID, broadcasterID string) (string, boo
 				s.Log.Info().Err(amErr).Str("broadcaster", broadcasterID).Msg("automod queue unavailable; moderator:manage:automod likely missing")
 			}
 		}
+		// Polls and predictions only exist for the user's own channel. A
+		// refusal there means the grant predates the stream manager
+		// scopes; the resubscribe after a reconnect fills them in.
+		if broadcasterID == userID {
+			feeds, feedErr := SubscribeBroadcasterFeeds(s.ctx, s.helix(), sessionID, broadcasterID, have)
+			maps.Copy(made, feeds)
+			if feedErr != nil {
+				s.Log.Info().Err(feedErr).Str("broadcaster", broadcasterID).Msg("poll or prediction feed unavailable; stream manager scopes likely missing")
+			}
+		}
 	}
 
 	s.mu.Lock()

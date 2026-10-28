@@ -17,8 +17,10 @@ mod sidecar_supervisor;
 mod tray;
 pub mod twitch_auth;
 pub mod twitch_channel;
+pub mod twitch_channel_info;
 pub mod twitch_chat_settings;
 pub mod twitch_irc;
+pub mod twitch_polls;
 mod uninstall;
 pub mod youtube_auth;
 
@@ -128,6 +130,17 @@ pub fn run() {
             chat_history::chat_history,
             twitch_chat_settings::twitch_get_chat_settings,
             twitch_chat_settings::twitch_update_chat_settings,
+            twitch_channel_info::twitch_get_channel_info,
+            twitch_channel_info::twitch_update_channel_info,
+            twitch_channel_info::twitch_search_categories,
+            twitch_polls::twitch_get_poll,
+            twitch_polls::twitch_create_poll,
+            twitch_polls::twitch_end_poll,
+            twitch_polls::twitch_get_prediction,
+            twitch_polls::twitch_create_prediction,
+            twitch_polls::twitch_lock_prediction,
+            twitch_polls::twitch_resolve_prediction,
+            twitch_polls::twitch_cancel_prediction,
         ])
         .setup(setup)
         .run(tauri::generate_context!())
@@ -202,6 +215,12 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
             .scope(Scope::ModeratorReadVips)
             // Held AutoMod messages: both EventSub feeds and allow/deny.
             .scope(Scope::ModeratorManageAutoMod)
+            // Stream manager on the user's own channel: title and category,
+            // polls and predictions. The manage scopes also cover reading
+            // them and their EventSub feeds.
+            .scope(Scope::ChannelManageBroadcast)
+            .scope(Scope::ChannelManagePolls)
+            .scope(Scope::ChannelManagePredictions)
             .build(KeychainStore, http_client),
     );
     let wakeup = Arc::new(Notify::new());

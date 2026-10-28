@@ -296,14 +296,51 @@ func SubscribeAutoMod(ctx context.Context, client *HelixClient, sessionID, broad
 	return made, nil
 }
 
+// broadcasterFeeds are the EventSub types Twitch only grants a broadcaster
+// for their own channel, one group per scope: channel:manage:polls, then
+// channel:manage:predictions.
+var broadcasterFeeds = [][]string{
+	{"channel.poll.begin", "channel.poll.progress", "channel.poll.end"},
+	{"channel.prediction.begin", "channel.prediction.progress", "channel.prediction.lock", "channel.prediction.end"},
+}
+
+// SubscribeBroadcasterFeeds creates the poll and prediction v1
+// subscriptions for the user's own channel. A group stops at its first
+// refusal, since that means the grant lacks its scope, while the other
+// group carries on. Types in `have` are skipped; the ids made come back by
+// type alongside every group's error.
+func SubscribeBroadcasterFeeds(ctx context.Context, client *HelixClient, sessionID, broadcasterID string, have map[string]string) (map[string]string, error) {
+	made := make(map[string]string)
+	var errs []error
+	condition := map[string]string{"broadcaster_user_id": broadcasterID}
+	for _, group := range broadcasterFeeds {
+		for _, subType := range group {
+			if _, ok := have[subType]; ok {
+				continue
+			}
+			id, err := createSubscription(ctx, client, subType, "1", sessionID, condition)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", subType, err))
+				break
+			}
+			made[subType] = id
+		}
+	}
+	return made, errors.Join(errs...)
+}
+
 func subscribeAsModerator(ctx context.Context, client *HelixClient, subType, sessionID, broadcasterID, moderatorID string) (string, error) {
+	return createSubscription(ctx, client, subType, "2", sessionID, map[string]string{
+		"broadcaster_user_id": broadcasterID,
+		"moderator_user_id":   moderatorID,
+	})
+}
+
+func createSubscription(ctx context.Context, client *HelixClient, subType, version, sessionID string, condition map[string]string) (string, error) {
 	req := SubscriptionRequest{
-		Type:    subType,
-		Version: "2",
-		Condition: map[string]string{
-			"broadcaster_user_id": broadcasterID,
-			"moderator_user_id":   moderatorID,
-		},
+		Type:      subType,
+		Version:   version,
+		Condition: condition,
 		Transport: Transport{
 			Method:    "websocket",
 			SessionID: sessionID,

@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::emote_index::EmoteSpan;
+use crate::twitch_polls::{poll_from_event, prediction_from_event, Poll, Prediction};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Platform {
@@ -169,7 +170,7 @@ struct TwitchSubscription {
 /// chat sources, anonymous chatters, empty notice bodies). `#[serde(default)]`
 /// only covers a missing key, so explicit nulls go through here and land
 /// on the type's default instead of failing the whole envelope.
-fn null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+pub(crate) fn null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
     D: serde::Deserializer<'de>,
     T: Default + Deserialize<'de>,
@@ -271,6 +272,12 @@ pub enum ChatEvent {
         moderator_login: String,
         moderator_name: String,
     },
+    /// A poll on the user's own channel began, got votes or ended, from
+    /// `channel.poll.*` v1.
+    PollUpdate(Box<Poll>),
+    /// A prediction on the user's own channel began, got predictions, was
+    /// locked or ended, from `channel.prediction.*` v1.
+    PredictionUpdate(Box<Prediction>),
 }
 
 /// A message AutoMod is holding. `reason` is `automod`, `blocked_term` or
@@ -727,12 +734,24 @@ pub fn parse_twitch_envelope(bytes: &[u8]) -> Result<Option<TwitchItem>, ParseEr
                 moderator_name: event.moderator_user_name,
             })
         }
+        t @ ("channel.poll.begin" | "channel.poll.progress" | "channel.poll.end") => {
+            TwitchItem::Event(ChatEvent::PollUpdate(Box::new(poll_from_event(
+                t,
+                event_value,
+            )?)))
+        }
+        t @ ("channel.prediction.begin"
+        | "channel.prediction.progress"
+        | "channel.prediction.lock"
+        | "channel.prediction.end") => TwitchItem::Event(ChatEvent::PredictionUpdate(Box::new(
+            prediction_from_event(t, event_value)?,
+        ))),
         _ => return Ok(None),
     };
     Ok(Some(item))
 }
 
-fn parse_platform_ts(message_timestamp: &str) -> Result<i64, ParseError> {
+pub(crate) fn parse_platform_ts(message_timestamp: &str) -> Result<i64, ParseError> {
     Ok(chrono::DateTime::parse_from_rfc3339(message_timestamp)
         .map_err(ParseError::Timestamp)?
         .timestamp_millis())
@@ -2017,5 +2036,77 @@ mod tests {
         .unwrap();
         assert_eq!(json["kind"], "automod_resolved");
         assert_eq!(json["moderator_login"], "");
+    }
+
+    fn broadcaster_feed(sub_type: &str, body: &str) -> ChatEvent {
+        let raw = format!(
+            r##"{{
+                "metadata": {{ "message_type": "notification", "message_timestamp": "2020-07-15T17:16:04Z" }},
+                "payload": {{
+                    "subscription": {{ "type": "{sub_type}", "version": "1", "condition": {{ "broadcaster_user_id": "1337" }} }},
+                    "event": {{
+                        "id": "1243456",
+                        "broadcaster_user_id": "1337",
+                        "broadcaster_user_login": "cool_user",
+                        "broadcaster_user_name": "Cool_User",
+                        "title": "Aren't shoes just really hard socks?",
+                        "started_at": "2020-07-15T17:16:03.17106713Z",
+                        {body}
+                    }}
+                }}
+            }}"##
+        );
+        event(raw.as_bytes())
+    }
+
+    #[test]
+    fn poll_notifications_become_poll_updates() {
+        for sub_type in [
+            "channel.poll.begin",
+            "channel.poll.progress",
+            "channel.poll.end",
+        ] {
+            let e = broadcaster_feed(
+                sub_type,
+                r#""choices": [{ "id": "123", "title": "Yeah!", "bits_votes": 0, "channel_points_votes": 7, "votes": 12 }],
+                   "bits_voting": { "is_enabled": false, "amount_per_vote": 0 },
+                   "channel_points_voting": { "is_enabled": true, "amount_per_vote": 10 },
+                   "status": "terminated",
+                   "ends_at": "2020-07-15T17:16:08.17106713Z""#,
+            );
+            let ChatEvent::PollUpdate(p) = &e else {
+                panic!("{sub_type}: expected a poll update, got {e:?}");
+            };
+            let ended = sub_type == "channel.poll.end";
+            assert_eq!(p.status, if ended { "terminated" } else { "active" });
+            assert_eq!(p.choices[0].votes, 12);
+            let json = serde_json::to_value(&e).unwrap();
+            assert_eq!(json["kind"], "poll_update");
+            assert_eq!(json["channel_id"], "1337");
+        }
+    }
+
+    #[test]
+    fn prediction_notifications_become_prediction_updates() {
+        for (sub_type, status) in [
+            ("channel.prediction.begin", "active"),
+            ("channel.prediction.progress", "active"),
+            ("channel.prediction.lock", "locked"),
+            ("channel.prediction.end", "canceled"),
+        ] {
+            let e = broadcaster_feed(
+                sub_type,
+                r#""outcomes": [{ "id": "1", "title": "Yeah!", "color": "blue", "users": 2, "channel_points": 300, "top_predictors": [] }],
+                   "status": "canceled""#,
+            );
+            let ChatEvent::PredictionUpdate(p) = &e else {
+                panic!("{sub_type}: expected a prediction update, got {e:?}");
+            };
+            assert_eq!(p.status, status, "{sub_type}");
+            assert_eq!(p.outcomes[0].channel_points, 300);
+            let json = serde_json::to_value(&e).unwrap();
+            assert_eq!(json["kind"], "prediction_update");
+            assert_eq!(json["outcomes"][0]["color"], "blue");
+        }
     }
 }
