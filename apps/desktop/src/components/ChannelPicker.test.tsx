@@ -62,7 +62,9 @@ const recent = (login: string): RecentChannel => ({
 const options = () =>
   screen
     .queryAllByRole("option")
-    .map((o) => o.querySelector(".picker__item-name")!.firstChild!.textContent);
+    .map(
+      (o) => o.querySelector(".palette__item-name")!.firstChild!.textContent,
+    );
 
 describe("ChannelPicker", () => {
   beforeEach(() => {
@@ -96,7 +98,7 @@ describe("ChannelPicker", () => {
     expect(mocks.ensure).toHaveBeenCalledWith(["home", "big"]);
     const [home, big] = screen.getAllByRole("option");
     expect(home!.textContent).toContain("150 watching · Chess");
-    expect(home!.querySelector(".picker__live")).not.toBeNull();
+    expect(home!.querySelector(".palette__live")).not.toBeNull();
     expect(home!.querySelector("img")!.getAttribute("src")).toBe(
       "https://img/home.png",
     );

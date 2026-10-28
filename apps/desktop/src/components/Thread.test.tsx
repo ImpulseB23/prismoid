@@ -61,7 +61,7 @@ describe("Thread", () => {
       expect.stringContaining("agree"),
       expect.stringContaining("nah"),
     ]);
-    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reply to thread" }));
     expect(reply).toHaveBeenCalledWith(
       expect.objectContaining({ message_id: "r2" }),
     );

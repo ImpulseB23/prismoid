@@ -70,10 +70,10 @@ describe("UserCard", () => {
         }}
       />
     ));
-    const rows = screen.getByRole("dialog").querySelectorAll(".user-card__msg");
+    const rows = screen.getByRole("dialog").querySelectorAll(".msg-row");
     expect(rows).toHaveLength(2);
-    expect(rows[0]!.classList.contains("user-card__msg--mention")).toBe(true);
-    expect(rows[1]!.classList.contains("user-card__msg--mention")).toBe(false);
+    expect(rows[0]!.classList.contains("msg-row--mention")).toBe(true);
+    expect(rows[1]!.classList.contains("msg-row--mention")).toBe(false);
   });
 
   it("toggles highlighting everything they say", async () => {

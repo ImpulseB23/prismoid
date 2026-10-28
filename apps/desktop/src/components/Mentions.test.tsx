@@ -28,9 +28,7 @@ describe("Mentions", () => {
   it("lists mentions and jumps to the channel", () => {
     render(() => <Mentions />);
     setMentionsOpen(true);
-    expect(screen.getByRole("dialog").textContent).toContain(
-      "Nobody has said your name yet",
-    );
+    expect(screen.getByRole("dialog").textContent).toContain("No mentions yet");
     recordMention(said);
     const row = screen.getByRole("button", { name: /Viewer/ });
     expect(row.textContent).toContain("Chan");
