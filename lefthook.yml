@@ -35,17 +35,30 @@ pre-commit:
       root: apps/desktop
       run: bunx tsc --noEmit
 
+# Each suite runs only when the push touches its part of the repo; CI runs
+# everything again. In lefthook `**` means one or more folders, so each area
+# lists its top level and its subfolders.
 pre-push:
   parallel: true
   jobs:
     - name: cargo-test
       root: apps/desktop/src-tauri
+      glob:
+        - "apps/desktop/src-tauri/*"
+        - "apps/desktop/src-tauri/**/*"
       run: cargo test
 
     - name: go-test
       root: apps/desktop/src-sidecar
+      glob:
+        - "apps/desktop/src-sidecar/*"
+        - "apps/desktop/src-sidecar/**/*"
       run: go test ./...
 
     - name: vitest
       root: apps/desktop
+      glob:
+        - "apps/desktop/src/*"
+        - "apps/desktop/src/**/*"
+        - "apps/desktop/*.{ts,js,json}"
       run: bunx vitest run
