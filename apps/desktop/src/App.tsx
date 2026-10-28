@@ -42,6 +42,7 @@ import { trackActiveStream } from "./stores/streamStore";
 import { initWhatsNew } from "./stores/whatsNewStore";
 import { trackWindowChrome } from "./stores/windowStore";
 import TitleBar from "./components/TitleBar";
+import { settingsOpen } from "./stores/settingsPanelStore";
 import {
   dismissUpdate,
   installUpdate,
@@ -146,7 +147,9 @@ const App: Component = () => {
       {/* The chat header carries the window buttons; every other screen gets the bare bar. */}
       <Show
         when={
-          auth()?.state !== "logged_in" || screenFor(updateState()) !== null
+          auth()?.state !== "logged_in" ||
+          settingsOpen() ||
+          screenFor(updateState()) !== null
         }
       >
         <TitleBar />

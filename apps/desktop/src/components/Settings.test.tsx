@@ -29,6 +29,7 @@ describe("Settings", () => {
     render(() => (
       <Settings open login="me" onClose={() => {}} onSignOut={() => {}} />
     ));
+    fireEvent.click(screen.getByRole("button", { name: "Window" }));
     const startup = screen.getByRole("checkbox", {
       name: /Start with Windows/,
     }) as HTMLInputElement;
@@ -53,6 +54,7 @@ describe("Settings", () => {
     render(() => (
       <Settings open login="me" onClose={() => {}} onSignOut={() => {}} />
     ));
+    fireEvent.click(screen.getByRole("button", { name: "Chat" }));
     const vips = screen.getByRole("button", { name: "VIPs" });
     fireEvent.click(vips);
     await vi.waitFor(() => expect(settings().highlightBadges).toContain("vip"));
@@ -62,6 +64,9 @@ describe("Settings", () => {
       expect(settings().highlightBadges).not.toContain("vip"),
     );
 
+    const appearance = screen.getByRole("button", { name: "Appearance" });
+    fireEvent.click(appearance);
+    expect(appearance.getAttribute("aria-current")).toBe("page");
     const rows = screen.getByRole("checkbox", {
       name: /Alternating rows/,
     });
@@ -71,6 +76,7 @@ describe("Settings", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /7TV name paints/ }));
     await vi.waitFor(() => expect(settings().showPaints).toBe(false));
 
+    fireEvent.click(screen.getByRole("button", { name: "Chat" }));
     const users = screen.getByPlaceholderText("bestfriend, cohost");
     fireEvent.change(users, { target: { value: "Friend, cohost" } });
     await vi.waitFor(() =>
