@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.6.0](https://github.com/ImpulseB23/prismoid/compare/v0.5.0...v0.6.0) (2026-10-28)
+
+
+### Features
+
+* 7tv name paints ([8d5eede](https://github.com/ImpulseB23/prismoid/commit/8d5eede94a0d27a120ad1f97b21d88ae0f8929dd))
+* alternating rows ([#225](https://github.com/ImpulseB23/prismoid/issues/225)) ([0bfa1c9](https://github.com/ImpulseB23/prismoid/commit/0bfa1c9f4ac3e6cfb499013db352d6a1f56f4633))
+* automod queue for mods ([3bbd133](https://github.com/ImpulseB23/prismoid/commit/3bbd1332447dd99aa199af84fb01b34c03765d90))
+* chat text size separate from zoom ([#217](https://github.com/ImpulseB23/prismoid/issues/217)) ([9da086c](https://github.com/ImpulseB23/prismoid/commit/9da086ce3e1cf4b7dbb38b804b33556d6ef21313))
+* chime and taskbar flash when mentioned in the background ([#213](https://github.com/ImpulseB23/prismoid/issues/213)) ([76f3596](https://github.com/ImpulseB23/prismoid/commit/76f359645d92937406d378094489ce6fd9db19dc))
+* clear chat from the mod bar ([#215](https://github.com/ImpulseB23/prismoid/issues/215)) ([a9a36a6](https://github.com/ImpulseB23/prismoid/commit/a9a36a6d8613480490035ea6acd1fbe9a9e82979))
+* faster update checks ([#220](https://github.com/ImpulseB23/prismoid/issues/220)) ([960b6f1](https://github.com/ImpulseB23/prismoid/commit/960b6f1ab0f3057cf65e695e2d0cc451938c4e56))
+* highlight first-time chatters ([eb1667a](https://github.com/ImpulseB23/prismoid/commit/eb1667a82f2f653a20cc78533f10a06211be12af))
+* highlight mentions in the user card ([#219](https://github.com/ImpulseB23/prismoid/issues/219)) ([1fcb437](https://github.com/ImpulseB23/prismoid/commit/1fcb4373edb1443f7d90b9f6776ba0a47a089652))
+* highlight users and badges ([#223](https://github.com/ImpulseB23/prismoid/issues/223)) ([55c0089](https://github.com/ImpulseB23/prismoid/commit/55c008942bdb40ced48ab37aefda774bcff32c75))
+* in-app patch notes ([#222](https://github.com/ImpulseB23/prismoid/issues/222)) ([6da603e](https://github.com/ImpulseB23/prismoid/commit/6da603e18636d6ce57305cf1bfdacb6a14e61159))
+* mentions panel ([#226](https://github.com/ImpulseB23/prismoid/issues/226)) ([111c0ab](https://github.com/ImpulseB23/prismoid/commit/111c0abe0cca92a0a6301e0a636e14f5f06e78a3))
+* reply and copy buttons on message hover ([#214](https://github.com/ImpulseB23/prismoid/issues/214)) ([f11861e](https://github.com/ImpulseB23/prismoid/commit/f11861e203b2c86b270f4660f1ff0c9b8cb56e03))
+* reply threads ([#228](https://github.com/ImpulseB23/prismoid/issues/228)) ([62768f3](https://github.com/ImpulseB23/prismoid/commit/62768f31f29af1921644809a693505fe57d791e8))
+* search chat with ctrl+f ([#212](https://github.com/ImpulseB23/prismoid/issues/212)) ([96cf94f](https://github.com/ImpulseB23/prismoid/commit/96cf94f954e78796f5e85b632fc0bb18bccebead))
+* themes (dark, midnight, light, match windows) ([#216](https://github.com/ImpulseB23/prismoid/issues/216)) ([52a76de](https://github.com/ImpulseB23/prismoid/commit/52a76de5d045af677b960cd85c227ba99b2da3f2))
+* timestamps off by default ([#218](https://github.com/ImpulseB23/prismoid/issues/218)) ([f61e359](https://github.com/ImpulseB23/prismoid/commit/f61e35948302a10c0486f9379a29d2ee243907c9))
+* tray, close to tray, start with windows ([#224](https://github.com/ImpulseB23/prismoid/issues/224)) ([6300a8c](https://github.com/ImpulseB23/prismoid/commit/6300a8cbdf0e57fc7bad7c9c55796a2769492fbf))
+
+
+### Bug Fixes
+
+* reconnecting twitch takes effect without a restart ([a60118a](https://github.com/ImpulseB23/prismoid/commit/a60118a45ce9c111f5681c9408ba2f7d20187788))
+* search names on light theme ([#230](https://github.com/ImpulseB23/prismoid/issues/230)) ([da7b8f6](https://github.com/ImpulseB23/prismoid/commit/da7b8f606b531dff6f7e4e2183e1e527cd7c8d9e))
+* sign-in says so when the browser does not open ([#211](https://github.com/ImpulseB23/prismoid/issues/211)) ([0de05f1](https://github.com/ImpulseB23/prismoid/commit/0de05f1d27181350b27f2062b5fbf92435a79451))
+
 ## [0.5.0](https://github.com/ImpulseB23/prismoid/compare/v0.4.0...v0.5.0) (2026-10-28)
 
 
