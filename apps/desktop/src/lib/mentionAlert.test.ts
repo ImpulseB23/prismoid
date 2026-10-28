@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ALERT_GAP_MS, createMentionAlert } from "./mentionAlert";
+import { ALERT_GAP_MS, createMentionAlert, playChime } from "./mentionAlert";
 
 function setup(focused = false) {
   let t = 0;
@@ -56,5 +56,35 @@ describe("mentionAlert", () => {
     await Promise.resolve();
     expect(error).toHaveBeenCalledWith("flash window", expect.any(Error));
     error.mockRestore();
+  });
+});
+
+describe("playChime", () => {
+  it("plays two short rising notes", () => {
+    const started: number[] = [];
+    const freqs: number[] = [];
+    const ramp = () => ({
+      setValueAtTime: () => {},
+      exponentialRampToValueAtTime: () => {},
+    });
+    const ctx = {
+      currentTime: 10,
+      destination: {},
+      createOscillator: () => ({
+        type: "",
+        frequency: {
+          set value(v: number) {
+            freqs.push(v);
+          },
+        },
+        connect: (node: unknown) => node,
+        start: (t: number) => started.push(t),
+        stop: () => {},
+      }),
+      createGain: () => ({ gain: ramp(), connect: (node: unknown) => node }),
+    } as unknown as AudioContext;
+    playChime(ctx);
+    expect(started).toEqual([10, 10.11]);
+    expect(freqs).toEqual([880, 1320]);
   });
 });

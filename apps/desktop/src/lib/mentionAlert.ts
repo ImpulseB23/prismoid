@@ -33,10 +33,13 @@ export function createMentionAlert(deps: MentionAlertDeps): MentionAlert {
 
 let audio: AudioContext | null = null;
 
-/** Two short rising notes, made on the fly so no sound file ships. */
-export function playChime(): void {
+function sharedContext(): AudioContext {
   audio ??= new AudioContext();
-  const ctx = audio;
+  return audio;
+}
+
+/** Two short rising notes, made on the fly so no sound file ships. */
+export function playChime(ctx: AudioContext = sharedContext()): void {
   const start = ctx.currentTime;
   for (const [offset, freq] of [
     [0, 880],
