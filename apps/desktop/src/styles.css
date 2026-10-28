@@ -55,6 +55,7 @@
   --text-faint: var(--color-base-400);
   --bg-hover: var(--color-base-600);
   --hover: rgba(255, 255, 255, 0.08);
+  --row-alt: rgba(255, 255, 255, 0.03);
   --overlay: var(--overlay);
   --overlay-strong: var(--overlay-strong);
   --shadow: var(--shadow);
@@ -95,6 +96,7 @@
   --text-muted: #53535f;
   --text-faint: #6e6e7a;
   --hover: rgba(0, 0, 0, 0.06);
+  --row-alt: rgba(0, 0, 0, 0.035);
   --overlay: rgba(14, 14, 16, 0.3);
   --overlay-strong: rgba(14, 14, 16, 0.45);
   --shadow: rgba(0, 0, 0, 0.18);
@@ -643,6 +645,10 @@ img {
   border-left: 2px solid transparent;
   white-space: normal;
   overflow-wrap: break-word;
+}
+
+.msg--alt {
+  background: var(--row-alt);
 }
 
 .msg:hover {

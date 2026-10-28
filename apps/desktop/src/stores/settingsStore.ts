@@ -20,6 +20,8 @@ export interface Settings {
   /** Chat message size in px, one of TEXT_SIZES. */
   textSize: number;
   showTimestamps: boolean;
+  /** Shade every other row so long chats are easier to follow. */
+  alternateRows: boolean;
   /** Logins whose messages are hidden from the feed. */
   ignoredLogins: string[];
   /** Logins whose every message is highlighted. */
@@ -65,6 +67,7 @@ export const DEFAULT_SETTINGS: Settings = {
   zoom: 1,
   textSize: DEFAULT_TEXT_SIZE,
   showTimestamps: false,
+  alternateRows: false,
   ignoredLogins: [],
   highlightUsers: [],
   highlightBadges: [],
@@ -205,6 +208,10 @@ function readSettings(storage: StorageLike | null): Settings {
         typeof p.showTimestamps === "boolean"
           ? p.showTimestamps
           : DEFAULT_SETTINGS.showTimestamps,
+      alternateRows:
+        typeof p.alternateRows === "boolean"
+          ? p.alternateRows
+          : DEFAULT_SETTINGS.alternateRows,
       ignoredLogins: stringList(p.ignoredLogins),
       highlightUsers: stringList(p.highlightUsers),
       highlightBadges: stringList(p.highlightBadges).filter(

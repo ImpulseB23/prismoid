@@ -28,6 +28,12 @@ describe("Settings", () => {
       expect(settings().highlightBadges).not.toContain("vip"),
     );
 
+    const rows = screen.getByRole("checkbox", {
+      name: /Alternating rows/,
+    });
+    fireEvent.click(rows);
+    await vi.waitFor(() => expect(settings().alternateRows).toBe(true));
+
     const users = screen.getByPlaceholderText("bestfriend, cohost");
     fireEvent.change(users, { target: { value: "Friend, cohost" } });
     await vi.waitFor(() =>
