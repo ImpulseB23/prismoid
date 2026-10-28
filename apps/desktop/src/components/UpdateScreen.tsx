@@ -2,7 +2,7 @@
 // happen behind it, so the installer never shows a window of its own.
 
 import { Component, Show } from "solid-js";
-import logo from "../assets/logo.svg";
+import { logo } from "../stores/themeStore";
 import type { UpdateState } from "../stores/updateStore";
 
 export interface ScreenView {
@@ -61,7 +61,7 @@ const UpdateScreen: Component<UpdateScreenProps> = (props) => (
         classList={{ "update-screen--error": view().failed }}
         role={view().failed ? "alert" : "status"}
       >
-        <img src={logo} alt="" />
+        <img src={logo()} alt="" />
         <h1>{view().title}</h1>
         <p>{view().detail}</p>
         <Show when={!view().failed}>

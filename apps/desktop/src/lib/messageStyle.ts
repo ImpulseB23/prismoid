@@ -3,12 +3,16 @@
 // dark background (e.g. #0000FF, #2E0000). We boost luminance until the
 // color clears a minimum readable threshold against #0e0e10, matching
 // the behavior the official Twitch web client uses for "Adjust Colors".
+// On the light palette it runs the other way: pale colors are pulled down.
 
 const FALLBACK = "#9147ff";
 
 // WCAG-style relative luminance threshold. 0.20 keeps deep colors moody
 // but readable; anything lower (#000080 etc.) gets lifted toward white.
 const MIN_LUMINANCE = 0.2;
+
+// Ceiling on white: about 4:1 contrast, so yellow and cyan names stay legible.
+const MAX_LUMINANCE_ON_LIGHT = 0.25;
 
 interface Rgb {
   r: number;
@@ -69,10 +73,25 @@ function liftToReadable(rgb: Rgb): Rgb {
   return { r, g, b };
 }
 
-export function normalizeUserColor(color: string | null | undefined): string {
+function darkenToReadable(rgb: Rgb): Rgb {
+  let { r, g, b } = rgb;
+  for (let i = 0; i < 16; i++) {
+    if (relativeLuminance({ r, g, b }) <= MAX_LUMINANCE_ON_LIGHT) break;
+    r *= 0.85;
+    g *= 0.85;
+    b *= 0.85;
+  }
+  return { r, g, b };
+}
+
+export function normalizeUserColor(
+  color: string | null | undefined,
+  onLight = false,
+): string {
   if (!color) return FALLBACK;
   const rgb = parseHex(color);
   if (!rgb) return FALLBACK;
+  if (onLight) return toHex(darkenToReadable(rgb));
   if (relativeLuminance(rgb) >= MIN_LUMINANCE) return toHex(rgb);
   return toHex(liftToReadable(rgb));
 }

@@ -3,6 +3,7 @@
 
 import {
   Component,
+  For,
   Show,
   createEffect,
   createSignal,
@@ -18,6 +19,7 @@ import {
 } from "../lib/twitchAuth";
 import { missingScopes, setAuthStatus } from "../stores/authStore";
 import {
+  THEMES,
   parseDurations,
   parseList,
   settings,
@@ -25,6 +27,7 @@ import {
   zoomIn,
   zoomOut,
   zoomReset,
+  type Theme,
 } from "../stores/settingsStore";
 import { formatSeconds } from "../lib/slashCommands";
 import { openLogDir } from "../lib/log";
@@ -45,6 +48,13 @@ export interface SettingsProps {
   onClose: () => void;
   onSignOut: () => void;
 }
+
+const THEME_LABELS: Record<Theme, string> = {
+  system: "Match Windows",
+  dark: "Dark",
+  midnight: "Midnight",
+  light: "Light",
+};
 
 const RECENT_MESSAGES_URL = "https://recent-messages.robotty.de/";
 const PRIVACY_URL = "https://prismoid.org/privacy";
@@ -205,6 +215,24 @@ const Settings: Component<SettingsProps> = (props) => {
           </Show>
 
           <div class="dialog__label">Appearance</div>
+          <div class="settings__row settings__row--stack">
+            <span class="settings__name">Theme</span>
+            <div class="settings__themes" role="group" aria-label="Theme">
+              <For each={THEMES}>
+                {(t) => (
+                  <button
+                    type="button"
+                    class="modbar__chip"
+                    classList={{ "modbar__chip--on": settings().theme === t }}
+                    aria-pressed={settings().theme === t}
+                    onClick={() => run(updateSettings({ theme: t }))}
+                  >
+                    {THEME_LABELS[t]}
+                  </button>
+                )}
+              </For>
+            </div>
+          </div>
           <div class="settings__row">
             <div class="settings__text">
               <span class="settings__name">Zoom</span>

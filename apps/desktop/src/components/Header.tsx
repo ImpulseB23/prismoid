@@ -31,7 +31,7 @@ import {
   whatsNewUnseen,
 } from "../stores/whatsNewStore";
 import Settings from "./Settings";
-import logo from "../assets/logo.svg";
+import { logo } from "../stores/themeStore";
 
 export interface HeaderProps {
   login: string;
@@ -194,7 +194,7 @@ const Header: Component<HeaderProps> = (props) => {
 
   return (
     <header class="header">
-      <img class="header__logo" src={logo} alt="" />
+      <img class="header__logo" src={logo()} alt="" />
 
       <span class="header__spacer" />
 

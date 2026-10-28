@@ -34,7 +34,11 @@ export interface Settings {
   tourDone: boolean;
   /** Chime and flash the taskbar when mentioned in the background. */
   mentionAlerts: boolean;
+  theme: Theme;
 }
+
+export type Theme = "system" | "dark" | "midnight" | "light";
+export const THEMES: Theme[] = ["system", "dark", "midnight", "light"];
 
 /** Twitch caps timeouts at two weeks. */
 export const MAX_TIMEOUT_SECONDS = 1_209_600;
@@ -53,6 +57,7 @@ export const DEFAULT_SETTINGS: Settings = {
   chatBacklog: true,
   tourDone: false,
   mentionAlerts: true,
+  theme: "dark",
 };
 
 /** Same ladder browsers use between 75% and 200%. */
@@ -65,6 +70,7 @@ export interface SettingsAppliers {
   zoom: (value: number) => Promise<void>;
   followBrowser: (value: boolean) => Promise<void>;
   chatBacklog: (value: boolean) => Promise<void>;
+  theme: (value: Theme) => Promise<void>;
 }
 
 export interface SettingsStore {
@@ -82,6 +88,11 @@ const defaultAppliers: SettingsAppliers = {
   zoom: (v) => getCurrentWebview().setZoom(v),
   followBrowser: (v) => invoke("set_browser_follow", { enabled: v }),
   chatBacklog: (v) => invoke("set_chat_backlog", { enabled: v }),
+  // "system" hands the title bar back to Windows; midnight shares dark chrome.
+  theme: (v) =>
+    getCurrentWindow().setTheme(
+      v === "system" ? null : v === "light" ? "light" : "dark",
+    ),
 };
 
 export function createSettingsStore(
@@ -107,6 +118,9 @@ export function createSettingsStore(
     if (next.chatBacklog !== current.chatBacklog) {
       await appliers.chatBacklog(next.chatBacklog);
     }
+    if (next.theme !== current.theme) {
+      await appliers.theme(next.theme);
+    }
     setSettings(next);
     write(storage, SETTINGS_KEY, JSON.stringify(next));
   }
@@ -125,6 +139,7 @@ export function createSettingsStore(
     if (s.zoom !== 1) await appliers.zoom(s.zoom);
     if (s.followBrowser) await appliers.followBrowser(true);
     if (!s.chatBacklog) await appliers.chatBacklog(false);
+    if (s.theme !== "system") await appliers.theme(s.theme);
   }
 
   return {
@@ -184,6 +199,10 @@ function readSettings(storage: StorageLike | null): Settings {
         typeof p.mentionAlerts === "boolean"
           ? p.mentionAlerts
           : DEFAULT_SETTINGS.mentionAlerts,
+      theme:
+        typeof p.theme === "string" && THEMES.includes(p.theme as Theme)
+          ? (p.theme as Theme)
+          : DEFAULT_SETTINGS.theme,
     };
   } catch {
     return DEFAULT_SETTINGS;

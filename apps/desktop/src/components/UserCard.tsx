@@ -22,6 +22,7 @@ import { formatSendError, toSendError } from "../lib/messageInput";
 import { splitMessage } from "../lib/emoteSpans";
 import { MESSAGE_LINE_HEIGHT } from "../lib/messageLayout";
 import { formatTimestamp, normalizeUserColor } from "../lib/messageStyle";
+import { isLight } from "../stores/themeStore";
 import { resolveBadge, badgeRevision } from "../stores/badgeStore";
 import {
   markMessageDeleted,
@@ -183,7 +184,7 @@ const UserCard: Component<UserCardProps> = (props) => {
                 <div class="user-card__names">
                   <span
                     class="user-card__name"
-                    style={{ color: normalizeUserColor(u().color) }}
+                    style={{ color: normalizeUserColor(u().color, isLight()) }}
                   >
                     {u().display_name}
                   </span>

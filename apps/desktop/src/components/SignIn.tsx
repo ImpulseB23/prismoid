@@ -8,7 +8,7 @@ import {
   type AuthStatus,
   type LoginView,
 } from "../lib/twitchAuth";
-import logo from "../assets/logo.svg";
+import { logo } from "../stores/themeStore";
 
 export interface SignInProps {
   onAuthenticated: (status: AuthStatus) => void;
@@ -93,7 +93,7 @@ const SignIn: Component<SignInProps> = (props) => {
 
   return (
     <div class="signin">
-      <img class="signin__logo" src={logo} alt="" />
+      <img class="signin__logo" src={logo()} alt="" />
       <h1>
         prismoid<span>.</span>
       </h1>

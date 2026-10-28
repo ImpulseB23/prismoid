@@ -6,6 +6,7 @@ import {
   parseDurations,
   parseList,
   type SettingsAppliers,
+  type Theme,
 } from "./settingsStore";
 import type { StorageLike } from "./channelStore";
 
@@ -25,12 +26,15 @@ function memStorage(seed: Record<string, string> = {}): StorageLike & {
 function appliers(): SettingsAppliers & {
   tops: boolean[];
   zooms: number[];
+  themes: Theme[];
 } {
   const tops: boolean[] = [];
   const zooms: number[] = [];
+  const themes: Theme[] = [];
   return {
     tops,
     zooms,
+    themes,
     alwaysOnTop: async (v) => {
       tops.push(v);
     },
@@ -39,6 +43,9 @@ function appliers(): SettingsAppliers & {
     },
     followBrowser: async () => {},
     chatBacklog: async () => {},
+    theme: async (v) => {
+      themes.push(v);
+    },
   };
 }
 
@@ -65,6 +72,7 @@ describe("settingsStore", () => {
       chatBacklog: true,
       tourDone: false,
       mentionAlerts: true,
+      theme: "dark",
     });
   });
 
@@ -90,6 +98,7 @@ describe("settingsStore", () => {
         zoom: async () => {},
         followBrowser: async () => {},
         chatBacklog: async () => {},
+        theme: async () => {},
       },
       memStorage(),
     );
@@ -108,6 +117,7 @@ describe("settingsStore", () => {
           zoom: 1.5,
           showTimestamps: "yes",
           mentionAlerts: false,
+          theme: "neon",
         }),
       }),
     );
@@ -124,6 +134,7 @@ describe("settingsStore", () => {
       chatBacklog: true,
       tourDone: false,
       mentionAlerts: false,
+      theme: "dark",
     });
 
     const badZoom = createSettingsStore(
@@ -132,6 +143,14 @@ describe("settingsStore", () => {
     );
     expect(badZoom.settings().zoom).toBe(1);
 
+    const midnight = createSettingsStore(
+      appliers(),
+      memStorage({
+        "prismoid.settings": JSON.stringify({ theme: "midnight" }),
+      }),
+    );
+    expect(midnight.settings().theme).toBe("midnight");
+
     const garbage = createSettingsStore(
       appliers(),
       memStorage({ "prismoid.settings": "{nope" }),
@@ -139,23 +158,39 @@ describe("settingsStore", () => {
     expect(garbage.settings()).toEqual(DEFAULT_SETTINGS);
   });
 
-  it("apply only touches the window for non-default values", async () => {
+  it("apply restores window state and pins the title bar theme", async () => {
     const a = appliers();
     const store = createSettingsStore(
       a,
       memStorage({
-        "prismoid.settings": JSON.stringify({ alwaysOnTop: true, zoom: 1.25 }),
+        "prismoid.settings": JSON.stringify({
+          alwaysOnTop: true,
+          zoom: 1.25,
+          theme: "light",
+        }),
       }),
     );
     await store.apply();
     expect(a.tops).toEqual([true]);
     expect(a.zooms).toEqual([1.25]);
+    expect(a.themes).toEqual(["light"]);
 
     const b = appliers();
     const plain = createSettingsStore(b, memStorage());
     await plain.apply();
     expect(b.tops).toEqual([]);
     expect(b.zooms).toEqual([]);
+    expect(b.themes).toEqual(["dark"]);
+
+    const c = appliers();
+    const system = createSettingsStore(
+      c,
+      memStorage({ "prismoid.settings": JSON.stringify({ theme: "system" }) }),
+    );
+    await system.apply();
+    expect(c.themes).toEqual([]);
+    await system.update({ theme: "midnight" });
+    expect(c.themes).toEqual(["midnight"]);
     expect(vi.isMockFunction(b.zoom)).toBe(false);
   });
 });
