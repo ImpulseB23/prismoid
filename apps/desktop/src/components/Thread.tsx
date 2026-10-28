@@ -6,36 +6,13 @@ import {
   findMessageById,
   messageRevision,
   searchMessages,
-  type ChatMessage,
 } from "../stores/chatStore";
 import { closeThread, threadRoot, threadRootOf } from "../stores/threadStore";
 import { requestReply } from "../stores/composerStore";
-import { isLight } from "../stores/themeStore";
-import { formatTimestamp, normalizeUserColor } from "../lib/messageStyle";
-import { splitMessage } from "../lib/emoteSpans";
-import { MESSAGE_LINE_HEIGHT } from "../lib/messageLayout";
-import MessagePieces from "./MessagePieces";
+import MessageRow from "./MessageRow";
+import PaletteClose from "./PaletteClose";
 
 export const MAX_REPLIES = 200;
-
-const Row: Component<{ msg: ChatMessage }> = (props) => (
-  <li class="search__row">
-    <span class="msg__time">{formatTimestamp(props.msg.timestamp)}</span>
-    <span
-      class="search__name"
-      style={{ color: normalizeUserColor(props.msg.color, isLight()) }}
-    >
-      {props.msg.display_name}
-    </span>
-    <span class="search__text">
-      <MessagePieces
-        pieces={splitMessage(props.msg.message_text, props.msg.emote_spans, {
-          maxHeight: MESSAGE_LINE_HEIGHT,
-        })}
-      />
-    </span>
-  </li>
-);
 
 const Thread: Component = () => {
   let dialogRef: HTMLDivElement | undefined;
@@ -74,11 +51,11 @@ const Thread: Component = () => {
   return (
     <Show when={thread()}>
       {(t) => (
-        <div class="dialog-backdrop" onMouseDown={closeThread}>
+        <div class="palette-backdrop" onMouseDown={closeThread}>
           <div
             ref={(el) => (dialogRef = el)}
             tabIndex={-1}
-            class="dialog search"
+            class="palette palette--wide"
             role="dialog"
             aria-modal="true"
             aria-label="Reply thread"
@@ -87,32 +64,56 @@ const Thread: Component = () => {
               if (e.key === "Escape") closeThread();
             }}
           >
-            <div class="dialog__title">
-              Thread
-              <button type="button" class="btn btn--small" onClick={reply}>
-                Reply
-              </button>
+            <div class="palette__head">
+              <span class="palette__title">Thread</span>
+              <span class="palette__count">
+                {t().replies.length}{" "}
+                {t().replies.length === 1 ? "reply" : "replies"}
+              </span>
+              <span class="palette__head-actions">
+                <PaletteClose onClick={closeThread} />
+              </span>
             </div>
-            <ol class="search__list">
+            <ol class="palette__body msg-list">
               <Show
                 when={t().origin}
                 fallback={
                   <Show when={quoted()}>
                     {(q) => (
-                      <li class="search__row thread__quoted">
-                        <span class="search__name">
-                          {q().user_name || q().user_login}
-                        </span>
-                        <span class="search__text">{q().body}</span>
+                      <li class="msg-list__item">
+                        <div class="msg-row msg-row--quoted">
+                          <span class="msg-row__main">
+                            <span class="msg-row__meta">
+                              <span class="msg-row__name">
+                                {q().user_name || q().user_login}
+                              </span>
+                              <span class="msg-row__detail">
+                                no longer loaded
+                              </span>
+                            </span>
+                            <span class="msg-row__text">{q().body}</span>
+                          </span>
+                        </div>
                       </li>
                     )}
                   </Show>
                 }
               >
-                {(origin) => <Row msg={origin()} />}
+                {(origin) => <MessageRow msg={origin()} />}
               </Show>
-              <For each={t().replies}>{(m) => <Row msg={m} />}</For>
+              <For each={t().replies}>
+                {(m) => <MessageRow msg={m} reply />}
+              </For>
             </ol>
+            <div class="palette__actions">
+              <button
+                type="button"
+                class="btn btn--small btn--primary"
+                onClick={reply}
+              >
+                Reply to thread
+              </button>
+            </div>
           </div>
         </div>
       )}

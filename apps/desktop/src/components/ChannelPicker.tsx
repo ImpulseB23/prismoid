@@ -244,7 +244,7 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
       row.kind === "live" || (row.kind === "search" && row.channel.is_live);
     return (
       <div
-        class="picker__item"
+        class="palette__item"
         role="option"
         aria-selected={highlight() === index()}
         onMouseEnter={() => setHighlight(index())}
@@ -252,21 +252,21 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
       >
         <Show
           when={avatar(row)}
-          fallback={<span class="picker__item-avatar" />}
+          fallback={<span class="palette__item-avatar" />}
         >
-          {(src) => <img class="picker__item-avatar" src={src()} alt="" />}
+          {(src) => <img class="palette__item-avatar" src={src()} alt="" />}
         </Show>
-        <span class="picker__item-text">
-          <span class="picker__item-name">
+        <span class="palette__item-text">
+          <span class="palette__item-name">
             {c.display_name}
             <Show when={row.kind === "search" && row.channel.followed}>
-              <span class="picker__followed">following</span>
+              <span class="palette__followed">following</span>
             </Show>
             <Show when={isLive}>
-              <span class="picker__live">live</span>
+              <span class="palette__live">live</span>
             </Show>
           </span>
-          <span class="picker__item-login">{subline(row)}</span>
+          <span class="palette__item-login">{subline(row)}</span>
         </span>
         <Show when={row.kind === "recent"}>
           <button
@@ -295,16 +295,16 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
 
   return (
     <Show when={props.open}>
-      <div class="picker-backdrop" onMouseDown={() => props.onClose()}>
+      <div class="palette-backdrop" onMouseDown={() => props.onClose()}>
         <div
-          class="picker"
+          class="palette"
           role="dialog"
           aria-modal="true"
           aria-label="Switch channel"
           onMouseDown={(e) => e.stopPropagation()}
           onKeyDown={onKeyDown}
         >
-          <div class="picker__field">
+          <div class="palette__field">
             <svg
               width="16"
               height="16"
@@ -328,7 +328,7 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
             </svg>
             <input
               ref={(el) => (inputRef = el)}
-              class="picker__input"
+              class="palette__input"
               type="text"
               placeholder="Search Twitch channels"
               autocomplete="off"
@@ -347,19 +347,19 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
               fallback={<kbd aria-hidden="true">Esc</kbd>}
             >
               <span
-                class="picker__spinner"
+                class="palette__spinner"
                 aria-label={busy() ? "Connecting" : "Searching"}
               />
             </Show>
           </div>
 
-          <div class="picker__section">
+          <div class="palette__section">
             <Show when={showLive()}>
-              <div class="picker__label">Live now</div>
+              <div class="palette__label">Live now</div>
               <Show
                 when={liveRows().length > 0}
                 fallback={
-                  <div class="picker__empty">
+                  <div class="palette__empty">
                     {liveState() === "needs_scope"
                       ? "Reconnect Twitch in Settings to see who you follow that's live."
                       : "Nobody you follow is live right now."}
@@ -372,7 +372,7 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
               </Show>
             </Show>
             <Show when={rows().length === 0 && !showLive()}>
-              <div class="picker__empty">
+              <div class="palette__empty">
                 {typed()
                   ? searching()
                     ? "Searching Twitch"
@@ -381,7 +381,7 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
               </div>
             </Show>
             <Show when={recents().length > 0}>
-              <div class="picker__label">Recent</div>
+              <div class="palette__label">Recent</div>
               <For each={recents()}>
                 {(channel, i) =>
                   item(
@@ -392,7 +392,7 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
               </For>
             </Show>
             <Show when={rows().length > liveRows().length + recents().length}>
-              <div class="picker__label">Twitch</div>
+              <div class="palette__label">Twitch</div>
               <For each={rows().slice(liveRows().length + recents().length)}>
                 {(row, i) =>
                   item(row, () => i() + liveRows().length + recents().length)
@@ -403,13 +403,13 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
 
           <Show when={error()}>
             {(e) => (
-              <div class="picker__error" role="alert">
+              <div class="palette__error" role="alert">
                 {e()}
               </div>
             )}
           </Show>
 
-          <div class="picker__footer">
+          <div class="palette__footer">
             <span>
               <kbd>↑↓</kbd>move
             </span>

@@ -10,11 +10,8 @@ import {
   mentionsOpen,
   setMentionsOpen,
 } from "../stores/mentionsStore";
-import { isLight } from "../stores/themeStore";
-import { formatTimestamp, normalizeUserColor } from "../lib/messageStyle";
-import { splitMessage } from "../lib/emoteSpans";
-import { MESSAGE_LINE_HEIGHT } from "../lib/messageLayout";
-import MessagePieces from "./MessagePieces";
+import MessageRow from "./MessageRow";
+import PaletteClose from "./PaletteClose";
 
 const Mentions: Component = () => {
   let dialogRef: HTMLDivElement | undefined;
@@ -23,8 +20,7 @@ const Mentions: Component = () => {
     if (mentionsOpen()) queueMicrotask(() => dialogRef?.focus());
   });
 
-  const channelName = (id: string) =>
-    channelTabs().find((c) => c.id === id)?.display_name;
+  const channelOf = (id: string) => channelTabs().find((c) => c.id === id);
 
   const close = () => setMentionsOpen(false);
 
@@ -36,11 +32,11 @@ const Mentions: Component = () => {
 
   return (
     <Show when={mentionsOpen()}>
-      <div class="dialog-backdrop" onMouseDown={close}>
+      <div class="palette-backdrop" onMouseDown={close}>
         <div
           ref={(el) => (dialogRef = el)}
           tabIndex={-1}
-          class="dialog search"
+          class="palette palette--wide"
           role="dialog"
           aria-modal="true"
           aria-label="Mentions"
@@ -49,69 +45,77 @@ const Mentions: Component = () => {
             if (e.key === "Escape") close();
           }}
         >
-          <div class="dialog__title">
-            Mentions
+          <div class="palette__head">
+            <span class="palette__title">Mentions</span>
             <Show when={mentions().length > 0}>
-              <button
-                type="button"
-                class="btn btn--small"
-                classList={{ "btn--danger": armed() }}
-                title="Removes these mentions for good"
-                onClick={onClear}
-              >
-                {armed() ? "Clear all?" : "Clear"}
-              </button>
+              <span class="palette__count">{mentions().length}</span>
+            </Show>
+            <span class="palette__head-actions">
+              <Show when={mentions().length > 0}>
+                <button
+                  type="button"
+                  class="btn btn--small"
+                  classList={{ "btn--danger": armed() }}
+                  title="Removes these mentions for good"
+                  onClick={onClear}
+                >
+                  {armed() ? "Clear all?" : "Clear"}
+                </button>
+              </Show>
+              <PaletteClose onClick={close} />
+            </span>
+          </div>
+
+          <div class="palette__body">
+            <Show
+              when={mentions().length > 0}
+              fallback={
+                <div class="palette__empty palette__empty--center">
+                  <span class="palette__empty-title">No mentions yet</span>
+                  Messages that mention you or match a highlight phrase, in any
+                  open channel, collect here.
+                </div>
+              }
+            >
+              <ol class="msg-list">
+                <For each={mentions()}>
+                  {(m) => {
+                    const channel = () => channelOf(m.channel_id);
+                    return (
+                      <MessageRow
+                        msg={m}
+                        mention
+                        lead={
+                          <Show
+                            when={channel()?.profile_image_url}
+                            fallback={<span class="msg-row__avatar" />}
+                          >
+                            {(src) => (
+                              <img class="msg-row__avatar" src={src()} alt="" />
+                            )}
+                          </Show>
+                        }
+                        detail={
+                          <Show when={channel()}>
+                            {(c) => <>in {c().display_name}</>}
+                          </Show>
+                        }
+                        onClick={() => {
+                          close();
+                          void focusChannel(m.channel_id);
+                        }}
+                      />
+                    );
+                  }}
+                </For>
+              </ol>
             </Show>
           </div>
-          <Show
-            when={mentions().length > 0}
-            fallback={
-              <div class="dialog__empty">
-                Nobody has said your name yet. Messages that mention you or
-                match a highlight phrase, in any open channel, collect here.
-              </div>
-            }
-          >
-            <ol class="search__list">
-              <For each={mentions()}>
-                {(m) => (
-                  <li>
-                    <button
-                      type="button"
-                      class="search__row mentions__row"
-                      onClick={() => {
-                        close();
-                        void focusChannel(m.channel_id);
-                      }}
-                    >
-                      <span class="msg__time">
-                        {formatTimestamp(m.timestamp)}
-                      </span>
-                      <Show when={channelName(m.channel_id)}>
-                        {(name) => (
-                          <span class="mentions__channel">{name()}</span>
-                        )}
-                      </Show>
-                      <span
-                        class="search__name"
-                        style={{
-                          color: normalizeUserColor(m.color, isLight()),
-                        }}
-                      >
-                        {m.display_name}
-                      </span>
-                      <span class="search__text">
-                        <MessagePieces
-                          pieces={splitMessage(m.message_text, m.emote_spans, {
-                            maxHeight: MESSAGE_LINE_HEIGHT,
-                          })}
-                        />
-                      </span>
-                    </button>
-                  </li>
-                )}
-              </For>
-            </ol>
+
+          <Show when={mentions().length > 0}>
+            <div class="palette__footer">
+              <span>Click a mention to open its channel</span>
+            </div>
           </Show>
         </div>
       </div>
