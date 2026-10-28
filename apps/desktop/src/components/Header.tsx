@@ -1,6 +1,6 @@
 // Top chrome: logo, the channel switcher, the sidecar connection dot, an
-// always-on-top pin, and the settings gear. Owns the two dialogs those
-// buttons open and the global shortcuts that reach them.
+// always-on-top pin, the settings gear and the window buttons. Owns the two
+// dialogs those buttons open and the global shortcuts that reach them.
 
 import { Component, Show, createSignal, onCleanup, onMount } from "solid-js";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -37,6 +37,8 @@ import {
 } from "../stores/whatsNewStore";
 import Settings from "./Settings";
 import { logo } from "../stores/themeStore";
+import { customChrome } from "../stores/windowStore";
+import WindowControls from "./WindowControls";
 
 export interface HeaderProps {
   login: string;
@@ -222,10 +224,20 @@ const Header: Component<HeaderProps> = (props) => {
   };
 
   return (
-    <header class="header">
-      <img class="header__logo" src={logo()} alt="" />
+    <header
+      class="header"
+      classList={{ "header--chrome": customChrome() }}
+      data-tauri-drag-region
+    >
+      <img
+        class="header__logo"
+        src={logo()}
+        alt=""
+        draggable={false}
+        data-tauri-drag-region
+      />
 
-      <span class="header__spacer" />
+      <span class="header__spacer" data-tauri-drag-region />
 
       <Show when={canModerate()}>
         <button
@@ -412,6 +424,8 @@ const Header: Component<HeaderProps> = (props) => {
           <span class="icon-btn__badge" aria-hidden="true" />
         </Show>
       </button>
+
+      <WindowControls />
 
       <ChannelPicker open={pickerOpen()} onClose={() => setPickerOpen(false)} />
       <ChatModes open={modesOpen()} onClose={() => setModesOpen(false)} />
