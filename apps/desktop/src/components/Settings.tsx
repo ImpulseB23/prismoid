@@ -73,6 +73,7 @@ const THEME_LABELS: Record<Theme, string> = {
   dark: "Dark",
   midnight: "Midnight",
   light: "Light",
+  prismoid: "Prismoid",
 };
 
 const RECENT_MESSAGES_URL = "https://recent-messages.robotty.de/";

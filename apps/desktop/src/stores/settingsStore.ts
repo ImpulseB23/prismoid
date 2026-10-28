@@ -59,8 +59,14 @@ export interface Settings {
   theme: Theme;
 }
 
-export type Theme = "system" | "dark" | "midnight" | "light";
-export const THEMES: Theme[] = ["system", "dark", "midnight", "light"];
+export type Theme = "system" | "dark" | "midnight" | "light" | "prismoid";
+export const THEMES: Theme[] = [
+  "system",
+  "dark",
+  "midnight",
+  "light",
+  "prismoid",
+];
 
 export const HIGHLIGHT_BADGES = [
   "broadcaster",

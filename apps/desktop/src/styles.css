@@ -38,11 +38,36 @@
 
   --color-purple: #6f38c9;
   --color-purple-light: #8b5fc8;
+  /* The logo's three facets. Used only as the prism gradient, for the few
+     places that carry the brand: primary actions, focus, mentions. Every
+     other emphasis is neutral, so no single platform's color takes over. */
+  --prism: linear-gradient(90deg, #6f38c9, #ea3247 55%, #4db332);
+  --prism-vertical: linear-gradient(180deg, #6f38c9, #ea3247 55%, #4db332);
+  --prism-tint: linear-gradient(
+    90deg,
+    rgba(111, 56, 201, 0.14),
+    rgba(234, 50, 71, 0.07) 60%,
+    rgba(77, 179, 50, 0.07)
+  );
+  --prism-tint-strong: linear-gradient(
+    90deg,
+    rgba(111, 56, 201, 0.22),
+    rgba(234, 50, 71, 0.11) 60%,
+    rgba(77, 179, 50, 0.11)
+  );
   --color-red: #ea3247;
   --color-red-light: #f0566a;
   --color-green: #4db332;
   --color-green-light: #6bc955;
   --color-amber: #e0a82e;
+  /* Selection: switches that are on, the picked chip, active modes. The
+     violet of the logo's prism; amber is kept for warnings. */
+  --select: #6f38c9;
+  --select-tint: rgba(111, 56, 201, 0.18);
+  --select-border: rgba(111, 56, 201, 0.55);
+  --select-text: #b597ff;
+  --scrollbar: color-mix(in srgb, var(--text) 16%, transparent);
+  --scrollbar-hover: color-mix(in srgb, var(--text) 30%, transparent);
   --color-teal: #3ab7bf;
 
   --bg: var(--color-base-900);
@@ -63,7 +88,6 @@
   --chip-7tv: #6fd0ff;
   --chip-bttv: #ff7a80;
   --chip-ffz: #a9c6ff;
-  --owner: #c4a6ff;
 
   --font-mono: "JetBrains Mono", Consolas, monospace;
   --font-sans:
@@ -102,16 +126,19 @@
   --shadow: rgba(0, 0, 0, 0.18);
 
   /* the light accents read as text on white, so they go a step darker */
-  --color-purple-light: #6f38c9;
   --color-red-light: #c8243a;
   --color-green-light: #2e7d1f;
   --color-amber: #9a6400;
+  --color-purple-light: #6f38c9;
+  --select: #6f38c9;
+  --select-tint: rgba(111, 56, 201, 0.1);
+  --select-border: rgba(111, 56, 201, 0.4);
+  --select-text: #6f38c9;
   --color-teal: #18797f;
   --chip-twitch: #6f38c9;
   --chip-7tv: #0270a8;
   --chip-bttv: #c62828;
   --chip-ffz: #2f5fb8;
-  --owner: #6f38c9;
   color-scheme: light;
 }
 
@@ -155,7 +182,7 @@ button:disabled {
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-purple-light);
+  outline: 2px solid var(--text-muted);
   outline-offset: 2px;
 }
 
@@ -168,6 +195,103 @@ img {
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+
+/* Header */
+
+/* Scrollbars: a slim rounded thumb on a clear track in every theme, in
+   place of the platform's grey bar. The transparent border keeps the thumb
+   off the edge. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+}
+
+/* Search fields clear with Escape or the app's own controls, not the
+   browser's x. */
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration {
+  appearance: none;
+}
+
+/* Dropdowns: the customizable select, so the open list is drawn in the
+   app's style too, with native keyboard handling and accessibility. */
+select,
+::picker(select) {
+  appearance: base-select;
+}
+
+select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+select::picker-icon {
+  color: var(--text-faint);
+  transition: rotate 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+select:open::picker-icon {
+  rotate: 180deg;
+}
+
+::picker(select) {
+  margin-top: 4px;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  color: var(--text);
+  box-shadow: 0 16px 40px var(--shadow);
+}
+
+option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  cursor: pointer;
+}
+
+option:hover,
+option:focus-visible {
+  background: var(--bg-surface);
+  outline: 0;
+}
+
+option:checked {
+  color: var(--select-text);
+}
+
+option::checkmark {
+  order: 1;
+  margin-left: auto;
+  color: var(--select-text);
 }
 
 /* Header */
@@ -243,7 +367,21 @@ img {
 
 .tab--active {
   color: var(--text);
-  border-bottom-color: var(--color-purple-light);
+}
+
+/* Sits in the tab's transparent bottom border, so it is always the tab's
+   exact width. */
+.tab--active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--prism);
+  transform-origin: left;
+  pointer-events: none;
 }
 
 .tab__avatar {
@@ -264,8 +402,8 @@ img {
   min-width: 18px;
   padding: 0 5px;
   border-radius: 9px;
-  background: var(--color-purple);
-  color: var(--color-base-50);
+  background: var(--text);
+  color: var(--bg);
   font-size: 10px;
   font-weight: 700;
   line-height: 16px;
@@ -356,7 +494,7 @@ img {
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
-  color: var(--color-purple-light);
+  color: var(--text);
 }
 
 /* Menus */
@@ -651,8 +789,10 @@ img {
   background: var(--row-alt);
 }
 
+/* A soft tint, not the raised-panel shade, so a hovered row reads as
+   highlighted rather than lifting out of the feed. */
 .msg:hover {
-  background: var(--bg-raised);
+  background: var(--hover);
 }
 
 .msg--pending {
@@ -722,7 +862,7 @@ img {
   height: 18px;
   border-radius: 50%;
   border: 2px solid var(--border);
-  border-top-color: var(--color-purple-light);
+  border-top-color: var(--text-muted);
   animation: spin 0.8s linear infinite;
   margin-bottom: 4px;
 }
@@ -766,7 +906,7 @@ img {
 }
 
 .jump:hover {
-  border-color: var(--color-purple);
+  border-color: var(--border-strong);
   color: var(--text);
 }
 
@@ -815,8 +955,8 @@ img {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-base-50);
-  background: var(--color-purple);
+  color: #ffffff;
+  background: var(--prism) border-box no-repeat;
   transition: opacity 0.15s;
 }
 
@@ -859,8 +999,8 @@ img {
 
 .btn--primary {
   color: var(--color-base-50);
-  background: var(--color-purple);
-  border-color: var(--color-purple);
+  background: var(--prism) border-box no-repeat;
+  border-color: transparent;
 }
 
 .btn--primary:hover {
@@ -879,7 +1019,7 @@ img {
 }
 
 .btn--outline:hover {
-  border-color: var(--color-purple);
+  border-color: var(--border-strong);
   color: var(--text);
 }
 
@@ -919,7 +1059,10 @@ img {
 }
 
 .signin h1 span {
-  color: var(--color-purple);
+  background: var(--prism);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .signin__lede {
@@ -949,7 +1092,7 @@ img {
 
 .waiting-card a,
 .settings__reconnect-wait a {
-  color: var(--color-purple-light);
+  color: var(--text);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -1056,7 +1199,7 @@ img {
 .update-screen__bar div {
   height: 100%;
   border-radius: inherit;
-  background: var(--color-purple);
+  background: var(--prism);
   transition: width 0.2s;
 }
 
@@ -1086,7 +1229,7 @@ img {
 }
 
 .icon-btn--active {
-  color: var(--color-purple-light);
+  color: var(--text);
   border-color: var(--border);
   background: var(--bg-raised);
 }
@@ -1117,7 +1260,6 @@ img {
   box-shadow: 0 24px 60px var(--shadow);
   padding: 6px 6px 10px;
   animation: card-in 0.15s ease;
-  scrollbar-width: thin;
 }
 
 .dialog__title {
@@ -1233,41 +1375,50 @@ img {
   color: var(--text);
 }
 
+/* A checkbox drawn as a switch. The outline is an inset shadow rather than
+   a border, and the knob is placed by a transform in both states: at
+   fractional display scales a border and an untransformed box snap to
+   whole pixels on their own, which left the knob off centre on one side. */
 .switch {
   appearance: none;
+  position: relative;
+  flex-shrink: 0;
   width: 34px;
   height: 20px;
+  margin: 0;
+  border: 0;
   border-radius: 999px;
   background: var(--bg-surface);
-  border: 1px solid var(--border);
-  position: relative;
+  box-shadow: inset 0 0 0 1px var(--border);
   cursor: pointer;
-  flex-shrink: 0;
-  transition: background 0.15s;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
 }
 
 .switch::after {
   content: "";
   position: absolute;
-  top: 2px;
-  left: 2px;
+  top: 50%;
+  left: 3px;
   width: 14px;
   height: 14px;
   border-radius: 50%;
   background: var(--text-muted);
+  transform: translate(0, -50%);
   transition:
     transform 0.15s,
     background 0.15s;
 }
 
 .switch:checked {
-  background: var(--color-purple);
-  border-color: var(--color-purple);
+  background: var(--select);
+  box-shadow: none;
 }
 
 .switch:checked::after {
-  transform: translateX(14px);
-  background: var(--color-base-50);
+  transform: translate(14px, -50%);
+  background: #ffffff;
 }
 
 .btn--danger {
@@ -1434,7 +1585,7 @@ img {
   width: 24px;
   text-align: center;
   font-family: var(--font-mono);
-  color: var(--color-purple-light);
+  color: var(--text);
 }
 
 .completion__code {
@@ -1514,12 +1665,12 @@ img {
 }
 
 .msg--mention {
-  background: rgba(111, 56, 201, 0.14);
-  border-left-color: var(--color-purple-light);
+  background: var(--prism-tint);
+  border-image: var(--prism-vertical) 1;
 }
 
 .msg--mention:hover {
-  background: rgba(111, 56, 201, 0.22);
+  background: var(--prism-tint-strong);
 }
 
 .msg__reply {
@@ -1556,9 +1707,9 @@ img {
 }
 
 .msg__link {
-  color: var(--color-purple-light);
+  color: var(--text);
   text-decoration: underline;
-  text-decoration-color: rgba(139, 95, 200, 0.4);
+  text-decoration-color: var(--text-faint);
   text-underline-offset: 2px;
 }
 
@@ -1647,8 +1798,8 @@ img {
 /* System notices and deleted messages */
 
 .msg--notice {
-  border-left-color: var(--color-purple);
-  background: rgba(111, 56, 201, 0.08);
+  border-left-color: var(--text-faint);
+  background: var(--hover);
 }
 
 .msg__notice {
@@ -1698,7 +1849,7 @@ img {
   margin-bottom: 6px;
   padding: 0 4px 0 10px;
   height: 28px;
-  border-left: 2px solid var(--color-purple-light);
+  border-left: 2px solid var(--text-faint);
   background: var(--bg-raised);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   font-size: 12px;
@@ -1781,7 +1932,7 @@ img {
 
 .stream-bar__game {
   flex-shrink: 0;
-  color: var(--color-purple-light);
+  color: var(--text);
 }
 
 .stream-bar__title {
@@ -2161,7 +2312,7 @@ img {
   position: absolute;
   border-radius: var(--radius-md);
   box-shadow:
-    0 0 0 2px var(--color-purple-light),
+    0 0 0 2px var(--text),
     0 0 0 9999px var(--overlay-strong);
   transition:
     top 0.2s ease,
@@ -2206,7 +2357,7 @@ img {
 }
 
 .tour__progress .tour__dot--on {
-  background: var(--color-purple-light);
+  background: var(--text);
 }
 
 .tour__card h2 {
@@ -2492,8 +2643,8 @@ img {
 }
 
 .modbar__role--owner {
-  background: rgba(124, 58, 237, 0.2);
-  color: var(--owner);
+  background: var(--prism-tint-strong);
+  color: var(--text);
 }
 
 .modbar__modes {
@@ -2528,13 +2679,13 @@ img {
 }
 
 .modbar__chip--on {
-  background: rgba(224, 168, 46, 0.16);
-  border-color: rgba(224, 168, 46, 0.4);
-  color: var(--color-amber);
+  background: var(--select-tint);
+  border-color: var(--select-border);
+  color: var(--select-text);
 }
 
 .modbar__chip--on:hover:not(:disabled) {
-  color: var(--color-amber);
+  color: var(--select-text);
 }
 
 .modbar__chip:disabled {
@@ -2663,7 +2814,6 @@ img {
   max-height: 60vh;
   overflow-y: auto;
   padding: 0 4px 4px;
-  scrollbar-width: thin;
 }
 
 .modlog__row {
@@ -2815,7 +2965,8 @@ img {
   flex-direction: column;
   gap: 2px;
   padding-left: 12px;
-  border-left: 2px solid var(--color-purple-light);
+  border-left: 2px solid transparent;
+  border-image: var(--prism-vertical) 1;
 }
 
 .notes__title {
@@ -2867,4 +3018,69 @@ img {
 .thread__quoted {
   color: var(--text-muted);
   font-style: italic;
+}
+
+/* Prismoid theme: dark with the logo's prism worked through the whole
+   window. A faint glow of the three facets sits behind everything, the
+   header and composer edges carry the gradient, and every switch that is
+   on fills with it. The other themes keep the prism to a few accents. */
+:root[data-theme="prismoid"] {
+  --bg: #0c0a10;
+  --bg-raised: #15121b;
+  --bg-surface: #221d2b;
+  --bg-hover: #2f2838;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --hover: rgba(255, 255, 255, 0.06);
+  --row-alt: rgba(255, 255, 255, 0.025);
+}
+
+:root[data-theme="prismoid"] body {
+  background:
+    radial-gradient(
+      60% 45% at 0% 0%,
+      rgba(111, 56, 201, 0.16),
+      transparent 70%
+    ),
+    radial-gradient(
+      55% 40% at 100% 100%,
+      rgba(77, 179, 50, 0.1),
+      transparent 70%
+    ),
+    radial-gradient(
+      40% 30% at 100% 0%,
+      rgba(234, 50, 71, 0.08),
+      transparent 70%
+    ),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+:root[data-theme="prismoid"] .header {
+  border-bottom: 1px solid transparent;
+  border-image: var(--prism) 1;
+}
+
+:root[data-theme="prismoid"] .composer {
+  background: rgba(21, 18, 27, 0.82);
+  border-image: var(--prism) 1;
+}
+
+:root[data-theme="prismoid"] .switch:checked {
+  background: var(--prism) border-box no-repeat;
+}
+
+:root[data-theme="prismoid"] .switch:checked::after {
+  background: #ffffff;
+}
+
+:root[data-theme="prismoid"] .tab__unread {
+  background: var(--prism) border-box no-repeat;
+  color: #ffffff;
+}
+
+:root[data-theme="prismoid"] .modbar__chip--on {
+  background: var(--prism-tint-strong);
+  border-color: transparent;
+  color: var(--text);
 }
