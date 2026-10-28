@@ -13,6 +13,8 @@
 //! behind `cfg(windows)` and callers fall back to a warn-and-bail in
 //! `lib::setup`.
 
+#[cfg(windows)]
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -43,8 +45,9 @@ use crate::first_messages::FirstMessageSetting;
 #[cfg(windows)]
 use crate::host::{
     build_bootstrap_line, build_token_refresh_line, build_twitch_connect_line,
-    build_twitch_disconnect_line, mark_handle_inheritable, parse_batch, parse_sidecar_event,
-    unmark_handle_inheritable, SidecarEvent, TwitchCreds, SIDECAR_BINARY, SIGNAL_WAIT_TIMEOUT,
+    build_twitch_disconnect_line, build_twitch_resubscribe_line, mark_handle_inheritable,
+    parse_batch, parse_sidecar_event, unmark_handle_inheritable, SidecarEvent, TwitchCreds,
+    SIDECAR_BINARY, SIGNAL_WAIT_TIMEOUT,
 };
 use crate::message::{assign_arrival_seqs, ChatEvent, UnifiedMessage};
 #[cfg(windows)]
@@ -121,22 +124,22 @@ pub fn spawn<R: Runtime>(
     app: AppHandle<R>,
     auth: Arc<AuthManager>,
     wakeup: Arc<Notify>,
+    signed_in: Arc<Notify>,
     sender: SidecarCommandSender,
     channels: watch::Receiver<ChannelSelection>,
     history: History,
 ) {
-    let cfg = SupervisorConfig::default();
     tauri::async_runtime::spawn(async move {
-        supervise(app, cfg, auth, wakeup, sender, channels, history).await;
+        supervise(app, auth, wakeup, signed_in, sender, channels, history).await;
     });
 }
 
 #[cfg(windows)]
 async fn supervise<R: Runtime>(
     app: AppHandle<R>,
-    cfg: SupervisorConfig,
     auth: Arc<AuthManager>,
     wakeup: Arc<Notify>,
+    signed_in: Arc<Notify>,
     sender: SidecarCommandSender,
     channels: watch::Receiver<ChannelSelection>,
     history: History,
@@ -146,6 +149,7 @@ async fn supervise<R: Runtime>(
     // (populated from token validation, stable across refresh).
     // Tokens live in the OS keychain, seeded via the SignIn overlay and
     // rotated automatically below (ADR 29).
+    let cfg = SupervisorConfig::default();
     let mut attempt: u32 = 0;
     let mut backoff = cfg.initial_backoff;
     // Per-process monotonic arrival counter. Owned by `supervise` so it
@@ -194,6 +198,7 @@ async fn supervise<R: Runtime>(
             cfg: &cfg,
             sender: &sender,
             auth: &auth,
+            signed_in: &signed_in,
             arrival_seq: &arrival_seq,
             history: &history,
             job: &job,
@@ -203,6 +208,7 @@ async fn supervise<R: Runtime>(
             attempt,
             tokens.user_id,
             tokens.login,
+            tokens.scopes,
             channels.clone(),
         )
         .await
@@ -287,6 +293,7 @@ struct RunContext<'a, R: Runtime> {
     cfg: &'a SupervisorConfig,
     sender: &'a SidecarCommandSender,
     auth: &'a Arc<AuthManager>,
+    signed_in: &'a Arc<Notify>,
     arrival_seq: &'a Arc<AtomicU64>,
     history: &'a History,
     job: &'a SidecarJob,
@@ -298,6 +305,7 @@ async fn run_once<R: Runtime>(
     attempt: u32,
     own_user_id: String,
     own_login: String,
+    granted: Vec<String>,
     channels: watch::Receiver<ChannelSelection>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let RunContext {
@@ -305,6 +313,7 @@ async fn run_once<R: Runtime>(
         cfg,
         sender,
         auth,
+        signed_in,
         arrival_seq,
         history,
         job,
@@ -432,12 +441,15 @@ async fn run_once<R: Runtime>(
     // Proactive token refresh (ADR 29): periodically check if the Twitch
     // token is near expiry and push a fresh one to the sidecar so EventSub
     // reconnects don't fail with a stale credential. The task is cancelled
-    // when the event loop exits (sidecar death or heartbeat timeout).
+    // when the event loop exits (sidecar death or heartbeat timeout). A
+    // sign-in wakes it early, and one that changed the granted scopes
+    // has the sidecar subscribe what the new grant allows.
     let refresh_handle = {
         let auth = Arc::clone(auth);
+        let signed_in = Arc::clone(signed_in);
         let sender = sender.clone();
         tauri::async_runtime::spawn(async move {
-            token_refresh_loop(auth, sender).await;
+            token_refresh_loop(auth, granted, signed_in, sender).await;
         })
     };
 
@@ -744,15 +756,31 @@ const TOKEN_CHECK_INTERVAL: Duration = Duration::from_secs(4 * 60);
 /// pushes a fresh one to the running sidecar. Designed to be spawned as
 /// a tokio task and aborted when the sidecar iteration ends.
 #[cfg(windows)]
-async fn token_refresh_loop(auth: Arc<AuthManager>, sender: SidecarCommandSender) {
-    token_refresh_loop_inner(auth, TOKEN_CHECK_INTERVAL, |line| sender.write_raw(line)).await;
+async fn token_refresh_loop(
+    auth: Arc<AuthManager>,
+    granted: Vec<String>,
+    signed_in: Arc<Notify>,
+    sender: SidecarCommandSender,
+) {
+    token_refresh_loop_inner(auth, TOKEN_CHECK_INTERVAL, granted, signed_in, |line| {
+        sender.write_raw(line)
+    })
+    .await;
 }
 
 /// Inner loop extracted so tests can inject a fake write callback and a
-/// shorter interval without needing a real `CommandChild`.
+/// shorter interval without needing a real `CommandChild`. `granted` is
+/// the scope set the sidecar's subscriptions were made with; a token with
+/// a different set goes out as `twitch_resubscribe` instead of a plain
+/// refresh.
 #[cfg(windows)]
-async fn token_refresh_loop_inner<W>(auth: Arc<AuthManager>, period: Duration, mut write: W)
-where
+async fn token_refresh_loop_inner<W>(
+    auth: Arc<AuthManager>,
+    period: Duration,
+    granted: Vec<String>,
+    signed_in: Arc<Notify>,
+    mut write: W,
+) where
     W: FnMut(&[u8]) -> bool,
 {
     let mut interval = tokio::time::interval(period);
@@ -761,9 +789,13 @@ where
     interval.tick().await;
 
     let mut last_token = String::new();
+    let mut granted: BTreeSet<String> = granted.into_iter().collect();
 
     loop {
-        interval.tick().await;
+        tokio::select! {
+            _ = interval.tick() => {}
+            () = signed_in.notified() => {}
+        }
 
         let tokens = match auth.load_or_refresh().await {
             Ok(t) => t,
@@ -773,22 +805,34 @@ where
             }
         };
 
-        if tokens.access_token == last_token {
+        let scopes: BTreeSet<String> = tokens.scopes.iter().cloned().collect();
+        let regranted = scopes != granted;
+        if !regranted && tokens.access_token == last_token {
             tracing::debug!("token unchanged, skipping refresh send");
             continue;
         }
 
-        let line = match build_token_refresh_line(&tokens.access_token) {
+        let built = if regranted {
+            build_twitch_resubscribe_line(&tokens.access_token)
+        } else {
+            build_token_refresh_line(&tokens.access_token)
+        };
+        let line = match built {
             Ok(l) => l,
             Err(e) => {
-                tracing::error!(error = %e, "failed to serialize token_refresh command");
+                tracing::error!(error = %e, "failed to serialize token command");
                 continue;
             }
         };
 
         if write(&line) {
             last_token = tokens.access_token;
-            tracing::info!("proactive token refresh sent to sidecar");
+            if regranted {
+                granted = scopes;
+                tracing::info!("granted scopes changed; sidecar resubscribing");
+            } else {
+                tracing::info!("proactive token refresh sent to sidecar");
+            }
         } else {
             tracing::debug!("sidecar gone before token refresh could be sent");
             break;
@@ -1889,10 +1933,16 @@ mod tests {
         let mut sent = Vec::new();
 
         // write returns false -> loop breaks after the first send attempt
-        token_refresh_loop_inner(auth, Duration::from_millis(50), |line| {
-            sent.push(String::from_utf8_lossy(line).to_string());
-            false
-        })
+        token_refresh_loop_inner(
+            auth,
+            Duration::from_millis(50),
+            vec![],
+            Arc::new(Notify::new()),
+            |line| {
+                sent.push(String::from_utf8_lossy(line).to_string());
+                false
+            },
+        )
         .await;
 
         assert_eq!(sent.len(), 1);
@@ -1908,10 +1958,16 @@ mod tests {
         let call_count = Rc::new(Cell::new(0u32));
         let cc = call_count.clone();
 
-        let loop_fut = token_refresh_loop_inner(auth, Duration::from_millis(50), move |_line| {
-            cc.set(cc.get() + 1);
-            true // write succeeds
-        });
+        let loop_fut = token_refresh_loop_inner(
+            auth,
+            Duration::from_millis(50),
+            vec![],
+            Arc::new(Notify::new()),
+            move |_line| {
+                cc.set(cc.get() + 1);
+                true // write succeeds
+            },
+        );
         tokio::pin!(loop_fut);
 
         // Advance past 3 ticks: first tick is skipped, ticks 2-4 fire.
@@ -1934,11 +1990,17 @@ mod tests {
         let sent = Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
         let s = sent.clone();
 
-        let loop_fut = token_refresh_loop_inner(auth, Duration::from_millis(50), move |line| {
-            s.borrow_mut()
-                .push(String::from_utf8_lossy(line).to_string());
-            true
-        });
+        let loop_fut = token_refresh_loop_inner(
+            auth,
+            Duration::from_millis(50),
+            vec![],
+            Arc::new(Notify::new()),
+            move |line| {
+                s.borrow_mut()
+                    .push(String::from_utf8_lossy(line).to_string());
+                true
+            },
+        );
         tokio::pin!(loop_fut);
 
         // Let the first real tick fire and send tok_old.
@@ -1970,10 +2032,16 @@ mod tests {
         let call_count = Rc::new(Cell::new(0u32));
         let cc = call_count.clone();
 
-        let loop_fut = token_refresh_loop_inner(auth, Duration::from_millis(50), move |_| {
-            cc.set(cc.get() + 1);
-            true
-        });
+        let loop_fut = token_refresh_loop_inner(
+            auth,
+            Duration::from_millis(50),
+            vec![],
+            Arc::new(Notify::new()),
+            move |_| {
+                cc.set(cc.get() + 1);
+                true
+            },
+        );
         tokio::pin!(loop_fut);
 
         // Let a few error ticks pass. write should never be called.
@@ -1990,5 +2058,109 @@ mod tests {
             _ = tokio::time::sleep(Duration::from_millis(60)) => {}
         }
         assert_eq!(call_count.get(), 1);
+    }
+
+    fn tokens_with_scopes(access: &str, scopes: &[&str]) -> TwitchTokens {
+        TwitchTokens {
+            scopes: scopes.iter().map(|s| (*s).to_owned()).collect(),
+            ..far_future_tokens(access)
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn sign_in_with_new_scopes_resubscribes_right_away() {
+        let store = SharedStore::default();
+        store
+            .save(&tokens_with_scopes("tok_old", &["user:read:chat"]))
+            .unwrap();
+        let auth = make_auth(store.clone());
+        let signed_in = Arc::new(Notify::new());
+        let sent = Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+        let s = sent.clone();
+
+        let loop_fut = token_refresh_loop_inner(
+            auth,
+            Duration::from_secs(3600),
+            vec!["user:read:chat".into()],
+            signed_in.clone(),
+            move |line| {
+                s.borrow_mut()
+                    .push(String::from_utf8_lossy(line).to_string());
+                true
+            },
+        );
+        tokio::pin!(loop_fut);
+
+        store
+            .save(&tokens_with_scopes(
+                "tok_new",
+                &["moderator:read:chat_settings", "user:read:chat"],
+            ))
+            .unwrap();
+        signed_in.notify_one();
+        tokio::select! {
+            _ = &mut loop_fut => panic!("loop should not exit"),
+            _ = tokio::time::sleep(Duration::from_millis(10)) => {}
+        }
+        {
+            let lines = sent.borrow();
+            assert_eq!(lines.len(), 1, "sent before the hourly tick");
+            assert!(lines[0].contains("twitch_resubscribe"));
+            assert!(lines[0].contains("tok_new"));
+        }
+
+        // The same grant signed in again is only a token change.
+        store
+            .save(&tokens_with_scopes(
+                "tok_again",
+                &["user:read:chat", "moderator:read:chat_settings"],
+            ))
+            .unwrap();
+        signed_in.notify_one();
+        tokio::select! {
+            _ = &mut loop_fut => panic!("loop should not exit"),
+            _ = tokio::time::sleep(Duration::from_millis(10)) => {}
+        }
+        let lines = sent.borrow();
+        assert_eq!(lines.len(), 2);
+        assert!(lines[1].contains("token_refresh"));
+        assert!(lines[1].contains("tok_again"));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn sign_in_with_the_same_grant_and_token_sends_nothing() {
+        let store = SharedStore::default();
+        store
+            .save(&tokens_with_scopes("tok", &["user:read:chat"]))
+            .unwrap();
+        let auth = make_auth(store);
+        let signed_in = Arc::new(Notify::new());
+        let calls = Rc::new(Cell::new(0u32));
+        let c = calls.clone();
+
+        let loop_fut = token_refresh_loop_inner(
+            auth,
+            Duration::from_secs(3600),
+            vec!["user:read:chat".into()],
+            signed_in.clone(),
+            move |_| {
+                c.set(c.get() + 1);
+                true
+            },
+        );
+        tokio::pin!(loop_fut);
+
+        // First wake sends the token once (the loop starts with none sent).
+        signed_in.notify_one();
+        tokio::select! {
+            _ = &mut loop_fut => panic!("loop should not exit"),
+            _ = tokio::time::sleep(Duration::from_millis(10)) => {}
+        }
+        signed_in.notify_one();
+        tokio::select! {
+            _ = &mut loop_fut => panic!("loop should not exit"),
+            _ = tokio::time::sleep(Duration::from_millis(10)) => {}
+        }
+        assert_eq!(calls.get(), 1);
     }
 }

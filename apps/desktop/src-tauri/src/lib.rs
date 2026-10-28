@@ -183,7 +183,9 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
             .build(KeychainStore, http_client),
     );
     let wakeup = Arc::new(Notify::new());
-    app.manage(AuthState::new(auth.clone(), wakeup.clone()));
+    let auth_state = AuthState::new(auth.clone(), wakeup.clone());
+    let signed_in = auth_state.signed_in.clone();
+    app.manage(auth_state);
 
     // Twitch's answer comes back as a prismoid:// link (ADR 43). The
     // installer registers the scheme for Windows releases; dev builds and
@@ -269,6 +271,7 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
             app.app_handle().clone(),
             auth,
             wakeup,
+            signed_in,
             sender,
             channel_rx,
             history,
@@ -276,7 +279,7 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
     }
     #[cfg(not(windows))]
     {
-        let _ = (auth, wakeup, sender, channel_rx, history);
+        let _ = (auth, wakeup, signed_in, sender, channel_rx, history);
         tracing::warn!(
             "sidecar lifecycle is Windows-only for now; launching frontend without sidecar"
         );

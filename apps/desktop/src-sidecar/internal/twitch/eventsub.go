@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"sync"
 	"time"
 
@@ -57,11 +58,23 @@ type Session struct {
 	running   bool
 }
 
-// channelSubs is one joined channel: its live subscription ids and what to
-// do when Twitch says the user may not read it.
+// channelSubs is one joined channel: its live subscription ids by type and
+// what to do when Twitch says the user may not read it. One goroutine at a
+// time subscribes a channel; a request while it runs sets rerun so the
+// runner goes again instead of racing it into duplicate subscriptions.
 type channelSubs struct {
-	ids      []string
+	ids      map[string]string
 	onBanned func(detail string)
+	running  bool
+	rerun    bool
+}
+
+func (c *channelSubs) idList() []string {
+	ids := make([]string, 0, len(c.ids))
+	for _, id := range c.ids {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 // NewSession makes an idle session; the socket opens on the first Join and
@@ -122,17 +135,41 @@ func (s *Session) Join(broadcasterID string, onBanned func(detail string)) {
 		s.mu.Unlock()
 		return
 	}
-	s.channels[broadcasterID] = &channelSubs{onBanned: onBanned}
-	sessionID := s.sessionID
+	s.channels[broadcasterID] = &channelSubs{ids: map[string]string{}, onBanned: onBanned}
 	if !s.running {
 		s.running = true
 		go s.run()
 	}
-	s.mu.Unlock()
-
-	if sessionID != "" {
-		go s.subscribeChannel(sessionID, broadcasterID)
+	if s.sessionID != "" {
+		s.startSubscribe(broadcasterID)
 	}
+	s.mu.Unlock()
+}
+
+// Resubscribe adds whatever subscriptions each joined channel is missing on
+// the live socket, as the current token. Called after a sign-in grants new
+// scopes; what already works is left alone, so chat never drops.
+func (s *Session) Resubscribe() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sessionID == "" {
+		return
+	}
+	for id := range s.channels {
+		s.startSubscribe(id)
+	}
+}
+
+// startSubscribe runs subscribeChannel for a joined channel, or has the
+// one already running go again. Callers hold s.mu and a live session.
+func (s *Session) startSubscribe(broadcasterID string) {
+	subs := s.channels[broadcasterID]
+	if subs.running {
+		subs.rerun = true
+		return
+	}
+	subs.running = true
+	go s.subscribeChannel(s.sessionID, broadcasterID)
 }
 
 // Leave stops delivering a channel's chat and deletes its subscriptions.
@@ -144,7 +181,7 @@ func (s *Session) Leave(broadcasterID string) {
 	if !ok || len(subs.ids) == 0 {
 		return
 	}
-	go s.deleteSubscriptions(subs.ids)
+	go s.deleteSubscriptions(subs.idList())
 }
 
 func (s *Session) helix() *HelixClient {
@@ -157,42 +194,54 @@ func (s *Session) helix() *HelixClient {
 	}
 }
 
-// subscribeChannel creates one channel's subscriptions on `sessionID` and
-// records their ids, unless the channel left or the socket changed in the
-// meantime. A 403 means the user is banned or timed out there.
+// subscribeChannel creates the subscriptions one channel lacks, going again
+// for as long as reruns were requested while it worked.
 func (s *Session) subscribeChannel(sessionID, broadcasterID string) {
-	s.mu.Lock()
-	userID := s.userID
-	s.mu.Unlock()
-
-	ids, err := Subscribe(s.ctx, s.helix(), sessionID, broadcasterID, userID)
-	if err != nil {
-		var denied *ChatAccessError
-		if errors.As(err, &denied) {
-			s.Log.Warn().Str("broadcaster", broadcasterID).Str("body", denied.Body).Msg("chat subscription forbidden: banned or timed out")
-			s.dropBanned(broadcasterID, denied.Body)
+	for {
+		next, again := s.subscribeMissing(sessionID, broadcasterID)
+		if !again {
 			return
 		}
-		var authErr *AuthError
-		if errors.As(err, &authErr) && s.Notify != nil {
-			s.Notify("auth_error", authErr.Error())
-		}
-		s.Log.Error().Err(err).Str("broadcaster", broadcasterID).Msg("chat subscribe failed")
-		return
+		sessionID = next
 	}
-	// Twitch only grants channel.moderate to the broadcaster and their
-	// moderators, so a refusal here is the normal case in most channels.
-	if modID, err := SubscribeModeration(s.ctx, s.helix(), sessionID, broadcasterID, userID); err != nil {
-		s.Log.Info().Err(err).Str("broadcaster", broadcasterID).Msg("moderation feed unavailable; not a moderator here or scopes missing")
-	} else {
-		ids = append(ids, modID)
-		// Only tried where channel.moderate went through, so the user is
-		// known to moderate here. A refusal now means the grant predates
-		// moderator:manage:automod; the app asks for a reconnect.
-		automodIDs, err := SubscribeAutoMod(s.ctx, s.helix(), sessionID, broadcasterID, userID)
-		ids = append(ids, automodIDs...)
-		if err != nil {
-			s.Log.Info().Err(err).Str("broadcaster", broadcasterID).Msg("automod queue unavailable; moderator:manage:automod likely missing")
+}
+
+// subscribeMissing creates the subscriptions the channel has none of on
+// `sessionID` and records their ids, unless the channel left or the socket
+// changed in the meantime. A 403 on chat means the user is banned or timed
+// out there. It returns the session to go again on when a rerun is due.
+func (s *Session) subscribeMissing(sessionID, broadcasterID string) (string, bool) {
+	s.mu.Lock()
+	userID := s.userID
+	have := map[string]string{}
+	if subs, ok := s.channels[broadcasterID]; ok {
+		maps.Copy(have, subs.ids)
+	}
+	s.mu.Unlock()
+
+	made, err := Subscribe(s.ctx, s.helix(), sessionID, broadcasterID, userID, have)
+	if err == nil {
+		if _, ok := have["channel.moderate"]; !ok {
+			// Twitch only grants channel.moderate to the broadcaster and
+			// their moderators, so a refusal here is the normal case in
+			// most channels.
+			if modID, modErr := SubscribeModeration(s.ctx, s.helix(), sessionID, broadcasterID, userID); modErr != nil {
+				s.Log.Info().Err(modErr).Str("broadcaster", broadcasterID).Msg("moderation feed unavailable; not a moderator here or scopes missing")
+			} else {
+				made["channel.moderate"] = modID
+			}
+		}
+		// AutoMod is only tried where channel.moderate is in place, so the
+		// user is known to moderate here. A refusal then means the grant
+		// predates moderator:manage:automod; the app asks for a reconnect
+		// and the resubscribe after it fills these in.
+		_, modded := made["channel.moderate"]
+		if _, ok := have["channel.moderate"]; ok || modded {
+			automod, amErr := SubscribeAutoMod(s.ctx, s.helix(), sessionID, broadcasterID, userID, have)
+			maps.Copy(made, automod)
+			if amErr != nil {
+				s.Log.Info().Err(amErr).Str("broadcaster", broadcasterID).Msg("automod queue unavailable; moderator:manage:automod likely missing")
+			}
 		}
 	}
 
@@ -200,14 +249,45 @@ func (s *Session) subscribeChannel(sessionID, broadcasterID string) {
 	subs, ok := s.channels[broadcasterID]
 	stale := s.sessionID != sessionID
 	if ok && !stale {
-		subs.ids = ids
+		maps.Copy(subs.ids, made)
+	}
+	next, again := "", false
+	if ok {
+		if subs.rerun && s.sessionID != "" {
+			subs.rerun = false
+			next, again = s.sessionID, true
+		} else {
+			subs.running = false
+			subs.rerun = false
+		}
 	}
 	s.mu.Unlock()
 	if !ok || stale {
+		ids := make([]string, 0, len(made))
+		for _, id := range made {
+			ids = append(ids, id)
+		}
 		go s.deleteSubscriptions(ids)
-		return
 	}
-	s.Log.Info().Str("broadcaster", broadcasterID).Int("subscriptions", len(ids)).Msg("subscribed to chat events")
+
+	if err != nil {
+		var denied *ChatAccessError
+		if errors.As(err, &denied) {
+			s.Log.Warn().Str("broadcaster", broadcasterID).Str("body", denied.Body).Msg("chat subscription forbidden: banned or timed out")
+			s.dropBanned(broadcasterID, denied.Body)
+			return "", false
+		}
+		var authErr *AuthError
+		if errors.As(err, &authErr) && s.Notify != nil {
+			s.Notify("auth_error", authErr.Error())
+		}
+		s.Log.Error().Err(err).Str("broadcaster", broadcasterID).Msg("chat subscribe failed")
+		return next, again
+	}
+	if ok && !stale && len(made) > 0 {
+		s.Log.Info().Str("broadcaster", broadcasterID).Int("subscriptions", len(made)).Msg("subscribed to chat events")
+	}
+	return next, again
 }
 
 // dropBanned removes a channel Twitch will not deliver and tells its owner.
@@ -226,7 +306,7 @@ func (s *Session) dropBanned(broadcasterID, detail string) {
 		subs.onBanned(detail)
 	}
 	if len(subs.ids) > 0 {
-		go s.deleteSubscriptions(subs.ids)
+		go s.deleteSubscriptions(subs.idList())
 	}
 }
 
@@ -305,17 +385,13 @@ func (s *Session) connectAndListen(ctx context.Context, url string) error {
 	s.mu.Lock()
 	carried := url != s.wsURL()
 	s.sessionID = sessionID
-	var pending []string
 	if !carried {
 		for id, subs := range s.channels {
-			subs.ids = nil
-			pending = append(pending, id)
+			clear(subs.ids)
+			s.startSubscribe(id)
 		}
 	}
 	s.mu.Unlock()
-	for _, id := range pending {
-		go s.subscribeChannel(sessionID, id)
-	}
 
 	return s.listenLoop(ctx, conn, keepalive)
 }

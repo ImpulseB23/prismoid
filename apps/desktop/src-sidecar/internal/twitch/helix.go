@@ -225,13 +225,16 @@ var chatSubscriptions = []string{
 	"channel.chat.clear",
 }
 
-// Subscribe creates the EventSub subscriptions in chatSubscriptions for one
-// channel on a WebSocket session and returns their ids, so a later leave
-// can delete exactly them. A failure part-way leaves the earlier ones in
-// place; they die with the session either way.
-func Subscribe(ctx context.Context, client *HelixClient, sessionID, broadcasterID, userID string) ([]string, error) {
-	ids := make([]string, 0, len(chatSubscriptions))
+// Subscribe creates the EventSub subscriptions in chatSubscriptions that
+// `have` lacks for one channel on a WebSocket session and returns their
+// ids by type, so a later leave can delete exactly them. What it made
+// before a failure part-way is returned alongside the error.
+func Subscribe(ctx context.Context, client *HelixClient, sessionID, broadcasterID, userID string, have map[string]string) (map[string]string, error) {
+	made := make(map[string]string, len(chatSubscriptions))
 	for _, subType := range chatSubscriptions {
+		if _, ok := have[subType]; ok {
+			continue
+		}
 		req := SubscriptionRequest{
 			Type:    subType,
 			Version: "1",
@@ -246,13 +249,14 @@ func Subscribe(ctx context.Context, client *HelixClient, sessionID, broadcasterI
 		}
 		var resp SubscriptionResponse
 		if err := client.Post(ctx, "/eventsub/subscriptions", req, &resp); err != nil {
-			return ids, mapSubscribeError(err)
+			return made, mapSubscribeError(err)
 		}
-		for _, d := range resp.Data {
-			ids = append(ids, d.ID)
+		if len(resp.Data) == 0 {
+			return made, errors.New("twitch helix: subscription response carried no data")
 		}
+		made[subType] = resp.Data[0].ID
 	}
-	return ids, nil
+	return made, nil
 }
 
 // DeleteSubscription removes one EventSub subscription by id.
@@ -274,17 +278,22 @@ func SubscribeModeration(ctx context.Context, client *HelixClient, sessionID, br
 // SubscribeAutoMod creates the automod.message.hold and .update v2
 // subscriptions: messages AutoMod holds for review, and their outcome once
 // a mod acts or they expire. Both need moderator:manage:automod, which
-// older grants lack, so callers treat failure as "no queue here".
-func SubscribeAutoMod(ctx context.Context, client *HelixClient, sessionID, broadcasterID, moderatorID string) ([]string, error) {
-	ids := make([]string, 0, 2)
+// older grants lack, so callers treat failure as "no queue here". Types in
+// `have` are skipped; the ids made come back by type, alongside the error
+// when one fails part-way.
+func SubscribeAutoMod(ctx context.Context, client *HelixClient, sessionID, broadcasterID, moderatorID string, have map[string]string) (map[string]string, error) {
+	made := make(map[string]string, 2)
 	for _, subType := range []string{"automod.message.hold", "automod.message.update"} {
+		if _, ok := have[subType]; ok {
+			continue
+		}
 		id, err := subscribeAsModerator(ctx, client, subType, sessionID, broadcasterID, moderatorID)
 		if err != nil {
-			return ids, err
+			return made, err
 		}
-		ids = append(ids, id)
+		made[subType] = id
 	}
-	return ids, nil
+	return made, nil
 }
 
 func subscribeAsModerator(ctx context.Context, client *HelixClient, subType, sessionID, broadcasterID, moderatorID string) (string, error) {

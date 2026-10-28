@@ -280,6 +280,8 @@ func DispatchCommand(ctx context.Context, cmd control.Command, clients map[strin
 		firsts.setEnabled(cmd.Enabled)
 	case "token_refresh":
 		HandleTokenRefresh(cmd, session, logger)
+	case "twitch_resubscribe":
+		HandleTwitchResubscribe(cmd, session, logger)
 	case "youtube_connect":
 		HandleYouTubeConnect(ctx, cmd, clients, out, notify, logger)
 	case "youtube_disconnect":
@@ -813,6 +815,19 @@ func HandleTokenRefresh(cmd control.Command, session *twitch.Session, logger zer
 	}
 	session.SetAccessToken(cmd.Token)
 	logger.Info().Msg("token refresh applied")
+}
+
+// HandleTwitchResubscribe takes a token whose grant differs from the one
+// the channels were subscribed with and fills in whatever subscriptions
+// the new scopes allow.
+func HandleTwitchResubscribe(cmd control.Command, session *twitch.Session, logger zerolog.Logger) {
+	if cmd.Token == "" {
+		logger.Warn().Msg("twitch_resubscribe missing token; ignoring")
+		return
+	}
+	session.SetAccessToken(cmd.Token)
+	session.Resubscribe()
+	logger.Info().Msg("scopes changed; resubscribing joined channels")
 }
 
 // HandleYouTubeConnect spawns a YouTube gRPC streamList client for the given

@@ -566,6 +566,24 @@ pub fn build_token_refresh_line(access_token: &str) -> serde_json::Result<Vec<u8
     Ok(bytes)
 }
 
+/// Serializes a `twitch_resubscribe` control command line: the token now
+/// carries a different set of scopes, so the sidecar adopts it and adds
+/// whatever EventSub subscriptions the joined channels were missing.
+pub fn build_twitch_resubscribe_line(access_token: &str) -> serde_json::Result<Vec<u8>> {
+    #[derive(Serialize)]
+    struct ResubscribeCmd<'a> {
+        cmd: &'a str,
+        token: &'a str,
+    }
+    let cmd = ResubscribeCmd {
+        cmd: "twitch_resubscribe",
+        token: access_token,
+    };
+    let mut bytes = serde_json::to_vec(&cmd)?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
 /// Marks a shared memory HANDLE inheritable just before spawning a child
 /// process. See ADR 18 for why this is necessary.
 #[cfg(windows)]
@@ -1442,6 +1460,15 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_slice(body).unwrap();
         assert_eq!(parsed["cmd"], "token_refresh");
         assert_eq!(parsed["token"], "fresh-tok");
+    }
+
+    #[test]
+    fn build_twitch_resubscribe_line_has_cmd_and_token() {
+        let line = build_twitch_resubscribe_line("regranted").unwrap();
+        assert_eq!(line.last(), Some(&b'\n'));
+        let parsed: serde_json::Value = serde_json::from_slice(&line[..line.len() - 1]).unwrap();
+        assert_eq!(parsed["cmd"], "twitch_resubscribe");
+        assert_eq!(parsed["token"], "regranted");
     }
 
     #[test]

@@ -65,15 +65,39 @@ func TestSubscribeSuccess(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ids, err := Subscribe(context.Background(), testHelix(srv.URL, "test-token", "test-client"), "sess-123", "broadcaster-1", "user-1")
+	ids, err := Subscribe(context.Background(), testHelix(srv.URL, "test-token", "test-client"), "sess-123", "broadcaster-1", "user-1", nil)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 	if !slices.Equal(gotTypes, chatSubscriptions) {
 		t.Fatalf("subscribed to %v, want %v", gotTypes, chatSubscriptions)
 	}
-	if !slices.Equal(ids, []string{"sub-1", "sub-2", "sub-3", "sub-4", "sub-5"}) {
+	if len(ids) != 5 || ids["channel.chat.message"] != "sub-1" || ids["channel.chat.clear"] != "sub-5" {
 		t.Fatalf("unexpected ids %v", ids)
+	}
+
+	// Only what the channel lacks is asked for again.
+	gotTypes = nil
+	have := map[string]string{"channel.chat.message": "x", "channel.chat.clear": "y"}
+	ids, err = Subscribe(context.Background(), testHelix(srv.URL, "test-token", "test-client"), "sess-123", "broadcaster-1", "user-1", have)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if !slices.Equal(gotTypes, chatSubscriptions[1:4]) || len(ids) != 3 {
+		t.Fatalf("subscribed to %v (ids %v), want %v", gotTypes, ids, chatSubscriptions[1:4])
+	}
+}
+
+func TestSubscribeRejectsEmptyResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer srv.Close()
+
+	ids, err := Subscribe(context.Background(), testHelix(srv.URL, "tok", "cid"), "s", "b", "u", nil)
+	if err == nil || len(ids) != 0 {
+		t.Fatalf("expected an error and no ids, got %v, %v", ids, err)
 	}
 }
 
@@ -127,7 +151,7 @@ func TestSubscribeAuthError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := Subscribe(context.Background(), testHelix(srv.URL, "bad-token", "client"), "sess-123", "b", "u")
+	_, err := Subscribe(context.Background(), testHelix(srv.URL, "bad-token", "client"), "sess-123", "b", "u", nil)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -148,7 +172,7 @@ func TestSubscribeForbiddenIsChatBan(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := Subscribe(context.Background(), testHelix(srv.URL, "token", "client"), "sess-123", "b", "u")
+	_, err := Subscribe(context.Background(), testHelix(srv.URL, "token", "client"), "sess-123", "b", "u", nil)
 	if !errors.Is(err, ErrChatBanned) {
 		t.Fatalf("expected ErrChatBanned, got %v", err)
 	}
@@ -169,7 +193,7 @@ func TestSubscribeServerError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := Subscribe(context.Background(), testHelix(srv.URL, "token", "client"), "sess-123", "b", "u")
+	_, err := Subscribe(context.Background(), testHelix(srv.URL, "token", "client"), "sess-123", "b", "u", nil)
 	if err == nil {
 		t.Fatal("expected error for 500")
 	}
@@ -412,11 +436,11 @@ func TestSubscribeAutoModHoldAndUpdateV2(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ids, err := SubscribeAutoMod(context.Background(), testHelix(srv.URL, "tok", "cid"), "sess-1", "b-1", "m-1")
+	ids, err := SubscribeAutoMod(context.Background(), testHelix(srv.URL, "tok", "cid"), "sess-1", "b-1", "m-1", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !slices.Equal(ids, []string{"am-1", "am-2"}) {
+	if len(ids) != 2 || ids["automod.message.hold"] != "am-1" || ids["automod.message.update"] != "am-2" {
 		t.Fatalf("unexpected ids %v", ids)
 	}
 	if len(got) != 2 || got[0].Type != "automod.message.hold" || got[1].Type != "automod.message.update" {
@@ -430,6 +454,12 @@ func TestSubscribeAutoModHoldAndUpdateV2(t *testing.T) {
 			t.Fatalf("unexpected session: %s", req.Transport.SessionID)
 		}
 	}
+
+	// A channel that already has the hold feed only asks for the update one.
+	more, err := SubscribeAutoMod(context.Background(), testHelix(srv.URL, "tok", "cid"), "sess-1", "b-1", "m-1", map[string]string{"automod.message.hold": "am-1"})
+	if err != nil || len(more) != 1 || more["automod.message.update"] != "am-3" || len(got) != 3 || got[2].Type != "automod.message.update" {
+		t.Fatalf("unexpected ids %v (err %v)", more, err)
+	}
 }
 
 func TestSubscribeAutoModStopsOnForbidden(t *testing.T) {
@@ -441,7 +471,7 @@ func TestSubscribeAutoModStopsOnForbidden(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ids, err := SubscribeAutoMod(context.Background(), testHelix(srv.URL, "tok", "cid"), "s", "b", "m")
+	ids, err := SubscribeAutoMod(context.Background(), testHelix(srv.URL, "tok", "cid"), "s", "b", "m", nil)
 	var he *HelixError
 	if !errors.As(err, &he) || he.Status != http.StatusForbidden {
 		t.Fatalf("expected 403 HelixError, got %v", err)

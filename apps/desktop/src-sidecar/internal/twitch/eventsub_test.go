@@ -555,6 +555,155 @@ func TestSession_wsURL(t *testing.T) {
 	}
 }
 
+// grantHelix accepts chat subscriptions and refuses channel.moderate until
+// granted is set and the automod ones until automod is set, the way Twitch
+// answers a token missing those scopes. block, when set, holds the first
+// channel.moderate request until it is closed.
+type grantHelix struct {
+	helixRecorder
+	granted atomic.Bool
+	automod atomic.Bool
+	block   chan struct{}
+	blocked atomic.Bool
+	tries   atomic.Int32
+}
+
+func (g *grantHelix) handler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		var req SubscriptionRequest
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &req)
+		refused := false
+		switch {
+		case req.Type == "channel.moderate":
+			g.tries.Add(1)
+			if g.block != nil && g.blocked.CompareAndSwap(false, true) {
+				<-g.block
+			}
+			refused = !g.granted.Load()
+		case strings.HasPrefix(req.Type, "automod."):
+			refused = !g.automod.Load()
+		}
+		if refused {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":"Forbidden","status":403,"message":"subscription missing proper authorization"}`))
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+	}
+	g.helixRecorder.handler(w, r)
+}
+
+func (g *grantHelix) typeCount(subType string) int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	n := 0
+	for _, p := range g.posts {
+		if p.Type == subType {
+			n++
+		}
+	}
+	return n
+}
+
+func grantingHelix(t *testing.T, block chan struct{}) (*httptest.Server, *grantHelix) {
+	t.Helper()
+	g := &grantHelix{block: block}
+	srv := httptest.NewServer(http.HandlerFunc(g.handler))
+	t.Cleanup(srv.Close)
+	return srv, g
+}
+
+func idleSocket(t *testing.T, sessionID string) string {
+	t.Helper()
+	return wsServer(t, func(conn *websocket.Conn, _ int) {
+		_ = conn.Write(context.Background(), websocket.MessageText, welcomeMsg(sessionID, 30))
+		time.Sleep(3 * time.Second)
+	})
+}
+
+func TestSessionResubscribeAddsOnlyWhatANewGrantAllows(t *testing.T) {
+	helix, g := grantingHelix(t, nil)
+	g.automod.Store(true)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := newTestSession(ctx, idleSocket(t, "sess-grant"), helix.URL, make(chan []byte, 16), nil)
+	s.Join("a", nil)
+	s.Join("b", nil)
+	waitFor(t, "chat subscribed, moderation refused", func() bool { return g.postCount() == 10 && g.tries.Load() == 2 })
+	if g.typeCount("automod.message.hold") != 0 {
+		t.Fatal("automod must wait for channel.moderate")
+	}
+
+	g.granted.Store(true)
+	s.SetAccessToken("regranted")
+	s.Resubscribe()
+	waitFor(t, "moderation and automod added to both channels", func() bool {
+		return g.typeCount("channel.moderate") == 2 && g.typeCount("automod.message.update") == 2
+	})
+	time.Sleep(100 * time.Millisecond)
+	if g.postCount() != 16 {
+		t.Fatalf("chat must not be subscribed twice, got %d subscriptions", g.postCount())
+	}
+	if len(g.deleted()) != 0 {
+		t.Fatalf("nothing should be deleted, got %v", g.deleted())
+	}
+
+	s.Leave("a")
+	waitFor(t, "a's chat, moderation and automod deleted", func() bool { return len(g.deleted()) == 8 })
+}
+
+func TestSessionResubscribeAddsAutoModWhenTheGrantGainsIt(t *testing.T) {
+	helix, g := grantingHelix(t, nil)
+	g.granted.Store(true)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := newTestSession(ctx, idleSocket(t, "sess-automod"), helix.URL, make(chan []byte, 16), nil)
+	s.Join("a", nil)
+	waitFor(t, "chat and moderation subscribed, automod refused", func() bool { return g.postCount() == 6 })
+	time.Sleep(100 * time.Millisecond)
+
+	g.automod.Store(true)
+	s.SetAccessToken("with-automod")
+	s.Resubscribe()
+	waitFor(t, "automod added", func() bool {
+		return g.typeCount("automod.message.hold") == 1 && g.typeCount("automod.message.update") == 1
+	})
+	time.Sleep(100 * time.Millisecond)
+	if g.postCount() != 8 || g.tries.Load() != 1 {
+		t.Fatalf("only automod should be new, got %d subscriptions and %d moderation tries", g.postCount(), g.tries.Load())
+	}
+
+	s.Leave("a")
+	waitFor(t, "every subscription deleted", func() bool { return len(g.deleted()) == 8 })
+}
+
+func TestSessionResubscribeWhileSubscribingRunsAgain(t *testing.T) {
+	block := make(chan struct{})
+	helix, g := grantingHelix(t, block)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := newTestSession(ctx, idleSocket(t, "sess-rerun"), helix.URL, make(chan []byte, 16), nil)
+	s.Join("a", nil)
+	waitFor(t, "moderation request in flight", g.blocked.Load)
+
+	s.Resubscribe()
+	close(block)
+	waitFor(t, "moderation tried again on the rerun", func() bool { return g.tries.Load() == 2 })
+	time.Sleep(100 * time.Millisecond)
+	if g.tries.Load() != 2 || g.postCount() != 5 {
+		t.Fatalf("expected one rerun and no duplicate chat, got %d moderation tries, %d subscriptions", g.tries.Load(), g.postCount())
+	}
+}
+
+func TestSessionResubscribeWithoutSocketIsANoOp(t *testing.T) {
+	s := NewSession(context.Background(), nil, zerolog.Nop(), nil)
+	s.Resubscribe()
+	if len(s.Joined()) != 0 {
+		t.Fatalf("unexpected channels %v", s.Joined())
+	}
+}
+
 func TestSession_AccessTokenConcurrent(t *testing.T) {
 	s := NewSession(context.Background(), nil, zerolog.Nop(), nil)
 	s.Configure("u", "initial", "cid")

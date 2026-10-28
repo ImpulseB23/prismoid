@@ -37,6 +37,10 @@ pub struct AuthState {
     /// spins up immediately; logout so any in-progress sidecar tears
     /// down on the next loop iteration.
     pub wakeup: Arc<Notify>,
+    /// Fired on every completed sign-in. The running sidecar's token loop
+    /// wakes on it, so a reconnect that adds scopes reaches EventSub now
+    /// instead of at the next refresh tick.
+    pub signed_in: Arc<Notify>,
 }
 
 impl AuthState {
@@ -49,6 +53,7 @@ impl AuthState {
             incoming,
             receiver: Mutex::new(receiver),
             wakeup,
+            signed_in: Arc::new(Notify::new()),
         }
     }
 
@@ -98,6 +103,7 @@ impl AuthState {
         // parked on notified(), so the wake can't be lost between login
         // completing and the supervisor reaching its await.
         self.wakeup.notify_one();
+        self.signed_in.notify_one();
         Ok(self.logged_in(&tokens))
     }
 
