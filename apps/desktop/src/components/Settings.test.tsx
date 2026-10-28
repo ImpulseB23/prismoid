@@ -68,6 +68,9 @@ describe("Settings", () => {
     fireEvent.click(rows);
     await vi.waitFor(() => expect(settings().alternateRows).toBe(true));
 
+    fireEvent.click(screen.getByRole("checkbox", { name: /7TV name paints/ }));
+    await vi.waitFor(() => expect(settings().showPaints).toBe(false));
+
     const users = screen.getByPlaceholderText("bestfriend, cohost");
     fireEvent.change(users, { target: { value: "Friend, cohost" } });
     await vi.waitFor(() =>

@@ -11,7 +11,7 @@ export default function Privacy() {
       />
       <article class="prose">
         <h1>Privacy policy</h1>
-        <p>Last updated 27 October 2026.</p>
+        <p>Last updated 28 October 2026.</p>
         <p>
           prismoid is a chat client that runs on your own computer and talks
           directly to the platforms you connect it to. There is no prismoid
@@ -80,6 +80,13 @@ export default function Privacy() {
             services for the emote lists of channels you open and loads the
             emote images from their servers. They see your IP address and the
             channel names, nothing about your account.
+          </li>
+          <li>
+            <strong>7TV name paints.</strong> To show the name paints chatters
+            picked on 7TV, the app keeps a connection to 7TV for the channels
+            you have open, so 7TV can see which channels those are, the same as
+            with the 7TV browser extension. Turning off "Show 7TV name paints"
+            in Settings closes that connection.
           </li>
           <li>
             <strong>recent-messages.robotty.de.</strong> Twitch sends nothing

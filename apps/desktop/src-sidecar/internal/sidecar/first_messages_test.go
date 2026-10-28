@@ -28,14 +28,14 @@ func TestTwitchConnectTracksLoginForFirstMessages(t *testing.T) {
 	out := make(chan []byte, 1)
 	nop := func(string, any) {}
 
-	HandleTwitchConnect(context.Background(), control.Command{BroadcasterID: "1", ChannelLogin: "forsen"}, clients, session, firsts, out, nop, zerolog.Nop())
-	HandleTwitchConnect(context.Background(), control.Command{BroadcasterID: "2"}, clients, session, firsts, out, nop, zerolog.Nop())
+	HandleTwitchConnect(context.Background(), control.Command{BroadcasterID: "1", ChannelLogin: "forsen"}, clients, session, firsts, idleCosmetics(t), out, nop, zerolog.Nop())
+	HandleTwitchConnect(context.Background(), control.Command{BroadcasterID: "2"}, clients, session, firsts, idleCosmetics(t), out, nop, zerolog.Nop())
 	if len(firsts.logins) != 1 || firsts.logins["1"] != "forsen" {
 		t.Fatalf("unexpected logins: %v", firsts.logins)
 	}
 
-	HandleTwitchDisconnect(control.Command{BroadcasterID: "1"}, clients, session, firsts, zerolog.Nop())
-	HandleTwitchDisconnect(control.Command{BroadcasterID: "2"}, clients, session, firsts, zerolog.Nop())
+	HandleTwitchDisconnect(control.Command{BroadcasterID: "1"}, clients, session, firsts, idleCosmetics(t), zerolog.Nop())
+	HandleTwitchDisconnect(control.Command{BroadcasterID: "2"}, clients, session, firsts, idleCosmetics(t), zerolog.Nop())
 	if len(firsts.logins) != 0 {
 		t.Fatalf("logins left after disconnect: %v", firsts.logins)
 	}
@@ -79,7 +79,7 @@ func TestFirstMessagesCommandStartsAndStopsWatcher(t *testing.T) {
 
 	dispatch := func(enabled bool) {
 		DispatchCommand(context.Background(), control.Command{Cmd: "first_messages", Enabled: enabled},
-			map[string]context.CancelFunc{}, idleSession(t), firsts, make(chan []byte, 1), func(string, any) {}, zerolog.Nop())
+			map[string]context.CancelFunc{}, idleSession(t), firsts, idleCosmetics(t), make(chan []byte, 1), func(string, any) {}, zerolog.Nop())
 	}
 	dispatch(true)
 	dispatch(true)

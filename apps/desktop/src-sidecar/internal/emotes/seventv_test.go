@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -103,5 +104,51 @@ func TestSevenTV_FetchChannel_NotFound(t *testing.T) {
 	_, err := c.FetchChannel(context.Background(), "999")
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestSevenTV_FetchUserID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/users/twitch/71092938":
+			_, _ = w.Write([]byte(`{"id":"71092938","platform":"TWITCH","username":"xqc","user":{"id":"01FE9DRF000009TR6M9N941CYW","style":{"color":-1857617921,"paint_id":"01JHXJFACX42RV996VE9933TB8"}}}`))
+		case "/users/twitch/1":
+			_, _ = w.Write([]byte(`{"id":"1","user":{}}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	c := &SevenTVClient{HTTPClient: srv.Client(), BaseURL: srv.URL}
+	id, err := c.FetchUserID(context.Background(), "71092938")
+	if err != nil || id != "01FE9DRF000009TR6M9N941CYW" {
+		t.Fatalf("id %q err %v", id, err)
+	}
+	for _, missing := range []string{"1", "2"} {
+		if _, err := c.FetchUserID(context.Background(), missing); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("%s: err = %v, want ErrNotFound", missing, err)
+		}
+	}
+}
+
+func TestSevenTV_SendSelfPresenceError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("content type %q", r.Header.Get("Content-Type"))
+		}
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"error":"bad session"}`))
+	}))
+	defer srv.Close()
+
+	c := &SevenTVClient{HTTPClient: srv.Client(), BaseURL: srv.URL}
+	err := c.SendSelfPresence(context.Background(), "stv", "42", "s")
+	if err == nil || !strings.Contains(err.Error(), "status 422") {
+		t.Fatalf("err = %v", err)
+	}
+	c.BaseURL = "http://127.0.0.1:1"
+	if err := c.SendSelfPresence(context.Background(), "stv", "42", "s"); err == nil {
+		t.Fatal("expected a connection error")
 	}
 }

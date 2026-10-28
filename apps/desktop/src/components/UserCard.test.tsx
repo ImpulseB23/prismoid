@@ -23,6 +23,23 @@ vi.mock("../stores/userInfoStore", async (importOriginal) => ({
   ensureUserInfo: () => {},
 }));
 
+vi.mock("../stores/paintStore", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../stores/paintStore")>()),
+  shownPaint: (id: string) =>
+    id === "7"
+      ? {
+          id: "01HEBYHWN0000EV2G1SJ85XJQR",
+          name: "Firebrand",
+          function: "RADIAL_GRADIENT",
+          angle: 0,
+          shape: "circle",
+          repeat: false,
+          stops: [{ at: 0.15, color: "#fff700ff" }],
+          shadows: [],
+        }
+      : undefined,
+}));
+
 const { default: UserCard } = await import("./UserCard");
 const { isUserHighlighted } = await import("../stores/settingsStore");
 
@@ -65,5 +82,23 @@ describe("UserCard", () => {
     await vi.waitFor(() => expect(isUserHighlighted("viewer")).toBe(true));
     fireEvent.click(screen.getByRole("button", { name: "Stop highlighting" }));
     await vi.waitFor(() => expect(isUserHighlighted("viewer")).toBe(false));
+  });
+
+  it("paints the name of a 7TV paint wearer", () => {
+    render(() => (
+      <UserCard
+        login="me"
+        onClose={() => {}}
+        user={{ ...viewer, platform_user_id: "7" }}
+      />
+    ));
+    const name = screen.getByText("Viewer", { selector: ".user-card__name" });
+    expect(name.classList.contains("name--painted")).toBe(true);
+  });
+
+  it("leaves other names plain", () => {
+    render(() => <UserCard login="me" onClose={() => {}} user={viewer} />);
+    const name = screen.getByText("Viewer", { selector: ".user-card__name" });
+    expect(name.classList.contains("name--painted")).toBe(false);
   });
 });

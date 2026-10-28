@@ -115,7 +115,8 @@ import {
   type TextMetrics,
   type PreparedMessage,
 } from "../lib/messageLayout";
-import { normalizeUserColor } from "../lib/messageStyle";
+import { nameStyle } from "../lib/paint";
+import { shownPaint, syncPaints } from "../stores/paintStore";
 import { isLight, logo } from "../stores/themeStore";
 import MessagePieces from "./MessagePieces";
 import UserCard, { type CardUser } from "./UserCard";
@@ -615,6 +616,10 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
         console.error("failed to listen for emote bundles:", err),
       );
 
+    syncPaints()
+      .then(retain)
+      .catch((err) => console.error("failed to listen for 7tv paints:", err));
+
     onCleanup(() => {
       ro.disconnect();
       disposed = true;
@@ -769,6 +774,15 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                   isNewAccount(userInfo(row().msg.platform_user_id), Date.now())
                 );
               };
+              const name = createMemo(() =>
+                nameStyle(
+                  row().msg.color,
+                  row().msg.platform === "Twitch"
+                    ? shownPaint(row().msg.platform_user_id)
+                    : undefined,
+                  isLight(),
+                ),
+              );
               const onRetry = () => {
                 const localId = row().msg.local_id;
                 if (!localId) return;
@@ -1117,6 +1131,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                         </For>
                         <span
                           class="msg__user"
+                          classList={{ "name--painted": name().painted }}
                           role="button"
                           tabIndex={0}
                           title={
@@ -1124,12 +1139,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                               ? "Account created in the last week"
                               : undefined
                           }
-                          style={{
-                            color: normalizeUserColor(
-                              row().msg.color,
-                              isLight(),
-                            ),
-                          }}
+                          style={name().style}
                           onClick={(e) => {
                             e.stopPropagation();
                             openCard(row().msg);

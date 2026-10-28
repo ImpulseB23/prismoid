@@ -1294,6 +1294,15 @@ img {
   text-underline-offset: 2px;
 }
 
+/* 7TV paint: only the fill changes, so Pretext's measured width holds. The
+   chat color shows through transparent stops, as in the 7TV extension. */
+.name--painted {
+  background-color: currentColor;
+  background-size: 100% 100%;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
 .user-card__head {
   padding: 8px 10px 4px;
 }

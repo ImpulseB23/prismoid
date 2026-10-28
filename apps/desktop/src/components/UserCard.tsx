@@ -21,7 +21,9 @@ import {
 import { formatSendError, toSendError } from "../lib/messageInput";
 import { splitMessage } from "../lib/emoteSpans";
 import { MESSAGE_LINE_HEIGHT } from "../lib/messageLayout";
-import { formatTimestamp, normalizeUserColor } from "../lib/messageStyle";
+import { formatTimestamp } from "../lib/messageStyle";
+import { nameStyle } from "../lib/paint";
+import { shownPaint } from "../stores/paintStore";
 import { isLight } from "../stores/themeStore";
 import { resolveBadge, badgeRevision } from "../stores/badgeStore";
 import {
@@ -96,6 +98,15 @@ const UserCard: Component<UserCardProps> = (props) => {
       const r = resolveBadge(b.set_id, b.id);
       return r ? [r] : [];
     });
+  });
+
+  const name = createMemo(() => {
+    const u = props.user;
+    return nameStyle(
+      u?.color,
+      u ? shownPaint(u.platform_user_id) : undefined,
+      isLight(),
+    );
   });
 
   const recent = createMemo(() => {
@@ -195,7 +206,8 @@ const UserCard: Component<UserCardProps> = (props) => {
                 <div class="user-card__names">
                   <span
                     class="user-card__name"
-                    style={{ color: normalizeUserColor(u().color, isLight()) }}
+                    classList={{ "name--painted": name().painted }}
+                    style={name().style}
                   >
                     {u().display_name}
                   </span>

@@ -17,6 +17,7 @@ use crate::message::{
     ChatEvent, TwitchItem, UnifiedMessage,
 };
 use crate::ringbuf::RawHandle;
+use crate::seventv_paints::{Paint, PaintEntitlement, PaintEvent};
 
 /// Platform tag bytes prepended by the Go sidecar. Must match control.go.
 const TAG_TWITCH: u8 = 0x01;
@@ -211,6 +212,22 @@ pub fn build_first_messages_line(enabled: bool) -> serde_json::Result<Vec<u8>> {
     }
     let mut bytes = serde_json::to_vec(&FirstMessagesCmd {
         cmd: "first_messages",
+        enabled,
+    })?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
+/// Serializes a `seventv_paints` control command line, which opens or
+/// closes the sidecar's 7TV EventAPI socket.
+pub fn build_seventv_paints_line(enabled: bool) -> serde_json::Result<Vec<u8>> {
+    #[derive(Serialize)]
+    struct SevenTvPaintsCmd {
+        cmd: &'static str,
+        enabled: bool,
+    }
+    let mut bytes = serde_json::to_vec(&SevenTvPaintsCmd {
+        cmd: "seventv_paints",
         enabled,
     })?;
     bytes.push(b'\n');
@@ -657,6 +674,10 @@ pub enum SidecarEvent {
     /// `{"type":"first_message","payload":FirstMessage}`. Twitch IRC
     /// tagged the message as its chatter's first in the channel.
     FirstMessage(FirstMessage),
+    /// `{"type":"seventv_paint","payload":Paint}` or
+    /// `{"type":"seventv_entitlement","payload":PaintEntitlement}` from the
+    /// sidecar's 7TV EventAPI socket.
+    SevenTvPaint(PaintEvent),
     /// A well-formed `{type, payload}` message the host does not yet
     /// recognize. The inner string is the type tag.
     Other(String),
@@ -783,6 +804,26 @@ pub fn parse_sidecar_event(bytes: &[u8]) -> SidecarEvent {
                 Ok(f) => SidecarEvent::FirstMessage(f),
                 Err(e) => {
                     tracing::warn!(error = %e, "first_message payload decode failed");
+                    SidecarEvent::Invalid
+                }
+            }
+        }
+        "seventv_paint" => {
+            let payload = env.payload.unwrap_or(serde_json::Value::Null);
+            match serde_json::from_value::<Paint>(payload) {
+                Ok(p) => SidecarEvent::SevenTvPaint(PaintEvent::Paint(Box::new(p))),
+                Err(e) => {
+                    tracing::warn!(error = %e, "seventv_paint payload decode failed");
+                    SidecarEvent::Invalid
+                }
+            }
+        }
+        "seventv_entitlement" => {
+            let payload = env.payload.unwrap_or(serde_json::Value::Null);
+            match serde_json::from_value::<PaintEntitlement>(payload) {
+                Ok(e) => SidecarEvent::SevenTvPaint(PaintEvent::Entitlement(e)),
+                Err(e) => {
+                    tracing::warn!(error = %e, "seventv_entitlement payload decode failed");
                     SidecarEvent::Invalid
                 }
             }
@@ -1235,6 +1276,40 @@ mod tests {
                 serde_json::from_slice(&line[..line.len() - 1]).unwrap();
             assert_eq!(parsed["cmd"], "first_messages");
             assert_eq!(parsed["enabled"], enabled);
+        }
+    }
+
+    #[test]
+    fn seventv_paints_line_carries_the_switch() {
+        for enabled in [true, false] {
+            let line = build_seventv_paints_line(enabled).unwrap();
+            assert_eq!(line.last(), Some(&b'\n'));
+            let parsed: serde_json::Value =
+                serde_json::from_slice(&line[..line.len() - 1]).unwrap();
+            assert_eq!(parsed["cmd"], "seventv_paints");
+            assert_eq!(parsed["enabled"], enabled);
+        }
+    }
+
+    #[test]
+    fn parse_sidecar_event_decodes_seventv_paints() {
+        let paint = br##"{"type":"seventv_paint","payload":{"id":"01HEBYHWN0000EV2G1SJ85XJQR","name":"Firebrand","function":"RADIAL_GRADIENT","angle":0,"shape":"circle","repeat":false,"stops":[{"at":0.15,"color":"#fff700ff"}],"shadows":[]}}"##;
+        match parse_sidecar_event(paint) {
+            SidecarEvent::SevenTvPaint(PaintEvent::Paint(p)) => assert_eq!(p.name, "Firebrand"),
+            _ => panic!("expected a paint"),
+        }
+        let ent = br#"{"type":"seventv_entitlement","payload":{"action":"create","user_id":"472256554","seventv_id":"01HD25TP0G000506K0FGX9BTDP","paint_id":"01HEBYHWN0000EV2G1SJ85XJQR"}}"#;
+        match parse_sidecar_event(ent) {
+            SidecarEvent::SevenTvPaint(PaintEvent::Entitlement(e)) => {
+                assert_eq!(e.user_id, "472256554");
+            }
+            _ => panic!("expected an entitlement"),
+        }
+        for bad in [
+            &br#"{"type":"seventv_paint","payload":{"id":"x"}}"#[..],
+            br#"{"type":"seventv_entitlement","payload":{"action":"wear","seventv_id":"s"}}"#,
+        ] {
+            assert!(matches!(parse_sidecar_event(bad), SidecarEvent::Invalid));
         }
     }
 

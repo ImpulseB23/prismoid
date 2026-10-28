@@ -7,6 +7,7 @@ pub mod logging;
 mod message;
 pub mod oauth_pkce;
 pub mod ringbuf;
+mod seventv_paints;
 mod sidecar_commands;
 #[cfg(windows)]
 mod sidecar_job;
@@ -111,6 +112,8 @@ pub fn run() {
             twitch_channel::twitch_users_info,
             sidecar_supervisor::current_emote_bundle,
             sidecar_supervisor::current_sidecar_status,
+            seventv_paints::current_seventv_paints,
+            seventv_paints::set_seventv_paints,
             chat_history::chat_history,
             twitch_chat_settings::twitch_get_chat_settings,
             twitch_chat_settings::twitch_update_chat_settings,
@@ -241,6 +244,8 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
     app.manage(sender.clone());
     app.manage(sidecar_supervisor::EmoteBundleState::default());
     app.manage(sidecar_supervisor::SidecarStatusState::default());
+    app.manage(seventv_paints::PaintState::default());
+    app.manage(seventv_paints::PaintSetting::default());
 
     let (channel_state, channel_rx) = twitch_channel::ChannelState::new();
     app.manage(channel_state);

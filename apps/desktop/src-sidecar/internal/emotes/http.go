@@ -1,6 +1,7 @@
 package emotes
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -55,5 +56,30 @@ func getJSON(ctx context.Context, client Doer, url string, dst any) error {
 	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
 		return fmt.Errorf("decode %s: %w", url, err)
 	}
+	return nil
+}
+
+func postJSON(ctx context.Context, client Doer, url string, body any) error {
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("encode %s: %w", url, err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request %s: %w", url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return fmt.Errorf("POST %s: status %d: %s", url, resp.StatusCode, string(msg))
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
 	return nil
 }
