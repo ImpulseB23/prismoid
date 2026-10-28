@@ -7,7 +7,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import type { StorageLike } from "./channelStore";
 import { notesFor, type ReleaseNote } from "../releaseNotes";
 
-const KEY = "prismoid.lastVersion";
+export const LAST_VERSION_KEY = "prismoid.lastVersion";
 export const RELEASES_URL = "https://github.com/ImpulseB23/Prismoid/releases";
 
 export interface WhatsNewStore {
@@ -63,7 +63,7 @@ export function releaseNotesUrl(version: string): string {
 
 function read(storage: StorageLike | null): string | null {
   try {
-    return storage?.getItem(KEY) ?? null;
+    return storage?.getItem(LAST_VERSION_KEY) ?? null;
   } catch {
     return null;
   }
@@ -71,7 +71,7 @@ function read(storage: StorageLike | null): string | null {
 
 function write(storage: StorageLike | null, value: string): void {
   try {
-    storage?.setItem(KEY, value);
+    storage?.setItem(LAST_VERSION_KEY, value);
   } catch {
     // best-effort persistence
   }

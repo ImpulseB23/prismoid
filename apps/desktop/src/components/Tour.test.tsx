@@ -32,20 +32,21 @@ describe("Tour", () => {
     expect(tourStep()).toBeNull();
   });
 
-  it("rings the targeted control and offers the two switches", () => {
-    const anchor = document.createElement("button");
-    anchor.dataset.tour = "settings";
-    document.body.append(anchor);
+  it("rings a Settings section and lets its controls through", async () => {
+    const section = document.createElement("section");
+    section.dataset.tour = "settings-content";
+    document.body.append(section);
     render(() => <Tour />);
     startTour();
-    const toggles = TOUR_STEPS.findIndex((s) => s.toggles);
-    for (let i = 0; i < toggles; i++) {
+    const at = TOUR_STEPS.findIndex((s) => s.section === "appearance");
+    for (let i = 0; i < at; i++) {
       fireEvent.click(screen.getByRole("button", { name: "Next" }));
     }
+    await Promise.resolve();
     expect(document.querySelector(".tour__ring")).not.toBeNull();
-    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+    expect(document.querySelector(".tour--interactive")).not.toBeNull();
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(tourStep()).toBeNull();
-    anchor.remove();
+    section.remove();
   });
 });

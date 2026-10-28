@@ -2427,6 +2427,16 @@ option::checkmark {
   pointer-events: none;
 }
 
+/* Settings steps: the dimmed area and the ring pass clicks through so the
+   ringed controls work; only the step card takes its own clicks. */
+.tour--interactive {
+  pointer-events: none;
+}
+
+.tour--interactive .tour__card {
+  pointer-events: auto;
+}
+
 .tour__card {
   position: absolute;
   left: 12px;
