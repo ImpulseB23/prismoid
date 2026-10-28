@@ -63,7 +63,7 @@ const UpdateRow: Component = () => {
     const s = updateState();
     switch (s.kind) {
       case "idle":
-        return "Checks on launch and every six hours";
+        return "Checks on launch, every half hour, and when you come back";
       case "checking":
         return "Looking for updates";
       case "none":

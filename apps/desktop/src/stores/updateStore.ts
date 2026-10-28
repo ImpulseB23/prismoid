@@ -1,6 +1,6 @@
 // App updates through the Tauri updater: a check at launch that installs
-// on its own if it finds something, a check every few hours that only
-// nudges, a manual check from Settings, and an install that restarts the
+// on its own if it finds something, a check every half hour and whenever
+// the window comes back into focus that only nudges, a manual check from Settings, and an install that restarts the
 // app. The plugin calls are injected so the store runs without a runtime.
 
 import { createSignal } from "solid-js";
@@ -10,7 +10,9 @@ import { relaunch } from "@tauri-apps/plugin-process";
 /** An update found this soon after launch installs on its own, before
  * anyone has started reading chat. Later finds only nudge. */
 export const LAUNCH_WINDOW_MS = 4_000;
-export const CHECK_EVERY_MS = 6 * 60 * 60 * 1000;
+export const CHECK_EVERY_MS = 30 * 60 * 1000;
+/** Coming back to the window checks again once the last check is this old. */
+export const FOCUS_RECHECK_MS = 5 * 60 * 1000;
 
 export type UpdateState =
   | { kind: "idle" }
@@ -48,8 +50,8 @@ export interface UpdateStore {
   install: () => Promise<void>;
   /** Puts a failed install back to "available" so the nudge stays. */
   dismiss: () => void;
-  /** Runs the launch check now and the interval checks; returns a stop
-   * function. */
+  /** Runs the launch check now, then the interval and focus checks;
+   * returns a stop function. */
   schedule: () => () => void;
 }
 
@@ -57,16 +59,19 @@ export function createUpdateStore(
   lookup: () => Promise<PendingUpdate | null> = checkViaPlugin,
   restart: () => Promise<void> = relaunch,
   now: () => number = Date.now,
+  onFocus: (cb: () => void) => () => void = windowFocus,
 ): UpdateStore {
   const [state, setState] = createSignal<UpdateState>({ kind: "idle" });
   let pending: PendingUpdate | null = null;
   let generation = 0;
   let launchedAt = 0;
+  let lastCheckAt = 0;
 
   async function runCheck(manual: boolean, atLaunch = false): Promise<void> {
     const current = state().kind;
     if (current === "downloading" || current === "ready") return;
     const gen = ++generation;
+    lastCheckAt = now();
     if (manual) setState({ kind: "checking" });
     try {
       const update = await lookup();
@@ -139,7 +144,13 @@ export function createUpdateStore(
     launchedAt = now();
     void runCheck(false, true);
     const every = setInterval(() => void runCheck(false), CHECK_EVERY_MS);
-    return () => clearInterval(every);
+    const stopFocus = onFocus(() => {
+      if (now() - lastCheckAt >= FOCUS_RECHECK_MS) void runCheck(false);
+    });
+    return () => {
+      clearInterval(every);
+      stopFocus();
+    };
   }
 
   return {
@@ -159,6 +170,11 @@ async function checkViaPlugin(): Promise<PendingUpdate | null> {
     body: update.body,
     downloadAndInstall: (onEvent) => update.downloadAndInstall(onEvent),
   };
+}
+
+function windowFocus(cb: () => void): () => void {
+  window.addEventListener("focus", cb);
+  return () => window.removeEventListener("focus", cb);
 }
 
 function describe(err: unknown): string {
