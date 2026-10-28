@@ -25,6 +25,8 @@ import { modesOpen, setModesOpen } from "../stores/modesPanelStore";
 import { canModerate } from "../stores/roleStore";
 import { pickerOpen, setPickerOpen } from "../stores/pickerStore";
 import { searchOpen, setSearchOpen } from "../stores/searchStore";
+import { setMentionsOpen, unreadMentions } from "../stores/mentionsStore";
+import Mentions from "./Mentions";
 import ChatSearch from "./ChatSearch";
 import { updateState } from "../stores/updateStore";
 import {
@@ -267,6 +269,43 @@ const Header: Component<HeaderProps> = (props) => {
       <button
         type="button"
         class="icon-btn"
+        aria-haspopup="dialog"
+        title={
+          unreadMentions() > 0
+            ? `Mentions: ${unreadMentions()} new`
+            : "Mentions"
+        }
+        onClick={() => setMentionsOpen(true)}
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="none"
+          aria-hidden="true"
+        >
+          <circle
+            cx="8"
+            cy="8"
+            r="2.6"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
+          <path
+            d="M10.6 8v1.2a1.9 1.9 0 0 0 3.8 0V8A6.4 6.4 0 1 0 11 13.4"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+        </svg>
+        <Show when={unreadMentions() > 0}>
+          <span class="icon-btn__badge" aria-hidden="true" />
+        </Show>
+      </button>
+
+      <button
+        type="button"
+        class="icon-btn"
         classList={{ "icon-btn--active": fullscreen() }}
         aria-pressed={fullscreen()}
         title={fullscreen() ? "Exit fullscreen" : "Fullscreen"}
@@ -361,6 +400,7 @@ const Header: Component<HeaderProps> = (props) => {
       <ChannelPicker open={pickerOpen()} onClose={() => setPickerOpen(false)} />
       <ChatModes open={modesOpen()} onClose={() => setModesOpen(false)} />
       <ChatSearch open={searchOpen()} onClose={() => setSearchOpen(false)} />
+      <Mentions />
       <Settings
         open={settingsOpen()}
         login={props.login}

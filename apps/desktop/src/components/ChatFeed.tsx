@@ -43,6 +43,7 @@ import {
 import { isIgnored, setIgnored, settings } from "../stores/settingsStore";
 import { isHighlighted, isSpotlit } from "../lib/highlight";
 import { createMentionAlert, playChime } from "../lib/mentionAlert";
+import { recordMention } from "../stores/mentionsStore";
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import {
   banUser,
@@ -468,7 +469,6 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
           noteUnread(m.channel_id);
         }
         if (
-          settings().mentionAlerts &&
           !m.notice &&
           m.username !== props.login &&
           !ignored.includes(m.username) &&
@@ -478,7 +478,8 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
             settings().highlightPhrases,
           )
         ) {
-          mentionAlert.notify();
+          recordMention(m);
+          if (settings().mentionAlerts) mentionAlert.notify();
         }
       }
       for (const m of accepted) {

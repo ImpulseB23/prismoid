@@ -34,6 +34,7 @@ import {
   selectChannel,
 } from "./stores/channelStore";
 import { clearMessages } from "./stores/chatStore";
+import { clearMentions } from "./stores/mentionsStore";
 import { clearRoles, loadModeratedChannels } from "./stores/roleStore";
 import { trackActiveStream } from "./stores/streamStore";
 import { initWhatsNew } from "./stores/whatsNewStore";
@@ -93,6 +94,7 @@ const App: Component = () => {
   const signOut = async () => {
     await logout();
     clearMessages();
+    clearMentions();
     setAuthStatus({ state: "logged_out" });
   };
 
