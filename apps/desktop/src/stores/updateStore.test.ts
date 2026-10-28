@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CHECK_EVERY_MS,
+  FOCUS_RECHECK_MS,
   LAUNCH_WINDOW_MS,
   createUpdateStore,
   type DownloadEvent,
@@ -106,6 +107,25 @@ describe("updateStore", () => {
     stop();
     await vi.advanceTimersByTimeAsync(CHECK_EVERY_MS);
     expect(lookup).toHaveBeenCalledTimes(2);
+  });
+
+  it("checks again on focus once the last check is stale", async () => {
+    const lookup = vi.fn(async () => null);
+    let focus!: () => void;
+    const unwatch = vi.fn();
+    const store = createUpdateStore(lookup, undefined, undefined, (cb) => {
+      focus = cb;
+      return unwatch;
+    });
+    const stop = store.schedule();
+    await vi.advanceTimersByTimeAsync(0);
+    focus();
+    expect(lookup).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(FOCUS_RECHECK_MS);
+    focus();
+    expect(lookup).toHaveBeenCalledTimes(2);
+    stop();
+    expect(unwatch).toHaveBeenCalledOnce();
   });
 
   it("ignores a check while a download is running", async () => {
