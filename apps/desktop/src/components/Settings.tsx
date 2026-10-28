@@ -37,6 +37,7 @@ import {
 } from "../stores/settingsStore";
 import { DEFAULT_TEXT_SIZE } from "../lib/messageLayout";
 import { formatSeconds } from "../lib/slashCommands";
+import { displayVersion } from "../lib/version";
 import SupportRows from "./SupportRows";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getVersion } from "@tauri-apps/api/app";
@@ -132,7 +133,7 @@ const UpdateRow: Component = () => {
       case "none":
         return "You're on the latest version";
       case "available":
-        return `Version ${s.version} is available`;
+        return `Version ${displayVersion(s.version)} is available`;
       case "downloading":
         return s.total
           ? `Downloading ${Math.round((s.received / s.total) * 100)}%`
@@ -156,7 +157,7 @@ const UpdateRow: Component = () => {
     <div class="settings__row">
       <div class="settings__text">
         <span class="settings__name">
-          Prismoid {version() ? `v${version()}` : ""}
+          Prismoid {version() ? `v${displayVersion(version())}` : ""}
         </span>
         <span class="settings__hint">{status()}</span>
       </div>

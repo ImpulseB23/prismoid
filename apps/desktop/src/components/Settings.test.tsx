@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
+import type { Update } from "@tauri-apps/plugin-updater";
 
 vi.mock("@tauri-apps/api/app", () => ({
   getVersion: vi.fn(async () => "0.6.0"),
@@ -21,6 +22,7 @@ vi.mock("@tauri-apps/plugin-autostart", () => ({
 
 const { default: Settings } = await import("./Settings");
 const { settings } = await import("../stores/settingsStore");
+const { check } = await import("@tauri-apps/plugin-updater");
 
 describe("Settings", () => {
   afterEach(cleanup);
@@ -81,6 +83,24 @@ describe("Settings", () => {
     fireEvent.change(users, { target: { value: "Friend, cohost" } });
     await vi.waitFor(() =>
       expect(settings().highlightUsers).toEqual(["friend", "cohost"]),
+    );
+  });
+
+  it("shows versions without a trailing .0", async () => {
+    vi.mocked(check).mockResolvedValueOnce({
+      version: "0.7.0",
+      downloadAndInstall: vi.fn(),
+    } as unknown as Update);
+    render(() => (
+      <Settings open login="me" onClose={() => {}} onSignOut={() => {}} />
+    ));
+    fireEvent.click(screen.getByRole("button", { name: "Updates" }));
+    await vi.waitFor(() =>
+      expect(screen.getByText("Prismoid v0.6")).toBeTruthy(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Check for updates" }));
+    await vi.waitFor(() =>
+      expect(screen.getByText("Version 0.7 is available")).toBeTruthy(),
     );
   });
 });
