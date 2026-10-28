@@ -72,7 +72,13 @@ export interface ChatMessage {
   color: string | null;
   reply_to: string | null;
   /** Who and what a reply answers; null for top-level messages. */
-  reply_parent: { user_login: string; user_name: string; body: string } | null;
+  reply_parent: {
+    user_login: string;
+    user_name: string;
+    body: string;
+    /** The message that started the thread; empty when the platform did not say. */
+    thread_id: string;
+  } | null;
   /** Twitch system notice (sub, raid, announcement) this row represents. */
   notice: { notice_type: string; system_message: string } | null;
   emote_spans: EmoteSpan[];

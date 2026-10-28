@@ -44,6 +44,8 @@ import { isIgnored, setIgnored, settings } from "../stores/settingsStore";
 import { isHighlighted, isSpotlit } from "../lib/highlight";
 import { createMentionAlert, playChime } from "../lib/mentionAlert";
 import { recordMention } from "../stores/mentionsStore";
+import { openThread } from "../stores/threadStore";
+import Thread from "./Thread";
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import {
   banUser,
@@ -989,10 +991,16 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                   </Show>
                   <Show when={row().prepared.replyParent}>
                     {(r) => (
-                      <div
+                      <button
+                        type="button"
                         class="msg__reply"
+                        title="Show the whole thread"
                         style={{
                           height: `${row().prepared.metrics.lineHeight}px`,
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openThread(row().msg);
                         }}
                       >
                         <svg
@@ -1014,7 +1022,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                           @{r().user_name || r().user_login}
                         </span>
                         <span class="msg__reply-body">{r().body}</span>
-                      </div>
+                      </button>
                     )}
                   </Show>
                   <Show when={row().prepared.timestamp}>
@@ -1149,6 +1157,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       />
       <EmoteCard />
       <ContextMenu />
+      <Thread />
     </div>
   );
 };
