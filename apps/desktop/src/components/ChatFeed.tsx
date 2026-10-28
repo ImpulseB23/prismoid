@@ -1018,7 +1018,11 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
         )}
       </Show>
 
-      <UserCard user={cardUser()} onClose={() => setCardUser(null)} />
+      <UserCard
+        user={cardUser()}
+        login={props.login}
+        onClose={() => setCardUser(null)}
+      />
       <EmoteCard />
       <ContextMenu />
     </div>
