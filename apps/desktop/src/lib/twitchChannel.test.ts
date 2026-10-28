@@ -62,6 +62,31 @@ describe("formatChannelError", () => {
     ).toContain("503");
   });
 
+  it("explains stream setup refusals", () => {
+    expect(
+      formatChannelError({ kind: "labels_not_allowed", message: "" }),
+    ).toMatch(/labels/);
+    expect(
+      formatChannelError({ kind: "branded_content_cooldown", message: "" }),
+    ).toMatch(/too often/);
+    expect(
+      formatChannelError({
+        kind: "language_not_supported",
+        language: "zu",
+        channel: {
+          broadcaster_id: "7",
+          title: "",
+          game_id: "",
+          game_name: "",
+          broadcaster_language: "en",
+          tags: [],
+          content_classification_labels: [],
+          is_branded_content: false,
+        },
+      }),
+    ).toMatch(/language/);
+  });
+
   it("falls back to Error messages and strings", () => {
     expect(formatChannelError(new Error("boom"))).toBe("boom");
     expect(formatChannelError("raw")).toBe("raw");

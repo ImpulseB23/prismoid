@@ -137,6 +137,7 @@ pub fn run() {
             twitch_channel_info::twitch_get_channel_info,
             twitch_channel_info::twitch_update_channel_info,
             twitch_channel_info::twitch_search_categories,
+            twitch_channel_info::twitch_get_content_labels,
             twitch_polls::twitch_get_poll,
             twitch_polls::twitch_create_poll,
             twitch_polls::twitch_end_poll,

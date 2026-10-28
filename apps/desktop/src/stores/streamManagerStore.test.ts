@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   Category,
   ChannelInfo,
+  ContentLabel,
   Poll,
   Prediction,
 } from "../lib/streamManager";
@@ -15,6 +16,10 @@ const info: ChannelInfo = {
   title: "hello",
   game_id: "509658",
   game_name: "Just Chatting",
+  broadcaster_language: "en",
+  tags: [],
+  content_classification_labels: [],
+  is_branded_content: false,
 };
 
 const poll = (over: Partial<Poll> = {}): Poll => ({
@@ -64,8 +69,9 @@ function deferred<T>() {
 function fakeApi(over: Partial<StreamManagerApi> = {}): StreamManagerApi {
   return {
     getChannelInfo: vi.fn(async () => info),
-    updateChannelInfo: vi.fn(async (u) => ({ ...info, ...u })),
+    updateChannelInfo: vi.fn(async () => info),
     searchCategories: vi.fn(async () => []),
+    getContentLabels: vi.fn(async () => []),
     getPoll: vi.fn(async () => null),
     createPoll: vi.fn(async () => poll()),
     endPoll: vi.fn(async () => poll({ status: "terminated", ended_at: 5000 })),
@@ -143,6 +149,82 @@ describe("streamManagerStore", () => {
     expect(await failing.updateInfo({ title: " " })).toBe(false);
     expect(failing.infoError()).toEqual(bad);
     expect(failing.infoPending()).toBe(false);
+  });
+
+  it("keeps what applied when Twitch skips the language", async () => {
+    const skipped = {
+      kind: "language_not_supported",
+      language: "zu",
+      channel: { ...info, title: "new" },
+    };
+    const s = createStreamManagerStore(
+      fakeApi({
+        updateChannelInfo: async () => {
+          throw skipped;
+        },
+      }),
+      () => "7",
+    );
+    await s.load();
+    expect(
+      await s.updateInfo({ title: "new", broadcaster_language: "zu" }),
+    ).toBe(false);
+    expect(s.infoError()).toEqual(skipped);
+    expect(s.channelInfo()?.title).toBe("new");
+  });
+
+  it("drops a skipped language result that lands after a clear", async () => {
+    const gate = deferred<ChannelInfo>();
+    const s = createStreamManagerStore(
+      fakeApi({ updateChannelInfo: () => gate.promise }),
+      () => "7",
+    );
+    const updating = s.updateInfo({ broadcaster_language: "zu" });
+    s.clear();
+    gate.reject({
+      kind: "language_not_supported",
+      language: "zu",
+      channel: info,
+    });
+    expect(await updating).toBe(false);
+    expect(s.channelInfo()).toBeNull();
+    expect(s.infoError()).toBeNull();
+  });
+
+  it("loads content labels, latest locale wins", async () => {
+    const en = deferred<ContentLabel[]>();
+    const de = deferred<ContentLabel[]>();
+    const api = fakeApi({
+      getContentLabels: vi
+        .fn()
+        .mockReturnValueOnce(en.promise)
+        .mockReturnValueOnce(de.promise),
+    });
+    const s = createStreamManagerStore(api, () => "7");
+    const first = s.loadContentLabels("en-US");
+    const second = s.loadContentLabels("de-DE");
+    de.resolve([{ id: "Gambling", name: "Glücksspiel", description: "" }]);
+    await second;
+    en.resolve([{ id: "Gambling", name: "Gambling", description: "" }]);
+    await first;
+    expect(api.getContentLabels).toHaveBeenLastCalledWith("de-DE");
+    expect(s.contentLabels().map((l) => l.name)).toEqual(["Glücksspiel"]);
+
+    const err = { kind: "helix", status: 400, message: "bad locale" };
+    const failing = createStreamManagerStore(
+      fakeApi({
+        getContentLabels: async () => {
+          throw err;
+        },
+      }),
+      () => "7",
+    );
+    await failing.loadContentLabels("xx");
+    expect(failing.contentLabelsError()).toEqual(err);
+    expect(failing.contentLabels()).toEqual([]);
+
+    s.clear();
+    expect(s.contentLabels()).toEqual([]);
   });
 
   it("keeps only the latest category search", async () => {

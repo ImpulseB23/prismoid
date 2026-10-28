@@ -1,6 +1,7 @@
 // Channel selection client. Mirrors apps/desktop/src-tauri/src/twitch_channel.rs.
 
 import { invoke } from "@tauri-apps/api/core";
+import type { ChannelInfo } from "./streamManager";
 
 export interface Channel {
   id: string;
@@ -21,7 +22,11 @@ export type ChannelError =
   | { kind: "marker_unavailable"; message: string }
   | { kind: "shoutout_cooldown"; message: string }
   | { kind: "shoutout_needs_viewers"; message: string }
-  | { kind: "already_pinned"; message: string };
+  | { kind: "already_pinned"; message: string }
+  | { kind: "labels_not_allowed"; message: string }
+  | { kind: "branded_content_cooldown"; message: string }
+  /** The rest of the update applied; `channel` is the result. */
+  | { kind: "language_not_supported"; language: string; channel: ChannelInfo };
 
 /** Opens a channel as a tab and shows it. */
 export function joinChannel(login: string): Promise<Channel> {
@@ -85,6 +90,12 @@ export function formatChannelError(e: unknown): string {
       return "Shoutouts need you live with at least one viewer.";
     case "already_pinned":
       return "That message is already pinned.";
+    case "labels_not_allowed":
+      return "Twitch would not set those labels. Game labels come from the category, and some are not allowed for your age and region.";
+    case "branded_content_cooldown":
+      return "Branded content was switched too often. Wait a bit and try again.";
+    case "language_not_supported":
+      return "Twitch does not support that stream language. Everything else was saved; pick another language or Other.";
   }
 }
 

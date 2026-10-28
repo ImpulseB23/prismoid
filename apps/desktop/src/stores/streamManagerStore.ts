@@ -1,5 +1,6 @@
-// Stream manager state for the signed-in broadcaster's own channel: title
-// and category, category search, and the latest poll and prediction. An
+// Stream manager state for the signed-in broadcaster's own channel: stream
+// setup, category search, content label names, and the latest poll and
+// prediction. An
 // initial load reads all three from Helix; after that the poll and
 // prediction stay live from the EventSub updates ChatFeed hands over.
 // Each area has its own pending flag and error so the panel can show them
@@ -11,11 +12,13 @@ import type {
   Category,
   ChannelInfo,
   ChannelInfoUpdate,
+  ContentLabel,
   NewPoll,
   NewPrediction,
   Poll,
   Prediction,
 } from "../lib/streamManager";
+import { isChannelError } from "../lib/twitchChannel";
 import { currentUserId } from "./authStore";
 
 export type StreamManagerApi = Pick<
@@ -23,6 +26,7 @@ export type StreamManagerApi = Pick<
   | "getChannelInfo"
   | "updateChannelInfo"
   | "searchCategories"
+  | "getContentLabels"
   | "getPoll"
   | "createPoll"
   | "endPoll"
@@ -50,12 +54,21 @@ export interface StreamManagerStore {
   categories: () => Category[];
   searching: () => boolean;
   searchError: () => unknown;
-  /** Reads title, category, poll and prediction for the signed-in user. */
+  /** Every content label with its localized name; empty until loaded. */
+  contentLabels: () => ContentLabel[];
+  contentLabelsError: () => unknown;
+  /** Reads the stream setup, poll and prediction for the signed-in user. */
   load: () => Promise<void>;
-  /** The actions resolve true once Twitch accepted the change. */
+  /**
+   * The actions resolve true once Twitch accepted the change. Pass only the
+   * fields that changed. When Twitch skips the language the rest still
+   * applied, so the channel updates alongside the error.
+   */
   updateInfo: (update: ChannelInfoUpdate) => Promise<boolean>;
   /** Latest query wins; a blank one clears the results. */
   searchCategories: (query: string) => Promise<void>;
+  /** Latest call wins; pick the locale with labelLocale. */
+  loadContentLabels: (locale: string) => Promise<void>;
   createPoll: (poll: NewPoll) => Promise<boolean>;
   endPoll: (pollId: string, archive: boolean) => Promise<boolean>;
   createPrediction: (prediction: NewPrediction) => Promise<boolean>;
@@ -108,9 +121,13 @@ export function createStreamManagerStore(
   const [categories, setCategories] = createSignal<Category[]>([]);
   const [searching, setSearching] = createSignal(false);
   const [searchError, setSearchError] = createSignal<unknown>(null);
+  const [contentLabels, setContentLabels] = createSignal<ContentLabel[]>([]);
+  const [contentLabelsError, setContentLabelsError] =
+    createSignal<unknown>(null);
   // Bumped by clear() so nothing in flight writes into a signed-out store.
   let generation = 0;
   let searchGeneration = 0;
+  let labelsGeneration = 0;
 
   function offerPoll(next: Poll): void {
     if (supersedes(poll(), next, pollRank)) setPoll(next);
@@ -194,6 +211,37 @@ export function createStreamManagerStore(
     }
   }
 
+  function updateInfo(update: ChannelInfoUpdate): Promise<boolean> {
+    const gen = generation;
+    return run(
+      setInfoPending,
+      setInfoError,
+      () =>
+        commands.updateChannelInfo(update).catch((e: unknown) => {
+          if (
+            gen === generation &&
+            isChannelError(e) &&
+            e.kind === "language_not_supported"
+          )
+            setChannelInfo(e.channel);
+          throw e;
+        }),
+      setChannelInfo,
+    );
+  }
+
+  async function loadContentLabels(locale: string): Promise<void> {
+    const gen = ++labelsGeneration;
+    try {
+      const labels = await commands.getContentLabels(locale);
+      if (gen !== labelsGeneration) return;
+      setContentLabels(labels);
+      setContentLabelsError(null);
+    } catch (e) {
+      if (gen === labelsGeneration) setContentLabelsError(e);
+    }
+  }
+
   return {
     channelInfo,
     poll,
@@ -208,15 +256,12 @@ export function createStreamManagerStore(
     categories,
     searching,
     searchError,
+    contentLabels,
+    contentLabelsError,
     load,
-    updateInfo: (update) =>
-      run(
-        setInfoPending,
-        setInfoError,
-        () => commands.updateChannelInfo(update),
-        setChannelInfo,
-      ),
+    updateInfo,
     searchCategories,
+    loadContentLabels,
     createPoll: (p) => pollAction(() => commands.createPoll(p)),
     endPoll: (id, archive) => pollAction(() => commands.endPoll(id, archive)),
     createPrediction: (p) =>
@@ -235,6 +280,7 @@ export function createStreamManagerStore(
     clear: () => {
       generation++;
       searchGeneration++;
+      labelsGeneration++;
       setChannelInfo(null);
       setPoll(null);
       setPrediction(null);
@@ -248,6 +294,8 @@ export function createStreamManagerStore(
       setCategories([]);
       setSearching(false);
       setSearchError(null);
+      setContentLabels([]);
+      setContentLabelsError(null);
     },
   };
 }
@@ -266,9 +314,12 @@ export const predictionError = defaultStore.predictionError;
 export const categoryResults = defaultStore.categories;
 export const categorySearching = defaultStore.searching;
 export const categorySearchError = defaultStore.searchError;
+export const contentLabels = defaultStore.contentLabels;
+export const contentLabelsError = defaultStore.contentLabelsError;
 export const loadStreamManager = defaultStore.load;
 export const updateChannelInfo = defaultStore.updateInfo;
 export const searchCategories = defaultStore.searchCategories;
+export const loadContentLabels = defaultStore.loadContentLabels;
 export const createPoll = defaultStore.createPoll;
 export const endPoll = defaultStore.endPoll;
 export const createPrediction = defaultStore.createPrediction;

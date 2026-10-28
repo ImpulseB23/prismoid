@@ -22,7 +22,7 @@ use tokio::sync::watch;
 
 use crate::chat_history::History;
 use crate::twitch_auth::{AuthError, AuthState, TWITCH_CLIENT_ID};
-use crate::twitch_channel_info::fetch_channel_info;
+use crate::twitch_channel_info::{fetch_channel_info, ChannelInfo};
 
 pub const HELIX_BASE: &str = "https://api.twitch.tv/helix";
 
@@ -210,6 +210,22 @@ pub enum ChannelError {
     },
     AlreadyPinned {
         message: String,
+    },
+    /// Twitch refused the content labels (403): the category sets gaming
+    /// labels itself, and some are not allowed for an underage user in a
+    /// restricted country.
+    LabelsNotAllowed {
+        message: String,
+    },
+    /// Branded content was switched too often (409).
+    BrandedContentCooldown {
+        message: String,
+    },
+    /// Twitch skips a language it does not support without an error; the
+    /// rest of the update still applied and `channel` is the result.
+    LanguageNotSupported {
+        language: String,
+        channel: Box<ChannelInfo>,
     },
 }
 
