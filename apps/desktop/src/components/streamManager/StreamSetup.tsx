@@ -1,6 +1,7 @@
-// Title and category for the user's own channel, the first card of the
-// stream manager's Live section. Only the fields that changed are sent,
-// and the form shows whatever Twitch answers with afterwards.
+// What viewers see in the directory: title, category, tags, language,
+// content labels and branded content. Edits stay local until Save, only
+// the fields that changed are sent, and the form then shows whatever
+// Twitch answers with.
 
 import {
   Component,
@@ -10,70 +11,103 @@ import {
   createSignal,
   on,
   onCleanup,
+  onMount,
 } from "solid-js";
-import { LIMITS, type Category } from "../../lib/streamManager";
+import {
+  LIMITS,
+  STREAM_LANGUAGES,
+  labelChanges,
+  labelLocale,
+  type ChannelInfo,
+  type ChannelInfoUpdate,
+} from "../../lib/streamManager";
 import { formatChannelError } from "../../lib/twitchChannel";
 import {
-  categoryResults,
-  categorySearchError,
-  categorySearching,
   channelInfoError,
   channelInfoPending,
-  searchCategories,
+  contentLabels,
+  contentLabelsError,
+  loadContentLabels,
   streamChannelInfo,
   streamManagerLoading,
   updateChannelInfo,
 } from "../../stores/streamManagerStore";
+import CategoryPicker, { type PickedCategory } from "./CategoryPicker";
+import TagField from "./TagField";
 
-const boxArt = (c: Category) =>
-  c.box_art_url.replace("{width}", "52").replace("{height}", "72");
+// Twitch sets this one from the category; it cannot be switched by hand.
+const CATEGORY_LABEL = "MatureGame";
+
+const languageNames = new Intl.DisplayNames(navigator.languages, {
+  type: "language",
+});
+
+function languageName(code: string): string {
+  if (code === "other") return "Other";
+  try {
+    return languageNames.of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
+const LANGUAGES = STREAM_LANGUAGES.map((code) => ({
+  code,
+  name: languageName(code),
+})).sort((a, b) => a.name.localeCompare(b.name));
+
+const sameList = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((x, i) => x === b[i]);
 
 const StreamSetup: Component = () => {
   const [title, setTitle] = createSignal("");
-  // null means the category is unchanged; an empty id clears it.
-  const [category, setCategory] = createSignal<Pick<
-    Category,
-    "id" | "name"
-  > | null>(null);
-  const [query, setQuery] = createSignal("");
+  const [category, setCategory] = createSignal<PickedCategory>({
+    id: "",
+    name: "",
+  });
+  const [tags, setTags] = createSignal<string[]>([]);
+  const [language, setLanguage] = createSignal("");
+  const [labels, setLabels] = createSignal<string[]>([]);
+  const [branded, setBranded] = createSignal(false);
+  const [editLabels, setEditLabels] = createSignal(false);
   const [saved, setSaved] = createSignal(false);
 
-  createEffect(
-    on(streamChannelInfo, (info) => {
-      if (!info) return;
-      setTitle(info.title);
-      setCategory(null);
-    }),
-  );
+  const reset = (info: ChannelInfo) => {
+    setTitle(info.title);
+    setCategory({ id: info.game_id, name: info.game_name });
+    setTags(info.tags);
+    setLanguage(info.broadcaster_language);
+    setLabels(info.content_classification_labels);
+    setBranded(info.is_branded_content);
+  };
+  createEffect(on(streamChannelInfo, (info) => info && reset(info)));
 
-  let searchTimer: ReturnType<typeof setTimeout> | undefined;
-  let savedTimer: ReturnType<typeof setTimeout> | undefined;
-  onCleanup(() => {
-    clearTimeout(searchTimer);
-    clearTimeout(savedTimer);
-    void searchCategories("");
+  onMount(() => {
+    if (contentLabels().length === 0) {
+      void loadContentLabels(labelLocale(navigator.languages));
+    }
   });
 
-  const onQuery = (q: string) => {
-    setQuery(q);
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => void searchCategories(q), 250);
-  };
+  let savedTimer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(savedTimer));
 
-  const pick = (c: Pick<Category, "id" | "name">) => {
-    setCategory(c);
-    setQuery("");
-    void searchCategories("");
-  };
-
-  const changes = () => {
+  const changes = (): ChannelInfoUpdate | null => {
     const info = streamChannelInfo();
     if (!info) return null;
-    const update: { title?: string; game_id?: string } = {};
+    const update: ChannelInfoUpdate = {};
     const t = title().trim();
     if (t !== info.title) update.title = t;
-    const c = category();
-    if (c && c.id !== info.game_id) update.game_id = c.id;
+    if (category().id !== info.game_id) update.game_id = category().id;
+    if (!sameList(tags(), info.tags)) update.tags = tags();
+    if (language() !== info.broadcaster_language)
+      update.broadcaster_language = language();
+    const labelUpdate = labelChanges(
+      info.content_classification_labels,
+      labels(),
+    );
+    if (labelUpdate) update.content_classification_labels = labelUpdate;
+    if (branded() !== info.is_branded_content)
+      update.is_branded_content = branded();
     return Object.keys(update).length > 0 ? update : null;
   };
 
@@ -87,114 +121,179 @@ const StreamSetup: Component = () => {
     }
   };
 
-  const shownCategory = () =>
-    category()?.name ?? streamChannelInfo()?.game_name ?? "";
+  // A language Twitch has on the channel but the list lacks stays pickable.
+  const languages = () =>
+    !language() || LANGUAGES.some((l) => l.code === language())
+      ? LANGUAGES
+      : [{ code: language(), name: languageName(language()) }, ...LANGUAGES];
+
+  const labelName = (id: string) =>
+    contentLabels().find((l) => l.id === id)?.name ?? id;
+
+  const toggleLabel = (id: string, on: boolean) =>
+    setLabels((list) => (on ? [...list, id] : list.filter((l) => l !== id)));
 
   return (
-    <section class="sm-card stream-info" aria-label="Stream setup">
-      <h3 class="sm-card__title">Stream setup</h3>
+    <section class="sm-setup" aria-labelledby="sm-setup-title">
+      <div class="sm-heading">
+        <h2 id="sm-setup-title">Stream setup</h2>
+        <span class="sm-hint">What viewers see in the directory</span>
+      </div>
       <Show
         when={streamChannelInfo()}
         fallback={
-          <div class="cc__empty">
+          <div class="sm-hint">
             {streamManagerLoading() || !channelInfoError()
-              ? "Loading"
+              ? "Loading your stream"
               : formatChannelError(channelInfoError())}
           </div>
         }
       >
-        <label class="stream-info__field">
-          <span class="stream-info__label">
+        <div class="sm-field">
+          <label class="sm-label" for="sm-title">
             Title
             <span
-              class="stream-info__count"
+              class="sm-label__aside"
               classList={{
-                "stream-info__count--full": title().length >= LIMITS.titleChars,
+                "sm-label__aside--full": title().length >= LIMITS.titleChars,
               }}
             >
-              {LIMITS.titleChars - title().length}
+              {LIMITS.titleChars - title().length} left
             </span>
-          </span>
+          </label>
           <textarea
-            class="settings__input stream-info__title"
+            id="sm-title"
+            class="sm-input sm-input--area"
             rows="2"
             maxLength={LIMITS.titleChars}
             value={title()}
             onInput={(e) => setTitle(e.currentTarget.value)}
           />
-        </label>
-
-        <div class="stream-info__field">
-          <span class="stream-info__label">Category</span>
-          <div class="stream-info__category">
-            <span classList={{ "stream-info__none": !shownCategory() }}>
-              {shownCategory() || "No category"}
-            </span>
-            <Show when={shownCategory()}>
-              <button
-                type="button"
-                class="btn btn--small btn--outline"
-                onClick={() => pick({ id: "", name: "" })}
-              >
-                Clear
-              </button>
-            </Show>
-          </div>
-          <input
-            type="text"
-            class="settings__input"
-            placeholder="Search categories"
-            aria-label="Search categories"
-            value={query()}
-            onInput={(e) => onQuery(e.currentTarget.value)}
-          />
-          <Show when={query().trim()}>
-            <Show
-              when={!categorySearchError()}
-              fallback={
-                <div class="dialog__error">
-                  {formatChannelError(categorySearchError())}
-                </div>
-              }
-            >
-              <ul class="stream-info__results" aria-busy={categorySearching()}>
-                <For
-                  each={categoryResults()}
-                  fallback={
-                    <li class="cc__empty">
-                      {categorySearching() ? "Searching" : "No matches"}
-                    </li>
-                  }
-                >
-                  {(c) => (
-                    <li>
-                      <button
-                        type="button"
-                        class="stream-info__result"
-                        onClick={() => pick(c)}
-                      >
-                        <img src={boxArt(c)} alt="" width="26" height="36" />
-                        <span>{c.name}</span>
-                      </button>
-                    </li>
-                  )}
-                </For>
-              </ul>
-            </Show>
-          </Show>
         </div>
 
-        <div class="stream-info__actions">
+        <CategoryPicker value={category()} onPick={setCategory} />
+        <TagField tags={tags()} onChange={setTags} />
+
+        <div class="sm-row">
+          <div class="sm-field sm-field--narrow">
+            <label class="sm-label" for="sm-language">
+              Language
+            </label>
+            <select
+              id="sm-language"
+              class="sm-input"
+              onChange={(e) => setLanguage(e.currentTarget.value)}
+            >
+              <For each={languages()}>
+                {(l) => (
+                  <option value={l.code} selected={l.code === language()}>
+                    {l.name}
+                  </option>
+                )}
+              </For>
+            </select>
+          </div>
+          <div class="sm-field sm-field--wide">
+            <span class="sm-label" id="sm-labels">
+              Content labels
+            </span>
+            <div class="sm-labels" role="group" aria-labelledby="sm-labels">
+              <span class="sm-labels__list">
+                {labels().length > 0
+                  ? labels().map(labelName).join(", ")
+                  : "None"}
+              </span>
+              <button
+                type="button"
+                class="sm-link"
+                aria-expanded={editLabels()}
+                onClick={() => setEditLabels((v) => !v)}
+              >
+                {editLabels() ? "Done" : "Edit"}
+              </button>
+            </div>
+          </div>
+        </div>
+        <Show when={editLabels()}>
+          <Show
+            when={contentLabels().length > 0}
+            fallback={
+              <div class="sm-hint">
+                {contentLabelsError()
+                  ? formatChannelError(contentLabelsError())
+                  : "Loading labels"}
+              </div>
+            }
+          >
+            <ul class="sm-checks">
+              <For each={contentLabels()}>
+                {(l) => (
+                  <li>
+                    <label class="sm-check">
+                      <input
+                        type="checkbox"
+                        checked={labels().includes(l.id)}
+                        disabled={l.id === CATEGORY_LABEL}
+                        onChange={(e) =>
+                          toggleLabel(l.id, e.currentTarget.checked)
+                        }
+                      />
+                      <span class="sm-check__text">
+                        <span>{l.name}</span>
+                        <span class="sm-hint">
+                          {l.id === CATEGORY_LABEL
+                            ? "Set by your category"
+                            : l.description}
+                        </span>
+                      </span>
+                    </label>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </Show>
+        </Show>
+
+        <label class="sm-toggle">
+          <input
+            type="checkbox"
+            class="switch"
+            role="switch"
+            checked={branded()}
+            onChange={(e) => setBranded(e.currentTarget.checked)}
+          />
+          <span class="sm-toggle__text">
+            <span>Branded content</span>
+            <span class="sm-hint">
+              Turn on when a sponsor paid for this stream
+            </span>
+          </span>
+        </label>
+
+        <div class="sm-actions">
           <button
             type="button"
             class="btn btn--small btn--primary"
             disabled={!changes() || channelInfoPending()}
             onClick={() => void save()}
           >
-            {channelInfoPending() ? "Saving" : "Save"}
+            {channelInfoPending() ? "Saving" : "Save changes"}
+          </button>
+          <button
+            type="button"
+            class="btn btn--small"
+            disabled={!changes() || channelInfoPending()}
+            onClick={() => {
+              const info = streamChannelInfo();
+              if (info) reset(info);
+            }}
+          >
+            Discard
           </button>
           <Show when={saved()}>
-            <span class="stream-info__saved">Saved</span>
+            <span class="sm-saved" role="status">
+              Saved
+            </span>
           </Show>
         </div>
         <Show when={channelInfoError()}>

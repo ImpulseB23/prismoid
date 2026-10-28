@@ -3,6 +3,7 @@ import type { ScopeGroup } from "../lib/twitchAuth";
 import {
   scopeGroupEnabled,
   scopeGroupNeedsReconnect,
+  scopeGroupReady,
   setAuthStatus,
 } from "./authStore";
 
@@ -37,5 +38,14 @@ describe("scope groups", () => {
   it("never asks a reconnect for a group that is off", () => {
     signedIn([], ["channel:read:ads"]);
     expect(scopeGroupNeedsReconnect("ads")).toBe(false);
+  });
+
+  it("is ready only when on and granted", () => {
+    signedIn([], []);
+    expect(scopeGroupReady("ads")).toBe(false);
+    signedIn(["ads"], ["channel:read:ads"]);
+    expect(scopeGroupReady("ads")).toBe(false);
+    signedIn(["ads"], []);
+    expect(scopeGroupReady("ads")).toBe(true);
   });
 });

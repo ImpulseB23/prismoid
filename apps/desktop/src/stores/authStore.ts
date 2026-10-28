@@ -75,3 +75,8 @@ export function scopeGroupNeedsReconnect(group: ScopeGroup): boolean {
   const missing = missingScopes();
   return SCOPE_GROUPS[group].some((s) => missing.includes(s));
 }
+
+/** True when the group is on and the grant has every scope it needs. */
+export function scopeGroupReady(group: ScopeGroup): boolean {
+  return scopeGroupEnabled(group) && !scopeGroupNeedsReconnect(group);
+}

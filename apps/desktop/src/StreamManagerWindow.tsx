@@ -24,8 +24,7 @@ import type { ChatEvent } from "./lib/chatEvents";
 import {
   authStatus,
   currentUserId,
-  scopeGroupEnabled,
-  scopeGroupNeedsReconnect,
+  scopeGroupReady,
   setAuthStatus,
   streamManagerNeedsReconnect,
 } from "./stores/authStore";
@@ -55,6 +54,8 @@ import SectionNav, {
   type Section,
 } from "./components/streamManager/SectionNav";
 import StreamSetup from "./components/streamManager/StreamSetup";
+import QuickActions from "./components/streamManager/QuickActions";
+import RunningNow from "./components/streamManager/RunningNow";
 
 const report = (what: string) => (err: unknown) => console.error(what, err);
 
@@ -71,8 +72,7 @@ const StreamManagerWindow: Component = () => {
   const stream = createStreamStore();
   stream.track(() => currentUserId() ?? undefined);
 
-  const adsReady = () =>
-    scopeGroupEnabled("ads") && !scopeGroupNeedsReconnect("ads");
+  const adsReady = () => scopeGroupReady("ads");
 
   // Loads for the signed-in account, again after a reconnect adds the
   // permission, and drops the old account's data on a switch.
@@ -172,7 +172,15 @@ const StreamManagerWindow: Component = () => {
             >
               <Switch>
                 <Match when={section() === "live"}>
-                  <StreamSetup />
+                  <div class="sm-cols">
+                    <div class="sm-col sm-col--main">
+                      <StreamSetup />
+                    </div>
+                    <div class="sm-col">
+                      <QuickActions live={stream.info()?.is_live === true} />
+                      <RunningNow now={now()} />
+                    </div>
+                  </div>
                 </Match>
               </Switch>
             </Show>
