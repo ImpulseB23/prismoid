@@ -24,8 +24,9 @@ use tauri::{AppHandle, Emitter, Runtime, State};
 
 use super::auth_state::{AuthCommandError, AuthState, AuthStatus, LoginView};
 
-/// Sent to every window after a sign-in, reconnect or sign-out, so the
-/// windows besides the one that started it follow the account too.
+/// Sent to every window after a sign-in, reconnect, sign-out or scope
+/// group change, so the windows besides the one that started it follow the
+/// account too.
 pub const AUTH_CHANGED: &str = "twitch_auth_changed";
 
 fn announce<R: Runtime>(app: &AppHandle<R>, status: &AuthStatus) {
@@ -62,6 +63,28 @@ pub async fn twitch_complete_login<R: Runtime>(
 pub async fn twitch_cancel_login(state: State<'_, AuthState>) -> Result<(), AuthCommandError> {
     state.cancel_login().await;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn twitch_enable_scope_group<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AuthState>,
+    group: String,
+) -> Result<AuthStatus, AuthCommandError> {
+    let status = state.set_scope_group(&group, true)?;
+    announce(&app, &status);
+    Ok(status)
+}
+
+#[tauri::command]
+pub async fn twitch_disable_scope_group<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AuthState>,
+    group: String,
+) -> Result<AuthStatus, AuthCommandError> {
+    let status = state.set_scope_group(&group, false)?;
+    announce(&app, &status);
+    Ok(status)
 }
 
 #[tauri::command]

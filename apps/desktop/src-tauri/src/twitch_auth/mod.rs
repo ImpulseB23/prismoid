@@ -22,17 +22,19 @@ pub mod commands;
 pub mod errors;
 pub mod implicit;
 pub mod manager;
+pub mod scope_groups;
 pub mod storage;
 pub mod tokens;
 
 pub use auth_state::{AuthCommandError, AuthState, AuthStatus, AuthStatusState, LoginView};
 pub use commands::{
-    twitch_auth_status, twitch_cancel_login, twitch_complete_login, twitch_logout,
-    twitch_start_login,
+    twitch_auth_status, twitch_cancel_login, twitch_complete_login, twitch_disable_scope_group,
+    twitch_enable_scope_group, twitch_logout, twitch_start_login,
 };
 pub use errors::AuthError;
 pub use implicit::{CallbackParams, PendingLogin, DEEP_LINK_SCHEME, TWITCH_REDIRECT_URL};
 pub use manager::{AuthManager, AuthManagerBuilder, REFRESH_THRESHOLD_MS};
+pub use scope_groups::{ScopeGroup, ScopeGroups};
 pub use storage::{KeychainStore, MemoryStore, TokenStore, KEYCHAIN_SERVICE};
 pub use tokens::TwitchTokens;
 

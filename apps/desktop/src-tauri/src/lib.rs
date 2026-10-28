@@ -96,6 +96,8 @@ pub fn run() {
             twitch_auth::commands::twitch_complete_login,
             twitch_auth::commands::twitch_cancel_login,
             twitch_auth::commands::twitch_logout,
+            twitch_auth::commands::twitch_enable_scope_group,
+            twitch_auth::commands::twitch_disable_scope_group,
             youtube_auth::commands::youtube_auth_status,
             youtube_auth::commands::youtube_start_login,
             youtube_auth::commands::youtube_complete_login,
@@ -199,7 +201,7 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
         tray::show_main(app.handle());
     }
     use tokio::sync::Notify;
-    use twitch_auth::{AuthManager, AuthState, KeychainStore, TWITCH_CLIENT_ID};
+    use twitch_auth::{AuthManager, AuthState, KeychainStore, ScopeGroups, TWITCH_CLIENT_ID};
     use twitch_oauth2::Scope;
 
     let http_client = match reqwest::Client::builder()
@@ -216,6 +218,13 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
         }
     };
     app.manage(seventv_users::SevenTvUsers::new(http_client.clone()));
+    let scope_groups = match app.path().app_data_dir() {
+        Ok(dir) => ScopeGroups::open(&dir),
+        Err(err) => {
+            tracing::error!(error = %err, "no app data dir; scope groups last until exit");
+            ScopeGroups::default()
+        }
+    };
     let auth = Arc::new(
         AuthManager::builder(TWITCH_CLIENT_ID)
             .scope(Scope::UserReadChat)
@@ -243,6 +252,7 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
             .scope(Scope::ChannelManageBroadcast)
             .scope(Scope::ChannelManagePolls)
             .scope(Scope::ChannelManagePredictions)
+            .scope_groups(scope_groups)
             .build(KeychainStore, http_client),
     );
     let wakeup = Arc::new(Notify::new());

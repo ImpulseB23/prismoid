@@ -51,6 +51,14 @@ pub enum AuthError {
     /// URL, empty client id, etc.). Bug, not a runtime condition.
     #[error("configuration error: {0}")]
     Config(String),
+
+    /// The frontend named a scope group the host does not define.
+    #[error("unknown scope group: {0}")]
+    UnknownScopeGroup(String),
+
+    /// Saving the enabled scope groups to disk failed.
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
 // The twitch_oauth2 Displays stop at the outer variant ("creation of

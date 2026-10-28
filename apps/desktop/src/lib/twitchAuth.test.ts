@@ -14,6 +14,8 @@ import {
   banUser,
   clearChat,
   deleteMessage,
+  disableScopeGroup,
+  enableScopeGroup,
   manageHeldMessage,
   sendMessage,
   timeoutUser,
@@ -110,6 +112,22 @@ describe("moderation commands", () => {
       channelId: "c1",
       messageId: "held-1",
       action: "DENY",
+    });
+  });
+});
+
+describe("scope groups", () => {
+  it("enables and disables a group by name", async () => {
+    const status = { state: "logged_out", enabled_scope_groups: ["ads"] };
+    invokeMock.mockResolvedValueOnce(status);
+    await expect(enableScopeGroup("ads")).resolves.toEqual(status);
+    expect(invokeMock).toHaveBeenCalledWith("twitch_enable_scope_group", {
+      group: "ads",
+    });
+    invokeMock.mockResolvedValueOnce(status);
+    await disableScopeGroup("live_actions");
+    expect(invokeMock).toHaveBeenLastCalledWith("twitch_disable_scope_group", {
+      group: "live_actions",
     });
   });
 });

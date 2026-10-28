@@ -143,6 +143,7 @@ describe("AutomodQueue", () => {
       user_id: "1",
       login: "me",
       missing_scopes: ["moderator:manage:automod"],
+      enabled_scope_groups: [],
     });
     render(() => <AutomodQueue />);
     expect(document.body.textContent).toContain("Reconnect in Settings");
