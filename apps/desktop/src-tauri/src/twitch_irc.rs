@@ -17,6 +17,8 @@ pub enum IrcItem {
         /// Set by the backlog service's `rm-deleted` tag on a message a
         /// moderator removed after it was sent.
         deleted: bool,
+        /// Twitch's `first-msg` tag: the chatter's first message in the channel.
+        first: bool,
     },
     Event(ChatEvent),
 }
@@ -63,6 +65,7 @@ fn privmsg(line: &IrcLine<'_>, channel_id: String) -> Option<IrcItem> {
 
     Some(IrcItem::Message {
         deleted: line.tag("rm-deleted") == Some("1"),
+        first: line.tag("first-msg") == Some("1"),
         message: Box::new(UnifiedMessage {
             id: id.to_owned(),
             platform: Platform::Twitch,
@@ -118,6 +121,7 @@ fn usernotice(line: &IrcLine<'_>, channel_id: String) -> Option<IrcItem> {
 
     Some(IrcItem::Message {
         deleted: line.tag("rm-deleted") == Some("1"),
+        first: false,
         message: Box::new(UnifiedMessage {
             id: id.to_owned(),
             platform: Platform::Twitch,
@@ -308,7 +312,9 @@ mod tests {
 
     fn message(line: &str, fallback: Option<&str>) -> (UnifiedMessage, bool) {
         match parse_line(line, fallback) {
-            Some(IrcItem::Message { message, deleted }) => (*message, deleted),
+            Some(IrcItem::Message {
+                message, deleted, ..
+            }) => (*message, deleted),
             other => panic!("expected a message, got {other:?}"),
         }
     }

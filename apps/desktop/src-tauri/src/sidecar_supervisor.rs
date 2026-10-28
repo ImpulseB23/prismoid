@@ -962,6 +962,10 @@ fn handle_sidecar_stdout<R: Runtime>(
             }
         },
         |first| {
+            // Saved with the history so the mark is still there after a
+            // reload or restart, then shown right away.
+            app.state::<History>()
+                .mark_first(first.channel_id.clone(), first.message_id.clone());
             if let Err(e) = app.emit("first_message", &first) {
                 tracing::warn!(error = %e, "failed to emit first_message");
             }

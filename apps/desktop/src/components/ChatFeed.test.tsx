@@ -136,6 +136,15 @@ describe("ChatFeed first messages", () => {
     );
   });
 
+  it("marks rows that carry the saved flag", async () => {
+    const { container } = render(() => <ChatFeed login="me" />);
+    await tick();
+
+    emit("chat_messages", [{ ...msg("saved"), first_message: true }]);
+    await tick();
+    expect(rowFor(container, "saved").classList).toContain("msg--first");
+  });
+
   it("hides the mark while the setting is off", async () => {
     const { container } = render(() => <ChatFeed login="me" />);
     await tick();
