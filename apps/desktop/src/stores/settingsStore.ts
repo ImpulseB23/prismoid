@@ -41,7 +41,7 @@ export const MAX_TIMEOUT_PRESETS = 8;
 export const DEFAULT_SETTINGS: Settings = {
   alwaysOnTop: false,
   zoom: 1,
-  showTimestamps: true,
+  showTimestamps: false,
   ignoredLogins: [],
   highlightPhrases: [],
   flagNewAccounts: true,

@@ -112,7 +112,7 @@ describe("settingsStore", () => {
     expect(good.settings()).toEqual({
       alwaysOnTop: true,
       zoom: 1.5,
-      showTimestamps: true,
+      showTimestamps: false,
       ignoredLogins: [],
       highlightPhrases: [],
       flagNewAccounts: true,
