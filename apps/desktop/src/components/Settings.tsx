@@ -56,7 +56,7 @@ import { showPatchNotes } from "../stores/whatsNewStore";
 import { notesFor } from "../releaseNotes";
 import { FOLLOWER_CHOICES, SLOW_CHOICES } from "../lib/chatModes";
 import { startTour, tourStep } from "../stores/tourStore";
-import { customChrome, fullscreen } from "../stores/windowStore";
+import { chromeShown, customChrome, fullscreen } from "../stores/windowStore";
 import {
   SETTINGS_SECTIONS,
   setSettingsSection,
@@ -256,7 +256,10 @@ const Settings: Component<SettingsProps> = (props) => {
         ref={(el) => (dialogRef = el)}
         tabIndex={-1}
         class="settings-page"
-        classList={{ "settings-page--chrome": customChrome() && !fullscreen() }}
+        classList={{
+          "settings-page--chrome":
+            customChrome() && (!fullscreen() || chromeShown()),
+        }}
         role="dialog"
         aria-modal="true"
         aria-label="Settings"
