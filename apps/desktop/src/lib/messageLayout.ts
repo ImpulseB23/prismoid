@@ -20,38 +20,67 @@ import { formatTimestamp } from "./messageStyle";
 // measures against — any drift here produces wrong heights.
 export const MESSAGE_FONT_FAMILY =
   '"Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-export const MESSAGE_FONT_SIZE_PX = 15;
-// Timestamps are set in the brand mono face at a smaller size; the DOM
-// applies the identical font via `.msg__time` so measurement matches.
+// Timestamps are set in the brand mono face at a smaller size; the feed
+// applies the identical font to `.msg__time` so measurement matches.
 export const TIMESTAMP_FONT_FAMILY = '"JetBrains Mono", Consolas, monospace';
-export const TIMESTAMP_FONT_SIZE_PX = 12;
 
-const USERNAME_FONT = `600 ${MESSAGE_FONT_SIZE_PX}px ${MESSAGE_FONT_FAMILY}`;
-const SEPARATOR_FONT = `400 ${MESSAGE_FONT_SIZE_PX}px ${MESSAGE_FONT_FAMILY}`;
-const TEXT_FONT = `400 ${MESSAGE_FONT_SIZE_PX}px ${MESSAGE_FONT_FAMILY}`;
-const TIMESTAMP_FONT = `400 ${TIMESTAMP_FONT_SIZE_PX}px ${TIMESTAMP_FONT_FAMILY}`;
-// System notices (subs, raids) set their line a step heavier than chat.
-const NOTICE_FONT = `500 ${MESSAGE_FONT_SIZE_PX}px ${MESSAGE_FONT_FAMILY}`;
+/** Chat text sizes in px, stepped through with Ctrl +/- and Ctrl+scroll. */
+export const TEXT_SIZES = [11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 28, 32];
+export const DEFAULT_TEXT_SIZE = 15;
 
-// Every distinct font Pretext measures with. The renderer waits for these
-// to decode before laying out so canvas metrics match the painted text.
+/** Everything in a chat row that scales with the text size. */
+export interface TextMetrics {
+  fontSize: number;
+  lineHeight: number;
+  timestampSize: number;
+  badgeSize: number;
+  textFont: string;
+  usernameFont: string;
+  timestampFont: string;
+  /** System notices (subs, raids) set their line a step heavier than chat. */
+  noticeFont: string;
+}
+
+const metricsCache = new Map<number, TextMetrics>();
+
+// Proportions come from the original 15px design: 22px lines, 12px
+// timestamps, 18px badges.
+export function textMetrics(fontSize: number): TextMetrics {
+  const cached = metricsCache.get(fontSize);
+  if (cached) return cached;
+  const timestampSize = Math.round((fontSize * 12) / 15);
+  const m: TextMetrics = {
+    fontSize,
+    lineHeight: Math.round((fontSize * 22) / 15),
+    timestampSize,
+    badgeSize: Math.round((fontSize * 18) / 15),
+    textFont: `400 ${fontSize}px ${MESSAGE_FONT_FAMILY}`,
+    usernameFont: `600 ${fontSize}px ${MESSAGE_FONT_FAMILY}`,
+    timestampFont: `400 ${timestampSize}px ${TIMESTAMP_FONT_FAMILY}`,
+    noticeFont: `500 ${fontSize}px ${MESSAGE_FONT_FAMILY}`,
+  };
+  metricsCache.set(fontSize, m);
+  return m;
+}
+
+// Every distinct face Pretext measures with. The renderer waits for these
+// to decode before laying out so canvas metrics match the painted text;
+// a face decodes once for every size, so the default size covers them all.
+const defaults = textMetrics(DEFAULT_TEXT_SIZE);
 export const MEASURED_FONTS = [
-  TEXT_FONT,
-  USERNAME_FONT,
-  TIMESTAMP_FONT,
-  NOTICE_FONT,
+  defaults.textFont,
+  defaults.usernameFont,
+  defaults.timestampFont,
+  defaults.noticeFont,
 ];
 
-export const MESSAGE_LINE_HEIGHT = 22;
+export const MESSAGE_LINE_HEIGHT = defaults.lineHeight;
 export const MESSAGE_PADDING_Y = 4;
 // Horizontal padding applied to every message row; Pretext must measure
 // against the container width minus both sides or the last-word-per-line
 // overflow will never wrap and measured heights will be too small.
 export const MESSAGE_PADDING_X = 8;
 
-// Rendered badge size. Kept square and identical across providers so that
-// mixed-platform chat visually aligns vertically.
-export const BADGE_SIZE_PX = 18;
 // Horizontal gap after each badge, before the next badge or the username.
 export const BADGE_GAP_PX = 4;
 
@@ -85,10 +114,12 @@ export interface PreparedMessage {
   replyParent: ChatMessage["reply_parent"];
   /** Set on system notices; the row shows this line instead of a username. */
   notice: ChatMessage["notice"];
+  metrics: TextMetrics;
 }
 
 export interface PrepareOptions {
   timestamps: boolean;
+  metrics?: TextMetrics;
 }
 
 export function prepareMessage(
@@ -96,9 +127,10 @@ export function prepareMessage(
   resolveBadge: (setId: string, id: string) => ResolvedBadge | undefined,
   opts: PrepareOptions = { timestamps: true },
 ): PreparedMessage {
+  const m = opts.metrics ?? defaults;
   const pieces = linkify(
     splitMessage(msg.message_text, msg.emote_spans, {
-      maxHeight: MESSAGE_LINE_HEIGHT,
+      maxHeight: m.lineHeight,
     }),
   );
 
@@ -109,7 +141,7 @@ export function prepareMessage(
   }
 
   const items: RichInlineItem[] = [];
-  const placeholder = placeholderWidth(TEXT_FONT);
+  const placeholder = placeholderWidth(m.textFont);
 
   // Timestamp prefix: a single non-breaking text run so the username
   // never wraps onto a line by itself when the timestamp pushes the
@@ -121,37 +153,37 @@ export function prepareMessage(
   if (timestamp) {
     items.push({
       text: timestamp,
-      font: TIMESTAMP_FONT,
+      font: m.timestampFont,
       break: "never",
     });
   }
 
   if (msg.notice) {
-    items.push({ text: msg.notice.system_message, font: NOTICE_FONT });
-    if (pieces.length > 0) items.push({ text: " ", font: TEXT_FONT });
+    items.push({ text: msg.notice.system_message, font: m.noticeFont });
+    if (pieces.length > 0) items.push({ text: " ", font: m.textFont });
   } else {
-    const badgeExtra = Math.max(0, BADGE_SIZE_PX + BADGE_GAP_PX - placeholder);
+    const badgeExtra = Math.max(0, m.badgeSize + BADGE_GAP_PX - placeholder);
     for (let i = 0; i < badges.length; i++) {
       items.push({
         text: EMOTE_PLACEHOLDER,
-        font: TEXT_FONT,
+        font: m.textFont,
         break: "never",
         extraWidth: badgeExtra,
       });
     }
     items.push(
-      { text: msg.display_name, font: USERNAME_FONT, break: "never" },
-      { text: ": ", font: SEPARATOR_FONT },
+      { text: msg.display_name, font: m.usernameFont, break: "never" },
+      { text: ": ", font: m.textFont },
     );
   }
 
   for (const piece of pieces) {
     if (piece.kind === "text" || piece.kind === "link") {
-      items.push({ text: piece.text, font: TEXT_FONT });
+      items.push({ text: piece.text, font: m.textFont });
     } else {
       items.push({
         text: EMOTE_PLACEHOLDER,
-        font: TEXT_FONT,
+        font: m.textFont,
         break: "never",
         extraWidth: Math.max(0, piece.primary.width - placeholder),
       });
@@ -165,6 +197,7 @@ export function prepareMessage(
     timestamp,
     replyParent: msg.reply_parent,
     notice: msg.notice,
+    metrics: m,
   };
 }
 
@@ -172,12 +205,11 @@ export function measureMessageHeight(
   msg: PreparedMessage,
   containerWidth: number,
 ): number {
+  const { lineHeight } = msg.metrics;
   // The quoted reply line is a single nowrap, ellipsized line in the DOM.
-  const extra = msg.replyParent ? MESSAGE_LINE_HEIGHT : 0;
+  const extra = msg.replyParent ? lineHeight : 0;
   const contentWidth = Math.max(0, containerWidth - MESSAGE_PADDING_X * 2);
-  if (contentWidth <= 0) return MESSAGE_LINE_HEIGHT + extra + MESSAGE_PADDING_Y;
+  if (contentWidth <= 0) return lineHeight + extra + MESSAGE_PADDING_Y;
   const { lineCount } = measureRichInlineStats(msg.prepared, contentWidth);
-  return (
-    Math.max(1, lineCount) * MESSAGE_LINE_HEIGHT + extra + MESSAGE_PADDING_Y
-  );
+  return Math.max(1, lineCount) * lineHeight + extra + MESSAGE_PADDING_Y;
 }

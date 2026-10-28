@@ -9,6 +9,7 @@ import {
   type Theme,
 } from "./settingsStore";
 import type { StorageLike } from "./channelStore";
+import { TEXT_SIZES } from "../lib/messageLayout";
 
 function memStorage(seed: Record<string, string> = {}): StorageLike & {
   data: Record<string, string>;
@@ -62,6 +63,7 @@ describe("settingsStore", () => {
     expect(JSON.parse(storage.data["prismoid.settings"]!)).toEqual({
       alwaysOnTop: true,
       zoom: 1,
+      textSize: 15,
       showTimestamps: false,
       ignoredLogins: [],
       highlightPhrases: [],
@@ -87,6 +89,29 @@ describe("settingsStore", () => {
     for (let i = 0; i < ZOOM_LEVELS.length + 2; i++) await store.zoomOut();
     expect(store.settings().zoom).toBe(ZOOM_LEVELS[0]);
     expect(a.zooms.at(-1)).toBe(ZOOM_LEVELS[0]);
+  });
+
+  it("text size steps without touching window zoom", async () => {
+    const a = appliers();
+    const store = createSettingsStore(a, memStorage());
+    await store.textBigger();
+    expect(store.settings().textSize).toBe(16);
+    expect(store.settings().zoom).toBe(1);
+    expect(a.zooms).toEqual([]);
+    for (let i = 0; i < TEXT_SIZES.length + 2; i++) await store.textSmaller();
+    expect(store.settings().textSize).toBe(TEXT_SIZES[0]);
+    await store.textReset();
+    expect(store.settings().textSize).toBe(15);
+
+    await store.update({ textSize: 17 });
+    await store.textBigger();
+    expect(store.settings().textSize).toBe(16);
+
+    const odd = createSettingsStore(
+      appliers(),
+      memStorage({ "prismoid.settings": JSON.stringify({ textSize: 99 }) }),
+    );
+    expect(odd.settings().textSize).toBe(15);
   });
 
   it("leaves state untouched when the window call fails", async () => {
@@ -124,6 +149,7 @@ describe("settingsStore", () => {
     expect(good.settings()).toEqual({
       alwaysOnTop: true,
       zoom: 1.5,
+      textSize: 15,
       showTimestamps: false,
       ignoredLogins: [],
       highlightPhrases: [],

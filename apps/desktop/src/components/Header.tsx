@@ -14,10 +14,10 @@ import { missingScopes } from "../stores/authStore";
 import {
   applyWindowSettings,
   settings,
+  textBigger,
+  textReset,
+  textSmaller,
   updateSettings,
-  zoomIn,
-  zoomOut,
-  zoomReset,
 } from "../stores/settingsStore";
 import ChannelPicker from "./ChannelPicker";
 import ChatModes from "./ChatModes";
@@ -150,26 +150,28 @@ const Header: Component<HeaderProps> = (props) => {
         case "=":
         case "+":
           e.preventDefault();
-          void zoomIn().catch(report("zoom in"));
+          void textBigger().catch(report("text bigger"));
           break;
         case "-":
         case "_":
           e.preventDefault();
-          void zoomOut().catch(report("zoom out"));
+          void textSmaller().catch(report("text smaller"));
           break;
         case "0":
           e.preventDefault();
-          void zoomReset().catch(report("zoom reset"));
+          void textReset().catch(report("text reset"));
           break;
       }
     };
-    // Ctrl+wheel is the zoom gesture people expect from browsers; the
-    // webview's own handling is off (zoomHotkeysEnabled defaults false)
-    // so the level stays under our control and persists.
+    // Ctrl with + - 0 and Ctrl+wheel size the chat text, like Chatterino;
+    // whole-window zoom lives in Settings. The webview's own zoom hotkeys
+    // are off (zoomHotkeysEnabled defaults false) so these reach us.
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey || e.deltaY === 0) return;
       e.preventDefault();
-      void (e.deltaY < 0 ? zoomIn() : zoomOut()).catch(report("zoom"));
+      void (e.deltaY < 0 ? textBigger() : textSmaller()).catch(
+        report("text size"),
+      );
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("wheel", onWheel, { passive: false });
