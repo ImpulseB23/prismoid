@@ -94,7 +94,7 @@ describe("settingsStore", () => {
       chatBacklog: true,
       closeToTray: false,
       highlightFirstMessages: true,
-      tourDone: false,
+      setupDone: false,
       mentionAlerts: true,
       theme: "dark",
     });
@@ -217,7 +217,7 @@ describe("settingsStore", () => {
       chatBacklog: true,
       closeToTray: false,
       highlightFirstMessages: true,
-      tourDone: false,
+      setupDone: false,
       mentionAlerts: false,
       theme: "dark",
     });

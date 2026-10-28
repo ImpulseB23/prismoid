@@ -22,6 +22,7 @@ import { missingScopes } from "../stores/authStore";
 import {
   applyWindowSettings,
   reapplyZoom,
+  settings,
   textBigger,
   textReset,
   textSmaller,
@@ -41,6 +42,7 @@ import {
   unreadMentions,
 } from "../stores/mentionsStore";
 import { cardOrigin, cardUser } from "../stores/userCardStore";
+import { tourStep } from "../stores/tourStore";
 import {
   chromeShown,
   customChrome,
@@ -279,6 +281,8 @@ const Header: Component<HeaderProps> = (props) => {
         text: `Updated to ${updated}`,
         section: "updates",
       };
+    if (!settings().setupDone && tourStep() === null)
+      return { text: "Set up Prismoid", section: "help" };
     return null;
   };
 

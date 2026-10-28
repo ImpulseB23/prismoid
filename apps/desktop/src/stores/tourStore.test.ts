@@ -9,13 +9,26 @@ vi.mock("@tauri-apps/api/window", () => ({
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
-function store(done = false) {
+const STEPS = [
+  { title: "a", body: "" },
+  { title: "b", body: "", section: "appearance" as const },
+  { title: "c", body: "" },
+];
+
+function store(done = false, fresh = true) {
   let isDone = done;
   const markDone = vi.fn(async () => {
     isDone = true;
   });
-  const tour = createTourStore(3, () => isDone, markDone);
-  return { tour, markDone };
+  const settingsOpen = vi.fn();
+  const tour = createTourStore(
+    STEPS,
+    () => isDone,
+    markDone,
+    settingsOpen,
+    fresh,
+  );
+  return { tour, markDone, settingsOpen };
 }
 
 describe("tourStore", () => {
@@ -32,6 +45,21 @@ describe("tourStore", () => {
     expect(markDone).toHaveBeenCalledOnce();
     tour.offer();
     expect(tour.step()).toBeNull();
+  });
+
+  it("leaves an updated install to the Settings badge", () => {
+    const { tour } = store(false, false);
+    tour.offer();
+    expect(tour.step()).toBeNull();
+  });
+
+  it("opens Settings only for Settings steps", () => {
+    const { tour, settingsOpen } = store();
+    tour.start();
+    tour.next();
+    expect(settingsOpen).toHaveBeenLastCalledWith("appearance");
+    tour.next();
+    expect(settingsOpen).toHaveBeenLastCalledWith(null);
   });
 
   it("does not offer itself after it was done", () => {

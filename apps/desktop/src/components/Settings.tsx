@@ -54,7 +54,7 @@ import { authErrorMessage, isAuthError } from "./SignIn";
 import { showPatchNotes } from "../stores/whatsNewStore";
 import { notesFor } from "../releaseNotes";
 import { FOLLOWER_CHOICES, SLOW_CHOICES } from "../lib/chatModes";
-import { startTour } from "../stores/tourStore";
+import { startTour, tourStep } from "../stores/tourStore";
 import { customChrome, fullscreen } from "../stores/windowStore";
 import {
   SETTINGS_SECTIONS,
@@ -236,6 +236,12 @@ const Settings: Component<SettingsProps> = (props) => {
     if (props.open) queueMicrotask(() => dialogRef?.focus());
   });
 
+  // The setup tour keeps Settings open while it walks the sections; a click
+  // outside the ring should not end that.
+  const close = () => {
+    if (tourStep() === null) props.onClose();
+  };
+
   const run = (p: Promise<void>) => {
     setError(null);
     p.catch((e: unknown) =>
@@ -254,7 +260,7 @@ const Settings: Component<SettingsProps> = (props) => {
         aria-modal="true"
         aria-label="Settings"
         onKeyDown={(e) => {
-          if (e.key === "Escape") props.onClose();
+          if (e.key === "Escape") close();
         }}
       >
         <nav class="settings-page__nav" aria-label="Settings sections">
@@ -262,7 +268,7 @@ const Settings: Component<SettingsProps> = (props) => {
             type="button"
             class="settings-page__back"
             title="Back to chat (Esc)"
-            onClick={props.onClose}
+            onClick={close}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
               <path
@@ -831,21 +837,26 @@ const Settings: Component<SettingsProps> = (props) => {
           <Show when={settingsSection() === "help"}>
             <div class="settings__row">
               <div class="settings__text">
-                <span class="settings__name">Welcome tour</span>
+                <span class="settings__name">Setup</span>
                 <span class="settings__hint">
-                  A one-minute walk through tabs, moderation and the switches
-                  worth turning on.
+                  <Show
+                    when={settings().setupDone}
+                    fallback="You haven't set Prismoid up yet. It takes a minute."
+                  >
+                    Walk through the window and every setting again.
+                  </Show>
                 </span>
               </div>
               <button
                 type="button"
-                class="btn btn--outline"
-                onClick={() => {
-                  props.onClose();
-                  startTour();
+                class="btn"
+                classList={{
+                  "btn--primary": !settings().setupDone,
+                  "btn--outline": settings().setupDone,
                 }}
+                onClick={startTour}
               >
-                Take the tour
+                {settings().setupDone ? "Run setup" : "Set up now"}
               </button>
             </div>
             <div class="settings__row">

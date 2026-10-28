@@ -1,5 +1,6 @@
-// Overlay for the welcome tour: dims the window, rings the control the
-// current step is about, and keeps the step card clear of it.
+// Overlay for the setup tour: dims the window, rings the control or the
+// Settings section the current step is about, and keeps the step card clear
+// of it. On Settings steps the ringed controls stay usable.
 
 import {
   Component,
@@ -15,7 +16,6 @@ import {
   previousTourStep,
   tourStep,
 } from "../stores/tourStore";
-import { settings, updateSettings } from "../stores/settingsStore";
 
 interface Ring {
   top: number;
@@ -36,7 +36,8 @@ const Tour: Component = () => {
   };
 
   const measure = () => {
-    const target = current()?.target;
+    const step = current();
+    const target = step?.section ? "settings-content" : step?.target;
     const el = target
       ? document.querySelector<HTMLElement>(`[data-tour="${target}"]`)
       : null;
@@ -55,10 +56,18 @@ const Tour: Component = () => {
 
   createEffect(() => {
     if (tourStep() === null) return;
-    measure();
-    queueMicrotask(() => cardRef?.focus());
+    // Settings mounts in the same tick it is opened; measure after it.
+    queueMicrotask(() => {
+      measure();
+      cardRef?.focus();
+    });
+    // Settings sections scroll inside the dialog, so the ring follows.
     window.addEventListener("resize", measure);
-    onCleanup(() => window.removeEventListener("resize", measure));
+    window.addEventListener("scroll", measure, true);
+    onCleanup(() => {
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure, true);
+    });
   });
 
   // The card sits at the bottom unless the ring is down there.
@@ -80,13 +89,14 @@ const Tour: Component = () => {
     }
   };
 
-  const run = (p: Promise<void>) =>
-    p.catch((err: unknown) => console.error("tour setting", err));
-
   return (
     <Show when={current()}>
       {(step) => (
-        <div class="tour" onKeyDown={onKey}>
+        <div
+          class="tour"
+          classList={{ "tour--interactive": step().section !== undefined }}
+          onKeyDown={onKey}
+        >
           <Show
             when={ring()}
             fallback={<div class="tour__shade" aria-hidden="true" />}
@@ -120,42 +130,6 @@ const Tour: Component = () => {
             </div>
             <h2 id="tour-title">{step().title}</h2>
             <p>{step().body}</p>
-            <Show when={step().toggles}>
-              <label class="tour__toggle">
-                <span>
-                  <strong>Follow my browser</strong>
-                  Switch to the Twitch channel open in your browser
-                </span>
-                <input
-                  type="checkbox"
-                  class="switch"
-                  checked={settings().followBrowser}
-                  onChange={(e) =>
-                    run(
-                      updateSettings({
-                        followBrowser: e.currentTarget.checked,
-                      }),
-                    )
-                  }
-                />
-              </label>
-              <label class="tour__toggle">
-                <span>
-                  <strong>Keep on top</strong>
-                  Stay above your game or stream preview
-                </span>
-                <input
-                  type="checkbox"
-                  class="switch"
-                  checked={settings().alwaysOnTop}
-                  onChange={(e) =>
-                    run(
-                      updateSettings({ alwaysOnTop: e.currentTarget.checked }),
-                    )
-                  }
-                />
-              </label>
-            </Show>
             <div class="tour__actions">
               <Show
                 when={tourStep() !== TOUR_STEPS.length - 1}
@@ -166,7 +140,7 @@ const Tour: Component = () => {
                   class="tour__skip"
                   onClick={() => void finishTour()}
                 >
-                  Skip tour
+                  Skip setup
                 </button>
               </Show>
               <div class="tour__nav">

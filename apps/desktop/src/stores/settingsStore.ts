@@ -56,8 +56,9 @@ export interface Settings {
   closeToTray: boolean;
   /** Mark a chatter's first message in a channel. */
   highlightFirstMessages: boolean;
-  /** The welcome tour has been finished or skipped. */
-  tourDone: boolean;
+  /** The setup tour has been finished or skipped. A new key, so people who
+   * saw the older, shorter tour still get the setup once. */
+  setupDone: boolean;
   /** Chime and flash the taskbar when mentioned in the background. */
   mentionAlerts: boolean;
   theme: Theme;
@@ -104,7 +105,7 @@ export const DEFAULT_SETTINGS: Settings = {
   chatBacklog: true,
   closeToTray: false,
   highlightFirstMessages: true,
-  tourDone: false,
+  setupDone: false,
   mentionAlerts: true,
   theme: "dark",
 };
@@ -304,10 +305,10 @@ function readSettings(storage: StorageLike | null): Settings {
         typeof p.highlightFirstMessages === "boolean"
           ? p.highlightFirstMessages
           : DEFAULT_SETTINGS.highlightFirstMessages,
-      tourDone:
-        typeof p.tourDone === "boolean"
-          ? p.tourDone
-          : DEFAULT_SETTINGS.tourDone,
+      setupDone:
+        typeof p.setupDone === "boolean"
+          ? p.setupDone
+          : DEFAULT_SETTINGS.setupDone,
       mentionAlerts:
         typeof p.mentionAlerts === "boolean"
           ? p.mentionAlerts
