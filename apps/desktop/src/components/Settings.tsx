@@ -43,7 +43,8 @@ import {
   updateState,
 } from "../stores/updateStore";
 import { authErrorMessage, isAuthError } from "./SignIn";
-import { releaseNotesUrl, updatedTo } from "../stores/whatsNewStore";
+import { showPatchNotes } from "../stores/whatsNewStore";
+import { notesFor } from "../releaseNotes";
 import { startTour } from "../stores/tourStore";
 
 export interface SettingsProps {
@@ -111,16 +112,12 @@ const UpdateRow: Component = () => {
         </span>
         <span class="settings__hint">{status()}</span>
       </div>
-      <Show when={updatedTo()}>
-        {(v) => (
+      <Show when={notesFor(version())}>
+        {(n) => (
           <button
             type="button"
             class="btn btn--outline"
-            onClick={() =>
-              void openUrl(releaseNotesUrl(v())).catch((err: unknown) =>
-                console.error("release notes", err),
-              )
-            }
+            onClick={() => showPatchNotes(n())}
           >
             What's new
           </button>
