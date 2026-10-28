@@ -186,6 +186,14 @@ func (s *Session) subscribeChannel(sessionID, broadcasterID string) {
 		s.Log.Info().Err(err).Str("broadcaster", broadcasterID).Msg("moderation feed unavailable; not a moderator here or scopes missing")
 	} else {
 		ids = append(ids, modID)
+		// Only tried where channel.moderate went through, so the user is
+		// known to moderate here. A refusal now means the grant predates
+		// moderator:manage:automod; the app asks for a reconnect.
+		automodIDs, err := SubscribeAutoMod(s.ctx, s.helix(), sessionID, broadcasterID, userID)
+		ids = append(ids, automodIDs...)
+		if err != nil {
+			s.Log.Info().Err(err).Str("broadcaster", broadcasterID).Msg("automod queue unavailable; moderator:manage:automod likely missing")
+		}
 	}
 
 	s.mu.Lock()

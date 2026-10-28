@@ -157,3 +157,15 @@ export function deleteMessage(
 export function clearChat(channelId: string): Promise<void> {
   return invoke("twitch_clear_chat", { channelId });
 }
+
+export function manageHeldMessage(
+  channelId: string,
+  messageId: string,
+  action: "ALLOW" | "DENY",
+): Promise<void> {
+  return invoke("twitch_manage_held_message", {
+    channelId,
+    messageId,
+    action,
+  });
+}

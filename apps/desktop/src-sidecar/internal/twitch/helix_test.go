@@ -399,6 +399,111 @@ func TestClearChatRequiresIDs(t *testing.T) {
 	}
 }
 
+func TestSubscribeAutoModHoldAndUpdateV2(t *testing.T) {
+	var got []SubscriptionRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req SubscriptionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		got = append(got, req)
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = fmt.Fprintf(w, `{"data":[{"id":"am-%d","status":"enabled"}]}`, len(got))
+	}))
+	defer srv.Close()
+
+	ids, err := SubscribeAutoMod(context.Background(), testHelix(srv.URL, "tok", "cid"), "sess-1", "b-1", "m-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !slices.Equal(ids, []string{"am-1", "am-2"}) {
+		t.Fatalf("unexpected ids %v", ids)
+	}
+	if len(got) != 2 || got[0].Type != "automod.message.hold" || got[1].Type != "automod.message.update" {
+		t.Fatalf("unexpected subscriptions: %+v", got)
+	}
+	for _, req := range got {
+		if req.Version != "2" || req.Condition["broadcaster_user_id"] != "b-1" || req.Condition["moderator_user_id"] != "m-1" {
+			t.Fatalf("unexpected request: %+v", req)
+		}
+		if req.Transport.SessionID != "sess-1" {
+			t.Fatalf("unexpected session: %s", req.Transport.SessionID)
+		}
+	}
+}
+
+func TestSubscribeAutoModStopsOnForbidden(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":"Forbidden","status":403,"message":"subscription missing proper authorization"}`))
+	}))
+	defer srv.Close()
+
+	ids, err := SubscribeAutoMod(context.Background(), testHelix(srv.URL, "tok", "cid"), "s", "b", "m")
+	var he *HelixError
+	if !errors.As(err, &he) || he.Status != http.StatusForbidden {
+		t.Fatalf("expected 403 HelixError, got %v", err)
+	}
+	if len(ids) != 0 || calls != 1 {
+		t.Fatalf("expected one refused call and no ids, got %d calls, ids %v", calls, ids)
+	}
+}
+
+func TestManageHeldMessage(t *testing.T) {
+	var body map[string]string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/moderation/automod/message" || r.URL.RawQuery != "" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.String())
+		}
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Fatalf("unexpected content type %q", r.Header.Get("Content-Type"))
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	c := &HelixClient{BaseURL: srv.URL, ClientID: "cid", AccessToken: "tok"}
+	if err := c.ManageHeldMessage(context.Background(), "m1", "msg-1", "ALLOW"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if body["user_id"] != "m1" || body["msg_id"] != "msg-1" || body["action"] != "ALLOW" {
+		t.Fatalf("unexpected body: %+v", body)
+	}
+}
+
+func TestManageHeldMessageRejectsBadInput(t *testing.T) {
+	c := &HelixClient{BaseURL: "http://unused", ClientID: "cid", AccessToken: "tok"}
+	if err := c.ManageHeldMessage(context.Background(), "", "msg-1", "DENY"); err == nil {
+		t.Fatal("expected error without a moderator id")
+	}
+	if err := c.ManageHeldMessage(context.Background(), "m1", "", "DENY"); err == nil {
+		t.Fatal("expected error without a message id")
+	}
+	if err := c.ManageHeldMessage(context.Background(), "m1", "msg-1", "allow"); err == nil {
+		t.Fatal("expected error for an action Twitch does not accept")
+	}
+}
+
+func TestManageHeldMessageSurfacesNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"Not Found","status":404,"message":"message not found"}`))
+	}))
+	defer srv.Close()
+
+	c := &HelixClient{BaseURL: srv.URL, ClientID: "cid", AccessToken: "tok"}
+	err := c.ManageHeldMessage(context.Background(), "m1", "gone", "DENY")
+	var he *HelixError
+	if !errors.As(err, &he) || he.Status != http.StatusNotFound {
+		t.Fatalf("expected 404 HelixError, got %v", err)
+	}
+}
+
 func TestSendChatMessageReply(t *testing.T) {
 	var body map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

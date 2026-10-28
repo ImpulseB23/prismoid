@@ -12,7 +12,10 @@ const openPanel = vi.fn();
 
 vi.mock("../stores/roleStore", () => ({ canModerate: () => canMod() }));
 vi.mock("../stores/channelStore", () => ({ activeChannel: () => channel() }));
-vi.mock("../stores/authStore", () => ({ currentUserId: () => "100" }));
+vi.mock("../stores/authStore", () => ({
+  currentUserId: () => "100",
+  automodNeedsReconnect: () => false,
+}));
 vi.mock("../stores/chatSettingsStore", () => ({
   chatSettings: () => modes(),
   chatSettingsBusy: () => false,
@@ -28,6 +31,8 @@ vi.mock("../lib/twitchAuth", () => ({
 }));
 
 const { default: ModBar, CLEAR_CONFIRM_MS } = await import("./ModBar");
+const { clearHeldMessages, recordHeldMessage } =
+  await import("../stores/automodStore");
 
 const settings: ChatSettings = {
   emote_mode: false,
@@ -100,6 +105,35 @@ describe("ModBar", () => {
     await vi.waitFor(() =>
       expect(screen.getByRole("alert").textContent).toBe("sidecar went away"),
     );
+  });
+
+  it("counts held messages for the open channel and opens the queue", () => {
+    render(() => <ModBar />);
+    const button = () => screen.getByRole("button", { name: /^AutoMod/ });
+    expect(button().textContent).toBe("AutoMod");
+    for (const [id, channel] of [
+      ["a", "100"],
+      ["b", "100"],
+      ["c", "200"],
+    ]) {
+      recordHeldMessage({
+        kind: "automod_held",
+        channel_id: channel,
+        message_id: id,
+        user_id: "42",
+        user_login: "chatter",
+        user_name: "Chatter",
+        text: "held",
+        reason: "automod",
+        category: "swearing",
+        level: 1,
+        held_at: 0,
+      });
+    }
+    expect(button().textContent).toBe("AutoMod2");
+    fireEvent.click(button());
+    expect(screen.getByRole("dialog", { name: "AutoMod queue" })).toBeTruthy();
+    clearHeldMessages();
   });
 
   it("labels a moderator and stays hidden without the role", () => {

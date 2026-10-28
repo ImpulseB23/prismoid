@@ -1,11 +1,14 @@
 package twitch
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -201,11 +204,11 @@ func TestSessionSubscribesEveryJoinedChannelAndImmediatelyWhenConnected(t *testi
 	s := newTestSession(ctx, ws, helix.URL, make(chan []byte, 16), nil)
 	s.Join("a", nil)
 	s.Join("b", nil)
-	// five chat subscriptions plus channel.moderate, per channel
-	waitFor(t, "both channels subscribed", func() bool { return rec.postCount() == 12 })
+	// five chat subscriptions, channel.moderate and the two automod ones, per channel
+	waitFor(t, "both channels subscribed", func() bool { return rec.postCount() == 16 })
 
 	s.Join("c", nil)
-	waitFor(t, "late join subscribed on the live socket", func() bool { return rec.postCount() == 18 })
+	waitFor(t, "late join subscribed on the live socket", func() bool { return rec.postCount() == 24 })
 
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
@@ -216,7 +219,7 @@ func TestSessionSubscribesEveryJoinedChannelAndImmediatelyWhenConnected(t *testi
 		}
 		seen[p.Condition["broadcaster_user_id"]]++
 	}
-	if seen["a"] != 6 || seen["b"] != 6 || seen["c"] != 6 {
+	if seen["a"] != 8 || seen["b"] != 8 || seen["c"] != 8 {
 		t.Fatalf("unexpected per-channel subscriptions: %v", seen)
 	}
 }
@@ -232,16 +235,16 @@ func TestSessionLeaveDeletesOnlyThatChannel(t *testing.T) {
 	defer cancel()
 	s := newTestSession(ctx, ws, helix.URL, make(chan []byte, 16), nil)
 	s.Join("a", nil)
-	waitFor(t, "a subscribed", func() bool { return rec.postCount() == 6 })
+	waitFor(t, "a subscribed", func() bool { return rec.postCount() == 8 })
 	s.Join("b", nil)
-	waitFor(t, "b subscribed", func() bool { return rec.postCount() == 12 })
+	waitFor(t, "b subscribed", func() bool { return rec.postCount() == 16 })
 
 	s.Leave("a")
-	waitFor(t, "a's subscriptions deleted", func() bool { return len(rec.deleted()) == 6 })
+	waitFor(t, "a's subscriptions deleted", func() bool { return len(rec.deleted()) == 8 })
 	for _, id := range rec.deleted() {
 		n := 0
 		_, _ = fmt.Sscanf(id, "sub-%d", &n)
-		if n < 1 || n > 6 {
+		if n < 1 || n > 8 {
 			t.Fatalf("deleted a subscription that was not a's: %s", id)
 		}
 	}
@@ -303,8 +306,8 @@ func TestSessionReconnectCarriesSubscriptionsOver(t *testing.T) {
 	// The reconnect url carries the old subscriptions, so nothing is
 	// subscribed twice.
 	time.Sleep(100 * time.Millisecond)
-	if n := rec.postCount(); n != 6 {
-		t.Fatalf("expected 6 subscriptions in total, got %d", n)
+	if n := rec.postCount(); n != 8 {
+		t.Fatalf("expected 8 subscriptions in total, got %d", n)
 	}
 }
 
@@ -322,7 +325,7 @@ func TestSessionResubscribesAfterADrop(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	newTestSession(ctx, ws, helix.URL, make(chan []byte, 16), nil).Join("broadcaster-1", nil)
-	waitFor(t, "subscriptions on both sockets", func() bool { return rec.postCount() == 12 })
+	waitFor(t, "subscriptions on both sockets", func() bool { return rec.postCount() == 16 })
 }
 
 func TestSessionRevocationIsReportedAndKeepsTheSocket(t *testing.T) {
@@ -450,6 +453,90 @@ func TestSessionChannelFull(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("server never finished writing; reader stalled")
 	}
+}
+
+// refusingHelix accepts every subscription except the listed types, which
+// get the 403 Twitch sends for a missing role or scope.
+func refusingHelix(t *testing.T, refused ...string) (*httptest.Server, *helixRecorder) {
+	t.Helper()
+	rec := &helixRecorder{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			var req SubscriptionRequest
+			body, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(body, &req)
+			if slices.Contains(refused, req.Type) {
+				rec.mu.Lock()
+				rec.posts = append(rec.posts, req)
+				rec.mu.Unlock()
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`{"error":"Forbidden","status":403,"message":"subscription missing proper authorization"}`))
+				return
+			}
+			r.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		rec.handler(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, rec
+}
+
+func (h *helixRecorder) types() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make([]string, 0, len(h.posts))
+	for _, p := range h.posts {
+		out = append(out, p.Type)
+	}
+	return out
+}
+
+func TestSessionSkipsAutoModWhereNotAModerator(t *testing.T) {
+	helix, rec := refusingHelix(t, "channel.moderate")
+	ws := wsServer(t, func(conn *websocket.Conn, _ int) {
+		_ = conn.Write(context.Background(), websocket.MessageText, welcomeMsg("sess-viewer", 30))
+		time.Sleep(2 * time.Second)
+	})
+
+	var notified atomic.Int32
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := newTestSession(ctx, ws, helix.URL, make(chan []byte, 16), func(string, any) { notified.Add(1) })
+	s.Join("a", nil)
+	waitFor(t, "chat and moderation attempts", func() bool { return rec.postCount() == 6 })
+	time.Sleep(100 * time.Millisecond)
+
+	if slices.Contains(rec.types(), "automod.message.hold") {
+		t.Fatalf("automod subscribed in a channel the user does not moderate: %v", rec.types())
+	}
+	if notified.Load() != 0 || len(s.Joined()) != 1 {
+		t.Fatalf("a viewer channel must stay joined without notifications, got %d notifications", notified.Load())
+	}
+}
+
+func TestSessionKeepsModerationWhenAutoModScopeIsMissing(t *testing.T) {
+	helix, rec := refusingHelix(t, "automod.message.hold")
+	ws := wsServer(t, func(conn *websocket.Conn, _ int) {
+		_ = conn.Write(context.Background(), websocket.MessageText, welcomeMsg("sess-old-grant", 30))
+		time.Sleep(2 * time.Second)
+	})
+
+	var notified atomic.Int32
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := newTestSession(ctx, ws, helix.URL, make(chan []byte, 16), func(string, any) { notified.Add(1) })
+	s.Join("a", nil)
+	waitFor(t, "automod attempt", func() bool { return slices.Contains(rec.types(), "automod.message.hold") })
+	time.Sleep(100 * time.Millisecond)
+
+	if slices.Contains(rec.types(), "automod.message.update") {
+		t.Fatal("update subscribed after hold was refused")
+	}
+	if notified.Load() != 0 {
+		t.Fatalf("a missing automod scope must stay quiet, got %d notifications", notified.Load())
+	}
+	s.Leave("a")
+	waitFor(t, "chat and moderation subscriptions deleted", func() bool { return len(rec.deleted()) == 6 })
 }
 
 func TestReconnectErrorMessage(t *testing.T) {

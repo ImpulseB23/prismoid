@@ -268,8 +268,28 @@ func DeleteSubscription(ctx context.Context, client *HelixClient, id string) err
 // with the full set of moderator:read scopes, so callers treat failure as
 // "no moderation feed here" rather than a connection error.
 func SubscribeModeration(ctx context.Context, client *HelixClient, sessionID, broadcasterID, moderatorID string) (string, error) {
+	return subscribeAsModerator(ctx, client, "channel.moderate", sessionID, broadcasterID, moderatorID)
+}
+
+// SubscribeAutoMod creates the automod.message.hold and .update v2
+// subscriptions: messages AutoMod holds for review, and their outcome once
+// a mod acts or they expire. Both need moderator:manage:automod, which
+// older grants lack, so callers treat failure as "no queue here".
+func SubscribeAutoMod(ctx context.Context, client *HelixClient, sessionID, broadcasterID, moderatorID string) ([]string, error) {
+	ids := make([]string, 0, 2)
+	for _, subType := range []string{"automod.message.hold", "automod.message.update"} {
+		id, err := subscribeAsModerator(ctx, client, subType, sessionID, broadcasterID, moderatorID)
+		if err != nil {
+			return ids, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func subscribeAsModerator(ctx context.Context, client *HelixClient, subType, sessionID, broadcasterID, moderatorID string) (string, error) {
 	req := SubscriptionRequest{
-		Type:    "channel.moderate",
+		Type:    subType,
 		Version: "2",
 		Condition: map[string]string{
 			"broadcaster_user_id": broadcasterID,
@@ -469,4 +489,23 @@ func (c *HelixClient) ClearChat(ctx context.Context, broadcasterID, moderatorID 
 	q.Set("broadcaster_id", broadcasterID)
 	q.Set("moderator_id", moderatorID)
 	return c.Delete(ctx, "/moderation/chat?"+q.Encode(), nil)
+}
+
+type manageHeldMessageRequest struct {
+	UserID string `json:"user_id"`
+	MsgID  string `json:"msg_id"`
+	Action string `json:"action"`
+}
+
+// ManageHeldMessage allows or denies a message AutoMod is holding for
+// review. action is ALLOW or DENY.
+func (c *HelixClient) ManageHeldMessage(ctx context.Context, moderatorID, messageID, action string) error {
+	if moderatorID == "" || messageID == "" {
+		return errors.New("twitch helix: missing moderator or message id")
+	}
+	if action != "ALLOW" && action != "DENY" {
+		return fmt.Errorf("twitch helix: automod action %q is not ALLOW or DENY", action)
+	}
+	req := manageHeldMessageRequest{UserID: moderatorID, MsgID: messageID, Action: action}
+	return c.Post(ctx, "/moderation/automod/message", req, nil)
 }

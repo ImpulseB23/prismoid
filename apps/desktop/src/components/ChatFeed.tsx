@@ -74,6 +74,7 @@ import { loadEmoteBundle, type EmoteBundleSets } from "../stores/emoteStore";
 import { clearChatters, recordChatter } from "../stores/chatterStore";
 import { canModerate, noteModerator } from "../stores/roleStore";
 import { clearModLog, recordModAction } from "../stores/modLogStore";
+import { recordHeldMessage, resolveHeldMessage } from "../stores/automodStore";
 import {
   MODE_ACTIONS,
   clearChatSettings,
@@ -536,6 +537,16 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       // else sees the effect Twitch reports to the whole channel.
       const publicRows = settings().showModActions && !canModerate();
       for (const e of event.payload) {
+        // The AutoMod queue keeps every moderated tab, so a hold in a
+        // background channel is waiting there when the mod switches over.
+        if (e.kind === "automod_held") {
+          recordHeldMessage(e);
+          continue;
+        }
+        if (e.kind === "automod_resolved") {
+          resolveHeldMessage(e);
+          continue;
+        }
         if (id !== undefined && e.channel_id !== id) continue;
         switch (e.kind) {
           case "message_deleted": {

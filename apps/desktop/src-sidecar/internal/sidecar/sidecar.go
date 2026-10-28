@@ -298,6 +298,8 @@ func DispatchCommand(ctx context.Context, cmd control.Command, clients map[strin
 		HandleDeleteMessage(ctx, cmd, notify, logger)
 	case "clear_chat":
 		HandleClearChat(ctx, cmd, notify, logger)
+	case "manage_held_message":
+		HandleManageHeldMessage(ctx, cmd, notify, logger)
 	case "send_chat_message":
 		HandleSendChatMessage(ctx, cmd, notify, logger)
 	case "youtube_send_message":
@@ -455,6 +457,27 @@ func HandleClearChat(ctx context.Context, cmd control.Command, notify twitch.Not
 	err := newTwitchHelixClient(cmd).ClearChat(ctx, cmd.BroadcasterID, cmd.UserID)
 	if err != nil {
 		logger.Warn().Err(err).Str("broadcaster", cmd.BroadcasterID).Msg("clear_chat failed")
+	}
+	reply(err)
+}
+
+func HandleManageHeldMessage(ctx context.Context, cmd control.Command, notify twitch.Notify, logger zerolog.Logger) {
+	reply := modReply(cmd, notify)
+	if msg := validateModAuth(cmd); msg != "" {
+		reply(errors.New(msg))
+		return
+	}
+	if cmd.MessageID == "" {
+		logger.Warn().
+			Str("cmd", cmd.Cmd).
+			Str("broadcaster", cmd.BroadcasterID).
+			Msg("manage_held_message missing message_id; ignoring")
+		reply(errors.New("missing message_id"))
+		return
+	}
+	err := newTwitchHelixClient(cmd).ManageHeldMessage(ctx, cmd.UserID, cmd.MessageID, cmd.Action)
+	if err != nil {
+		logger.Warn().Err(err).Str("broadcaster", cmd.BroadcasterID).Str("message_id", cmd.MessageID).Str("action", cmd.Action).Msg("manage_held_message failed")
 	}
 	reply(err)
 }

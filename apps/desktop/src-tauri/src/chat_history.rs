@@ -328,7 +328,9 @@ impl Store {
                         params![channel_id],
                     )?;
                 }
-                ChatEvent::ModAction(_) => {}
+                ChatEvent::ModAction(_)
+                | ChatEvent::AutomodHeld(_)
+                | ChatEvent::AutomodResolved { .. } => {}
             }
         }
         tx.commit()

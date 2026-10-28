@@ -14,6 +14,7 @@ import {
   banUser,
   clearChat,
   deleteMessage,
+  manageHeldMessage,
   sendMessage,
   timeoutUser,
   unbanUser,
@@ -99,6 +100,16 @@ describe("moderation commands", () => {
     await clearChat("c1");
     expect(invokeMock).toHaveBeenCalledWith("twitch_clear_chat", {
       channelId: "c1",
+    });
+  });
+
+  it("invokes twitch_manage_held_message", async () => {
+    invokeMock.mockResolvedValueOnce(undefined);
+    await manageHeldMessage("c1", "held-1", "DENY");
+    expect(invokeMock).toHaveBeenCalledWith("twitch_manage_held_message", {
+      channelId: "c1",
+      messageId: "held-1",
+      action: "DENY",
     });
   });
 });

@@ -1,7 +1,7 @@
 // Turns a channel.moderate event into the one-line notice moderators see
 // in the feed and in a user's history, and into a feed row.
 
-import type { ChatEvent, ModAction } from "./chatEvents";
+import type { ModAction, PublicModerationEvent } from "./chatEvents";
 import type { ChatMessage } from "../stores/chatStore";
 import { formatSeconds } from "./slashCommands";
 import { formatViewers } from "./streamInfo";
@@ -112,7 +112,7 @@ function quoted(terms: string[]): string {
  * gone, or the whole chat, with no moderator, duration or reason.
  */
 export function describePublicModeration(
-  e: Exclude<ChatEvent, ModAction>,
+  e: PublicModerationEvent,
   deleted?: { display_name: string; message_text: string },
 ): string {
   switch (e.kind) {
@@ -129,7 +129,7 @@ export function describePublicModeration(
 
 /** Feed row for a moderation event seen without the moderator feed. */
 export function publicModerationMessage(
-  e: Exclude<ChatEvent, ModAction>,
+  e: PublicModerationEvent,
   arrivalSeq: number,
   deleted?: { display_name: string; message_text: string },
 ): ChatMessage {
