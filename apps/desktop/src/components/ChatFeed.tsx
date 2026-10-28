@@ -626,14 +626,31 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     msg.platform_user_id.length > 0 &&
     msg.username !== props.login;
 
+  const copy = (text: string, done: string) =>
+    navigator.clipboard.writeText(text).then(
+      () => notify(done),
+      (err: unknown) => console.error("copy", err),
+    );
+
+  const replyTo = (msg: ChatMessage) =>
+    requestReply({
+      message_id: msg.id,
+      user_login: msg.username,
+      user_name: msg.display_name,
+      body: msg.message_text,
+    });
+
+  // Reply and Copy show on hover for any ordinary message that has landed.
+  const canReply = (msg: ChatMessage) =>
+    msg.platform === "Twitch" &&
+    msg.notice === null &&
+    msg.status === undefined &&
+    !msg.deleted &&
+    msg.platform_user_id.length > 0;
+
   const openMenuFor = (e: MouseEvent, msg: ChatMessage) => {
     if (msg.platform !== "Twitch") return;
     const run = runModAction;
-    const copy = (text: string, done: string) =>
-      navigator.clipboard.writeText(text).then(
-        () => notify(done),
-        (err: unknown) => console.error("copy", err),
-      );
     const profile = `https://www.twitch.tv/${msg.username}`;
     openContextMenu(
       e,
@@ -646,13 +663,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
           timeouts: settings().timeoutPresets,
         },
         {
-          reply: () =>
-            requestReply({
-              message_id: msg.id,
-              user_login: msg.username,
-              user_name: msg.display_name,
-              body: msg.message_text,
-            }),
+          reply: () => replyTo(msg),
           copyMessage: () => void copy(msg.message_text, "Message copied"),
           copyLogin: () => void copy(msg.username, "Name copied"),
           mention: () => requestMention(msg.username),
@@ -791,6 +802,67 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                     }
                   >
                     <div class="msg__actions">
+                      <Show when={canReply(row().msg)}>
+                        <button
+                          type="button"
+                          class="msg__action"
+                          title="Reply"
+                          aria-label="Reply"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            replyTo(row().msg);
+                          }}
+                        >
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            aria-hidden="true"
+                          >
+                            <path
+                              d="M5 3 2 6l3 3M2 6h5a3 3 0 0 1 3 3v1"
+                              stroke="currentColor"
+                              stroke-width="1.4"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          class="msg__action"
+                          title="Copy message"
+                          aria-label="Copy message"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void copy(row().msg.message_text, "Message copied");
+                          }}
+                        >
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            aria-hidden="true"
+                          >
+                            <rect
+                              x="4"
+                              y="4"
+                              width="6.5"
+                              height="6.5"
+                              rx="1.2"
+                              stroke="currentColor"
+                              stroke-width="1.3"
+                            />
+                            <path
+                              d="M8 4V2.7A1.2 1.2 0 0 0 6.8 1.5H2.7A1.2 1.2 0 0 0 1.5 2.7v4.1A1.2 1.2 0 0 0 2.7 8H4"
+                              stroke="currentColor"
+                              stroke-width="1.3"
+                            />
+                          </svg>
+                        </button>
+                      </Show>
                       <Show when={showModIcons(row().msg)}>
                         <button
                           type="button"
