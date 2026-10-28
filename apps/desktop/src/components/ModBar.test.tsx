@@ -82,11 +82,24 @@ describe("ModBar", () => {
   });
 
   it("shows why a clear failed", async () => {
-    clear.mockRejectedValueOnce({ kind: "not_moderator" });
+    clear.mockRejectedValueOnce({
+      kind: "helix",
+      code: "403",
+      message: "not a moderator",
+    });
     render(() => <ModBar />);
     fireEvent.click(screen.getByRole("button", { name: "Clear" }));
     fireEvent.click(screen.getByRole("button", { name: "Clear chat?" }));
-    expect((await screen.findByRole("alert")).textContent).not.toBe("");
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "not a moderator",
+    );
+
+    clear.mockRejectedValueOnce("sidecar went away");
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear chat?" }));
+    await vi.waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toBe("sidecar went away"),
+    );
   });
 
   it("labels a moderator and stays hidden without the role", () => {

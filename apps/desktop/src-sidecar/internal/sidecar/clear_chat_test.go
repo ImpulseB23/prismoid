@@ -53,3 +53,33 @@ func TestHandleClearChat_RejectsMissingAuth(t *testing.T) {
 		t.Fatalf("unexpected payloads: %#v", *payloads)
 	}
 }
+
+func TestHandleClearChat_ReportsHelixError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":"Forbidden","status":403,"message":"not a moderator"}`))
+	}))
+	defer srv.Close()
+
+	prev := twitchHelixBase
+	twitchHelixBase = srv.URL
+	defer func() { twitchHelixBase = prev }()
+	notify, _, payloads := captureNotify()
+
+	HandleClearChat(context.Background(), control.Command{
+		Cmd:           "clear_chat",
+		BroadcasterID: "b1",
+		UserID:        "u1",
+		ClientID:      "cid",
+		Token:         "tok",
+		RequestID:     8,
+	}, notify, zerolog.Nop())
+
+	if len(*payloads) != 1 {
+		t.Fatalf("unexpected payloads: %#v", *payloads)
+	}
+	got := (*payloads)[0]
+	if got.Ok || got.HTTPStatus != http.StatusForbidden || got.RequestID != 8 {
+		t.Fatalf("unexpected payload: %+v", got)
+	}
+}

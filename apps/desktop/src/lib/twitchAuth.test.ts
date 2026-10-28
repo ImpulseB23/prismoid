@@ -12,6 +12,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 
 import {
   banUser,
+  clearChat,
   deleteMessage,
   sendMessage,
   timeoutUser,
@@ -90,6 +91,14 @@ describe("moderation commands", () => {
     expect(invokeMock).toHaveBeenCalledWith("twitch_delete_message", {
       channelId: "c1",
       messageId: "m1",
+    });
+  });
+
+  it("invokes twitch_clear_chat", async () => {
+    invokeMock.mockResolvedValueOnce(undefined);
+    await clearChat("c1");
+    expect(invokeMock).toHaveBeenCalledWith("twitch_clear_chat", {
+      channelId: "c1",
     });
   });
 });
