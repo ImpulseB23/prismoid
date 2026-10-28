@@ -348,7 +348,7 @@ func TestDispatchCommand_RoutesResubscribe(t *testing.T) {
 	session.Configure("u", "old", "cid")
 	cmd := control.Command{Cmd: "twitch_resubscribe", Token: "regranted"}
 
-	DispatchCommand(context.Background(), cmd, map[string]context.CancelFunc{}, session, idleFirsts(), make(chan []byte, 1), func(string, any) {}, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, map[string]context.CancelFunc{}, session, idleFirsts(), idleCosmetics(t), make(chan []byte, 1), func(string, any) {}, zerolog.Nop())
 
 	if got := session.AccessToken(); got != "regranted" {
 		t.Errorf("dispatch did not route twitch_resubscribe: token = %q", got)
