@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.7.0](https://github.com/ImpulseB23/prismoid/compare/v0.6.0...v0.7.0) (2026-10-28)
+
+
+### Features
+
+* bigger default size that follows display scale ([#245](https://github.com/ImpulseB23/prismoid/issues/245)) ([0e3ac94](https://github.com/ImpulseB23/prismoid/commit/0e3ac9442e51d0cb5a39ce72dd9e85302e6142ea))
+* chat modes and mod tools in one command center ([#251](https://github.com/ImpulseB23/prismoid/issues/251)) ([d8a8abf](https://github.com/ImpulseB23/prismoid/commit/d8a8abf76efc823aebb706021f408820d8c206cb))
+* copy logs, reset and uninstall ([#238](https://github.com/ImpulseB23/prismoid/issues/238)) ([1aa19b4](https://github.com/ImpulseB23/prismoid/commit/1aa19b4e2b06b499bc1a8359e8d9d3340dfce9f1))
+* copy logs, reset and uninstall in settings ([#261](https://github.com/ImpulseB23/prismoid/issues/261)) ([0f89a25](https://github.com/ImpulseB23/prismoid/commit/0f89a2558ff89cbed8ce5171e362b15823df9dd2))
+* custom title bar and window buttons ([#247](https://github.com/ImpulseB23/prismoid/issues/247)) ([99b78d7](https://github.com/ImpulseB23/prismoid/commit/99b78d7f7979339800433837bc66f156514a67a8))
+* emote card redesign and hover tooltip ([#257](https://github.com/ImpulseB23/prismoid/issues/257)) ([31e9d54](https://github.com/ImpulseB23/prismoid/commit/31e9d5476f9d8a7b43a7e1105561e34a7e72e2c0))
+* emote creator in emote data ([#236](https://github.com/ImpulseB23/prismoid/issues/236)) ([558d05e](https://github.com/ImpulseB23/prismoid/commit/558d05e3c762073a3a5bc33abcc55639763398b2))
+* emote picker with set rail and preview ([#258](https://github.com/ImpulseB23/prismoid/issues/258)) ([86c956c](https://github.com/ImpulseB23/prismoid/commit/86c956c66fcebe6830475e5059a11471a0841a58))
+* first message label on the right of the row ([#264](https://github.com/ImpulseB23/prismoid/issues/264)) ([57b4cf3](https://github.com/ImpulseB23/prismoid/commit/57b4cf3c6325ce1278c2c361adc2f73388d08915))
+* flush composer with countdowns, account avatar in the header ([#249](https://github.com/ImpulseB23/prismoid/issues/249)) ([3f96896](https://github.com/ImpulseB23/prismoid/commit/3f968962905e8a176e737c62b3b6087f541d5ba1))
+* followed live channels in the picker ([#235](https://github.com/ImpulseB23/prismoid/issues/235)) ([676f090](https://github.com/ImpulseB23/prismoid/commit/676f09010a95629113a0686024cdbe8d5dc31c79))
+* fullscreen hides the header, livelier header icons ([#248](https://github.com/ImpulseB23/prismoid/issues/248)) ([a35b212](https://github.com/ImpulseB23/prismoid/commit/a35b212d19cd074ba1eb46ad894d5e393b2f3e90))
+* load popups before they open ([#259](https://github.com/ImpulseB23/prismoid/issues/259)) ([e0c81a1](https://github.com/ImpulseB23/prismoid/commit/e0c81a167a4d2a521accd3fb9d8cb04645d7965b))
+* mentions from history across tabs, two-tap clear ([#253](https://github.com/ImpulseB23/prismoid/issues/253)) ([437fac7](https://github.com/ImpulseB23/prismoid/commit/437fac7b8408ef7a64dcccd460218164cdc07d24))
+* palette style popups for search, mentions, threads and user cards ([#256](https://github.com/ImpulseB23/prismoid/issues/256)) ([8f8c131](https://github.com/ImpulseB23/prismoid/commit/8f8c131c795af1dfb22b26c30da8141743a52bb0))
+* prismoid theme and prism colors ([#246](https://github.com/ImpulseB23/prismoid/issues/246)) ([c0eddeb](https://github.com/ImpulseB23/prismoid/commit/c0eddeb992edea3e21106b5151a0e38423a574b2))
+* recents only on pick or after a while on screen ([#263](https://github.com/ImpulseB23/prismoid/issues/263)) ([a318af6](https://github.com/ImpulseB23/prismoid/commit/a318af6c7133aba08a50842cdbb52fa2ea9bc52c))
+* right-click menus, more button and mods delete own messages ([#260](https://github.com/ImpulseB23/prismoid/issues/260)) ([1bd5546](https://github.com/ImpulseB23/prismoid/commit/1bd554693da371ad6880fe11efdeeb03fb5bde52))
+* settings as a full page with sections ([#250](https://github.com/ImpulseB23/prismoid/issues/250)) ([0368679](https://github.com/ImpulseB23/prismoid/commit/03686795bd8d98064744d3c401b2ba7dc4414816))
+* setup walks through settings as part of the tour ([#252](https://github.com/ImpulseB23/prismoid/issues/252)) ([032694b](https://github.com/ImpulseB23/prismoid/commit/032694bb5948578b22e9c65d2d411a615e0eb4ea))
+* show versions without a trailing .0 ([#262](https://github.com/ImpulseB23/prismoid/issues/262)) ([4cf3a50](https://github.com/ImpulseB23/prismoid/commit/4cf3a502c45db9fd8ddfe2c2ffc6edc0eda9f302))
+* sliding tab underline and small motion pass ([#255](https://github.com/ImpulseB23/prismoid/issues/255)) ([3be6e7c](https://github.com/ImpulseB23/prismoid/commit/3be6e7c2c5cefe05f6c1c2cb67947c5fd76bce1c))
+* stream bar chat pulse and stat switches ([#254](https://github.com/ImpulseB23/prismoid/issues/254)) ([ace51f2](https://github.com/ImpulseB23/prismoid/commit/ace51f286d3b0a0a9ec7f273d0dd09545828c242))
+* who added a 7tv emote and when ([#237](https://github.com/ImpulseB23/prismoid/issues/237)) ([fd460cb](https://github.com/ImpulseB23/prismoid/commit/fd460cb372daeeb77da388e1c8fdee1d33514074))
+
+
+### Bug Fixes
+
+* first message flag survives reloads ([#244](https://github.com/ImpulseB23/prismoid/issues/244)) ([58ac5f0](https://github.com/ImpulseB23/prismoid/commit/58ac5f022e188ac3cf5253922e9a04f17a1b5c38))
+* viewer count hint still said clicking hides it ([#265](https://github.com/ImpulseB23/prismoid/issues/265)) ([80e4903](https://github.com/ImpulseB23/prismoid/commit/80e4903fdd23be6568f4201fbbebba43b9a761e4))
+
 ## [0.6.0](https://github.com/ImpulseB23/prismoid/compare/v0.5.0...v0.6.0) (2026-10-28)
 
 
