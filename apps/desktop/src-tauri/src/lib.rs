@@ -71,6 +71,7 @@ pub fn run() {
     builder
         .plugin(logging::plugin())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(WINDOW_STATE)
