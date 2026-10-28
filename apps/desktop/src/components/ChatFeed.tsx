@@ -43,7 +43,7 @@ import {
 import { isIgnored, setIgnored, settings } from "../stores/settingsStore";
 import { isHighlighted, isSpotlit } from "../lib/highlight";
 import { createMentionAlert, playChime } from "../lib/mentionAlert";
-import { recordMention } from "../stores/mentionsStore";
+import { isMentionFor, recordMention } from "../stores/mentionsStore";
 import { openThread } from "../stores/threadStore";
 import Thread from "./Thread";
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
@@ -502,14 +502,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
           noteUnread(m.channel_id);
         }
         if (
-          !m.notice &&
-          m.username !== props.login &&
-          !ignored.includes(m.username) &&
-          isHighlighted(
-            m.message_text,
-            props.login,
-            settings().highlightPhrases,
-          )
+          isMentionFor(m, props.login, settings().highlightPhrases, ignored)
         ) {
           recordMention(m);
           if (settings().mentionAlerts) mentionAlert.notify();
