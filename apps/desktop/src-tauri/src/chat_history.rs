@@ -41,7 +41,9 @@ CREATE TABLE IF NOT EXISTS messages (
     PRIMARY KEY (channel_id, message_id)
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS messages_by_time ON messages (channel_id, effective_ts, arrival_seq);
-CREATE INDEX IF NOT EXISTS messages_by_user ON messages (channel_id, user_id);
+-- Replaced by messages_by_user_time, which also serves the user card in order.
+DROP INDEX IF EXISTS messages_by_user;
+CREATE INDEX IF NOT EXISTS messages_by_user_time ON messages (channel_id, user_id, effective_ts, arrival_seq);
 CREATE INDEX IF NOT EXISTS messages_by_author ON messages (user_id, effective_ts);
 -- Messages Twitch flagged as a chatter's first in the channel. Kept apart
 -- from `messages` so a flag can land before or after its message.
@@ -65,11 +67,19 @@ pub struct StoredMessage {
 
 type Reply = oneshot::Sender<Vec<StoredMessage>>;
 
+/// Which rows of a channel a load reads.
+enum Query {
+    Tail,
+    /// Only what this user wrote.
+    User(String),
+}
+
 enum Op {
     Store(Vec<UnifiedMessage>),
     Apply(Vec<ChatEvent>),
     Load {
         channel_id: String,
+        query: Query,
         limit: u32,
         reply: Reply,
     },
@@ -152,6 +162,20 @@ impl History {
 
     /// The newest `limit` rows of a channel, oldest first.
     pub async fn load(&self, channel_id: String, limit: u32) -> Vec<StoredMessage> {
+        self.query(channel_id, Query::Tail, limit).await
+    }
+
+    /// The newest `limit` rows `user_id` wrote in a channel, oldest first.
+    pub async fn load_user(
+        &self,
+        channel_id: String,
+        user_id: String,
+        limit: u32,
+    ) -> Vec<StoredMessage> {
+        self.query(channel_id, Query::User(user_id), limit).await
+    }
+
+    async fn query(&self, channel_id: String, query: Query, limit: u32) -> Vec<StoredMessage> {
         let Some(tx) = &self.tx else {
             return Vec::new();
         };
@@ -159,6 +183,7 @@ impl History {
         if tx
             .send(Msg::Op(Op::Load {
                 channel_id,
+                query,
                 limit,
                 reply,
             }))
@@ -221,6 +246,18 @@ pub async fn chat_history<R: Runtime>(
     history.load(channel_id, limit).await
 }
 
+/// What one user said recently in a channel, for their user card.
+#[tauri::command]
+pub async fn chat_history_user<R: Runtime>(
+    app: AppHandle<R>,
+    channel_id: String,
+    user_id: String,
+    limit: u32,
+) -> Vec<StoredMessage> {
+    let history = app.state::<History>().inner().clone();
+    history.load_user(channel_id, user_id, limit).await
+}
+
 struct Store {
     conn: Connection,
     /// Inserts per channel since its last count prune.
@@ -228,7 +265,7 @@ struct Store {
     /// Imports announced but not yet delivered, per channel.
     importing: HashMap<String, u32>,
     /// Loads parked until their channel's imports are in.
-    waiting: HashMap<String, Vec<(u32, Reply)>>,
+    waiting: HashMap<String, Vec<(Query, u32, Reply)>>,
 }
 
 impl Store {
@@ -265,6 +302,7 @@ impl Store {
             Op::Apply(events) => self.apply(&events),
             Op::Load {
                 channel_id,
+                query,
                 limit,
                 reply,
             } => {
@@ -272,9 +310,9 @@ impl Store {
                     self.waiting
                         .entry(channel_id)
                         .or_default()
-                        .push((limit, reply));
+                        .push((query, limit, reply));
                 } else {
-                    self.answer(&channel_id, limit, reply);
+                    self.answer(&channel_id, &query, limit, reply);
                 }
                 Ok(())
             }
@@ -300,8 +338,10 @@ impl Store {
                 });
                 if outstanding == Some(0) {
                     self.importing.remove(&channel_id);
-                    for (limit, reply) in self.waiting.remove(&channel_id).unwrap_or_default() {
-                        self.answer(&channel_id, limit, reply);
+                    for (query, limit, reply) in
+                        self.waiting.remove(&channel_id).unwrap_or_default()
+                    {
+                        self.answer(&channel_id, &query, limit, reply);
                     }
                 }
                 result
@@ -324,8 +364,12 @@ impl Store {
         }
     }
 
-    fn answer(&self, channel_id: &str, limit: u32, reply: Reply) {
-        let rows = self.load(channel_id, limit).unwrap_or_else(|e| {
+    fn answer(&self, channel_id: &str, query: &Query, limit: u32, reply: Reply) {
+        let rows = match query {
+            Query::Tail => self.load(channel_id, limit),
+            Query::User(user_id) => self.load_user(channel_id, user_id, limit),
+        };
+        let rows = rows.unwrap_or_else(|e| {
             tracing::error!(error = %e, channel_id, "chat history load failed");
             Vec::new()
         });
@@ -453,29 +497,25 @@ impl Store {
              WHERE m.channel_id = ?1 \
              ORDER BY m.effective_ts DESC, m.arrival_seq DESC LIMIT ?2",
         )?;
-        let rows = stmt.query_map(params![channel_id, limit], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, bool>(1)?,
-                r.get::<_, bool>(2)?,
-            ))
-        })?;
-        let mut out = Vec::new();
-        for row in rows {
-            let (body, deleted, first_message) = row?;
-            // A row written by an older build with a different message
-            // shape is skipped rather than failing the whole load.
-            match serde_json::from_str(&body) {
-                Ok(message) => out.push(StoredMessage {
-                    message,
-                    deleted,
-                    first_message,
-                }),
-                Err(e) => tracing::warn!(error = %e, "skipping unreadable history row"),
-            }
-        }
-        out.reverse();
-        Ok(out)
+        read_newest_first(&mut stmt, params![channel_id, limit])
+    }
+
+    /// Walks `messages_by_user_time` backwards from the user's newest row in
+    /// the channel, so it stops after `limit` rows without sorting.
+    fn load_user(
+        &self,
+        channel_id: &str,
+        user_id: &str,
+        limit: u32,
+    ) -> rusqlite::Result<Vec<StoredMessage>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT m.body, m.deleted, f.message_id IS NOT NULL FROM messages m \
+             LEFT JOIN first_messages f \
+             ON f.channel_id = m.channel_id AND f.message_id = m.message_id \
+             WHERE m.channel_id = ?1 AND m.user_id = ?2 \
+             ORDER BY m.effective_ts DESC, m.arrival_seq DESC LIMIT ?3",
+        )?;
+        read_newest_first(&mut stmt, params![channel_id, user_id, limit])
     }
 
     /// One range seek on `messages_by_author`. The table is WITHOUT ROWID,
@@ -528,6 +568,37 @@ impl Store {
         )?;
         Ok(())
     }
+}
+
+/// Decodes `(body, deleted)` rows selected newest first and returns them
+/// oldest first.
+fn read_newest_first(
+    stmt: &mut rusqlite::CachedStatement<'_>,
+    params: impl rusqlite::Params,
+) -> rusqlite::Result<Vec<StoredMessage>> {
+    let rows = stmt.query_map(params, |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, bool>(1)?,
+            r.get::<_, bool>(2)?,
+        ))
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (body, deleted, first_message) = row?;
+        // A row written by an older build with a different message
+        // shape is skipped rather than failing the whole load.
+        match serde_json::from_str(&body) {
+            Ok(message) => out.push(StoredMessage {
+                message,
+                deleted,
+                first_message,
+            }),
+            Err(e) => tracing::warn!(error = %e, "skipping unreadable history row"),
+        }
+    }
+    out.reverse();
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -643,15 +714,125 @@ mod tests {
     }
 
     fn load_op(channel: &str) -> (Op, oneshot::Receiver<Vec<StoredMessage>>) {
+        query_op(channel, Query::Tail)
+    }
+
+    fn query_op(channel: &str, query: Query) -> (Op, oneshot::Receiver<Vec<StoredMessage>>) {
         let (reply, rx) = oneshot::channel();
         (
             Op::Load {
                 channel_id: channel.into(),
+                query,
                 limit: 10,
                 reply,
             },
             rx,
         )
+    }
+
+    #[test]
+    fn user_load_returns_their_newest_rows_in_the_channel() {
+        let mut s = store();
+        s.store(&[
+            msg("a", "c", "u1", 1, 0),
+            msg("b", "c", "u2", 2, 1),
+            msg("c", "c", "u1", 3, 2),
+            msg("d", "c", "u1", 3, 3),
+            msg("x", "other", "u1", 4, 4),
+        ])
+        .unwrap();
+        s.apply(&[ChatEvent::MessageDeleted {
+            channel_id: "c".into(),
+            message_id: "d".into(),
+            target_user_id: "u1".into(),
+        }])
+        .unwrap();
+        let rows = s.load_user("c", "u1", 2).unwrap();
+        assert_eq!(ids(&rows), ["c", "d"]);
+        assert_eq!(
+            rows.iter().map(|r| r.deleted).collect::<Vec<_>>(),
+            [false, true]
+        );
+        assert!(s.load_user("c", "nobody", 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn user_load_seeks_the_user_index() {
+        let s = store();
+        let plan: Vec<String> = s
+            .conn
+            .prepare(
+                "EXPLAIN QUERY PLAN SELECT body, deleted FROM messages \
+                 WHERE channel_id = ?1 AND user_id = ?2 \
+                 ORDER BY effective_ts DESC, arrival_seq DESC LIMIT ?3",
+            )
+            .unwrap()
+            .query_map(params!["c", "u", 10], |r| r.get::<_, String>(3))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert!(
+            plan.iter()
+                .any(|d| d.contains("INDEX messages_by_user_time"))
+                && !plan.iter().any(|d| d.contains("TEMP B-TREE")),
+            "{plan:?}"
+        );
+    }
+
+    #[test]
+    fn schema_swaps_the_old_user_index() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn.execute_batch("CREATE INDEX messages_by_user ON messages (channel_id, user_id)")
+            .unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        let names: Vec<String> = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'messages_by_user%'")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert_eq!(names, ["messages_by_user_time"]);
+    }
+
+    #[test]
+    fn user_load_waits_for_a_pending_import() {
+        let mut s = store();
+        s.handle(Op::ImportBegin("c".into()));
+        let (load, mut rx) = query_op("c", Query::User("u".into()));
+        s.handle(load);
+        assert!(rx.try_recv().is_err());
+        s.handle(Op::Import {
+            channel_id: "c".into(),
+            rows: vec![
+                StoredMessage {
+                    message: msg("mine", "c", "u", 1, 0),
+                    deleted: false,
+                    first_message: false,
+                },
+                StoredMessage {
+                    message: msg("theirs", "c", "v", 2, 1),
+                    deleted: false,
+                    first_message: false,
+                },
+            ],
+        });
+        assert_eq!(ids(&rx.try_recv().unwrap()), ["mine"]);
+    }
+
+    #[tokio::test]
+    async fn user_load_goes_through_the_history_thread() {
+        let dir = tempfile::tempdir().unwrap();
+        let history = History::open(dir.path()).unwrap();
+        history.store(&[msg("a", "c", "u", 1, 0), msg("b", "c", "v", 2, 1)]);
+        let rows = history.load_user("c".into(), "u".into(), 10).await;
+        assert_eq!(ids(&rows), ["a"]);
+        history.close().await.unwrap();
+        assert!(History::default()
+            .load_user("c".into(), "u".into(), 10)
+            .await
+            .is_empty());
     }
 
     #[test]
@@ -757,6 +938,24 @@ mod tests {
                 ("b".to_string(), false)
             ]
         );
+    }
+
+    #[test]
+    fn user_load_keeps_first_flags() {
+        let mut s = store();
+        s.handle(Op::MarkFirst {
+            channel_id: "c".into(),
+            message_id: "a".into(),
+        });
+        s.store(&[msg("a", "c", "u", 1, 0), msg("b", "c", "u", 2, 1)])
+            .unwrap();
+        let flags: Vec<_> = s
+            .load_user("c", "u", 10)
+            .unwrap()
+            .iter()
+            .map(|r| (r.message.id.clone(), r.first_message))
+            .collect();
+        assert_eq!(flags, [("a".to_string(), true), ("b".to_string(), false)]);
     }
 
     #[test]
