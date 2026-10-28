@@ -17,25 +17,20 @@ import {
 } from "solid-js";
 import {
   formatChannelError,
-  getFollowedLive,
   normalizeLogin,
   searchChannels,
   type ChannelSearchResult,
   type FollowedLive,
 } from "../lib/twitchChannel";
 import { formatViewers } from "../lib/streamInfo";
-import { missingScopes } from "../stores/authStore";
 import {
   forgetRecentChannel,
   recentChannels,
   selectChannel,
   type RecentChannel,
 } from "../stores/channelStore";
-import {
-  ensureUserInfo,
-  userInfo,
-  userInfoRevision,
-} from "../stores/userInfoStore";
+import { userInfo, userInfoRevision } from "../stores/userInfoStore";
+import { followedLive, liveState } from "../stores/pickerStore";
 
 export interface ChannelPickerProps {
   open: boolean;
@@ -43,8 +38,6 @@ export interface ChannelPickerProps {
 }
 
 const SEARCH_DEBOUNCE_MS = 200;
-
-type LiveState = "idle" | "loading" | "ready" | "needs_scope" | "failed";
 
 type Row =
   | { kind: "live"; channel: FollowedLive }
@@ -58,16 +51,13 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
   const [error, setError] = createSignal<string | null>(null);
   const [results, setResults] = createSignal<ChannelSearchResult[]>([]);
   const [searching, setSearching] = createSignal(false);
-  const [live, setLive] = createSignal<FollowedLive[]>([]);
-  const [liveState, setLiveState] = createSignal<LiveState>("idle");
   let inputRef: HTMLInputElement | undefined;
   let searchSeq = 0;
-  let liveSeq = 0;
 
   const typed = () => query().trim().length > 0;
   const showLive = () =>
     !typed() && (liveState() === "ready" || liveState() === "needs_scope");
-  const liveRows = createMemo(() => (typed() ? [] : live()));
+  const liveRows = createMemo(() => (typed() ? [] : followedLive()));
 
   const recents = createMemo(() => {
     const q = query().trim().toLowerCase().replace(/^@/, "");
@@ -91,41 +81,6 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
         .map((channel): Row => ({ kind: "search", channel })),
     ];
   });
-
-  // Fetched on every open since live state goes stale quickly. A grant
-  // without the follows scope gets a reconnect hint instead of a call
-  // that would fail.
-  createEffect(
-    on(
-      () => props.open,
-      (open) => {
-        const seq = ++liveSeq;
-        setLive([]);
-        if (!open) {
-          setLiveState("idle");
-          return;
-        }
-        if (missingScopes().includes("user:read:follows")) {
-          setLiveState("needs_scope");
-          return;
-        }
-        setLiveState("loading");
-        getFollowedLive().then(
-          (found) => {
-            if (seq !== liveSeq) return;
-            ensureUserInfo(found.map((c) => c.id));
-            setLive(found);
-            setLiveState("ready");
-          },
-          (e: unknown) => {
-            if (seq !== liveSeq) return;
-            setLiveState("failed");
-            console.error("followed live", e);
-          },
-        );
-      },
-    ),
-  );
 
   // Debounced Helix search. A sequence number drops responses that come
   // back after the query moved on.

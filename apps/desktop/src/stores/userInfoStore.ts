@@ -14,6 +14,11 @@ export const NEW_ACCOUNT_DAYS = 7;
 export interface UserInfoStore {
   /** Queues ids not yet known; resolves once the batch they ride in lands. */
   ensure: (ids: Iterable<string>) => void;
+  /**
+   * Like `ensure` but sends at once, for something waiting to show these
+   * profiles. Settles when they have landed or failed; never rejects.
+   */
+  load: (ids: Iterable<string>) => Promise<void>;
   info: (id: string) => UserInfo | undefined;
   /** Bumps whenever new profiles arrive, for memos keyed on it. */
   revision: () => number;
@@ -32,6 +37,7 @@ export function createUserInfoStore(
   const [revision, setRevision] = createSignal(0);
   let scheduled = false;
   let inflight: Promise<void> = Promise.resolve();
+  const pending = new Map<string, Promise<void>>();
 
   async function send(ids: string[]): Promise<void> {
     try {
@@ -49,9 +55,16 @@ export function createUserInfoStore(
     scheduled = false;
     const batches: Promise<void>[] = [];
     while (queue.length > 0) {
-      batches.push(send(queue.splice(0, USER_INFO_BATCH)));
+      const ids = queue.splice(0, USER_INFO_BATCH);
+      const batch = send(ids).finally(() => {
+        for (const id of ids) pending.delete(id);
+      });
+      for (const id of ids) pending.set(id, batch);
+      batches.push(batch);
     }
-    inflight = Promise.all(batches).then(() => {});
+    if (batches.length > 0) {
+      inflight = Promise.all([inflight, ...batches]).then(() => {});
+    }
   }
 
   function ensure(ids: Iterable<string>): void {
@@ -66,8 +79,16 @@ export function createUserInfoStore(
     }
   }
 
+  async function load(ids: Iterable<string>): Promise<void> {
+    const list = [...ids];
+    ensure(list);
+    if (queue.length > 0) drain();
+    await Promise.all(list.map((id) => pending.get(id)));
+  }
+
   return {
     ensure,
+    load,
     info: (id) => known.get(id),
     revision,
     flush: () => inflight,
@@ -99,5 +120,6 @@ export function formatJoined(createdAt: string, now: number): string {
 
 const defaultStore = createUserInfoStore();
 export const ensureUserInfo = defaultStore.ensure;
+export const loadUserInfo = defaultStore.load;
 export const userInfo = defaultStore.info;
 export const userInfoRevision = defaultStore.revision;

@@ -83,6 +83,51 @@ describe("userInfoStore", () => {
     await store.flush();
     expect(store.info("1")).toBeDefined();
   });
+
+  it("load sends at once and settles when the profiles land", async () => {
+    const calls: string[][] = [];
+    const sched = manualSchedule();
+    const store = createUserInfoStore(async (ids) => {
+      calls.push(ids);
+      return ids.map((id) => user(id));
+    }, sched.schedule);
+    store.ensure(["1"]);
+    await store.load(["1", "2"]);
+    expect(calls).toEqual([["1", "2"]]);
+    expect(store.info("2")?.login).toBe("u2");
+    sched.run();
+    await store.load(["2"]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("load joins a batch already in flight", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const fetch = vi.fn(async (ids: string[]) => {
+      await gate;
+      return ids.map((id) => user(id));
+    });
+    const store = createUserInfoStore(fetch, manualSchedule().schedule);
+    const first = store.load(["1"]);
+    let done = false;
+    const second = store.load(["1"]).then(() => (done = true));
+    await Promise.resolve();
+    expect(done).toBe(false);
+    release();
+    await Promise.all([first, second]);
+    expect(done).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("load settles without rejecting when the fetch fails", async () => {
+    const store = createUserInfoStore(async () => {
+      throw new Error("503");
+    }, manualSchedule().schedule);
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await expect(store.load(["1"])).resolves.toBeUndefined();
+    spy.mockRestore();
+    expect(store.info("1")).toBeUndefined();
+  });
 });
 
 describe("account age", () => {
