@@ -1,5 +1,5 @@
-// Chat send input pinned below the message feed. Single-line: Enter
-// sends, Tab completes the emote or @mention under the caret, Up and Down
+// Chat send box pinned below the message feed. It wraps and grows for long
+// messages, but Enter always sends (Twitch messages are one line), Tab completes the emote or @mention under the caret, Up and Down
 // walk through sent messages, and the inline status row surfaces drop
 // reasons or transport errors from the Tauri command.
 
@@ -11,6 +11,7 @@ import {
   createMemo,
   createSignal,
   on,
+  onCleanup,
 } from "solid-js";
 import {
   MAX_CHAT_MESSAGE_BYTES,
@@ -48,7 +49,15 @@ import {
   replyTarget,
 } from "../stores/composerStore";
 import { allEmotes, emoteRevision } from "../stores/emoteStore";
-import { moderationNeedsReconnect } from "../stores/authStore";
+import { currentUserId, moderationNeedsReconnect } from "../stores/authStore";
+import { chatSettings } from "../stores/chatSettingsStore";
+import { modActionsFor } from "../stores/modLogStore";
+import {
+  COUNTER_FROM,
+  bytesLeft,
+  slowModeLeft,
+  timeoutLeft,
+} from "../lib/composerMeta";
 import { canModerate } from "../stores/roleStore";
 import { formatSeconds } from "../lib/slashCommands";
 import EmotePicker from "./EmotePicker";
@@ -79,7 +88,7 @@ const MessageInput: Component<Props> = (props) => {
   // Escape hides suggestions for the word being typed; any edit re-arms.
   const [dismissed, setDismissed] = createSignal(false);
   const [pickerOpen, setPickerOpen] = createSignal(false);
-  let inputEl: HTMLInputElement | undefined;
+  let inputEl: HTMLTextAreaElement | undefined;
   // Per-input monotonic counter. Pending-entry mutations are already
   // safely keyed by `local_id`, but the inline status string is shared
   // across submits, so a slower earlier rejection could otherwise stomp
@@ -91,10 +100,44 @@ const MessageInput: Component<Props> = (props) => {
   const history: string[] = [];
   let historyIndex = 0;
   let draft = "";
+  // When this user last sent in each channel, for the slow mode countdown.
+  const [lastSent, setLastSent] = createSignal(new Map<string, number>());
+  const [now, setNow] = createSignal(Date.now());
+
+  const role = () => {
+    const c = activeChannel();
+    if (c && c.id === currentUserId()) return "Streamer";
+    return canModerate() ? "Mod" : null;
+  };
+  const slowLeft = () => {
+    const c = activeChannel();
+    return c
+      ? slowModeLeft(
+          chatSettings(),
+          lastSent().get(c.id),
+          now(),
+          role() !== null,
+        )
+      : 0;
+  };
+  const timedOutLeft = () => {
+    const c = activeChannel();
+    const me = currentUserId();
+    return c && me ? timeoutLeft(modActionsFor(me), c.id, now()) : 0;
+  };
+  const left = () => bytesLeft(text());
+
+  // Ticks once a second only while a countdown is on screen.
+  createEffect(() => {
+    if (slowLeft() === 0 && timedOutLeft() === 0) return;
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    onCleanup(() => clearInterval(tick));
+  });
 
   const canSend = () =>
     activeChannel() !== null &&
     !channelBanned() &&
+    slowLeft() === 0 &&
     normalizeOutgoing(text()) !== null;
 
   const word = createMemo(() => wordAtCaret(text(), caret()));
@@ -239,6 +282,10 @@ const MessageInput: Component<Props> = (props) => {
       }
       body = `/me ${parsed.command.text}`;
     }
+    if (slowLeft() > 0) {
+      setStatus(`Slow mode: wait ${formatSeconds(slowLeft())}.`);
+      return;
+    }
     const payload = normalizeOutgoing(body);
     if (!payload) {
       setStatus("Message is empty.");
@@ -276,6 +323,8 @@ const MessageInput: Component<Props> = (props) => {
       };
     }
     insertPending(optimistic);
+    setLastSent((m) => new Map(m).set(channel.id, Date.now()));
+    setNow(Date.now());
     const localId = optimistic.local_id!;
     const submitSeq = ++lastSubmitSeq;
 
@@ -305,14 +354,22 @@ const MessageInput: Component<Props> = (props) => {
         accept(list[Math.max(0, highlight())]!);
         return;
       case "ArrowDown":
-        e.preventDefault();
-        if (n > 0) setHighlight((h) => (h + 1) % n);
-        else recall(1);
+        if (n > 0) {
+          e.preventDefault();
+          setHighlight((h) => (h + 1) % n);
+        } else if (!wrapped()) {
+          e.preventDefault();
+          recall(1);
+        }
         return;
       case "ArrowUp":
-        e.preventDefault();
-        if (n > 0) setHighlight((h) => (h <= 0 ? n - 1 : h - 1));
-        else recall(-1);
+        if (n > 0) {
+          e.preventDefault();
+          setHighlight((h) => (h <= 0 ? n - 1 : h - 1));
+        } else if (!wrapped()) {
+          e.preventDefault();
+          recall(-1);
+        }
         return;
       case "Escape":
         if (n > 0) {
@@ -333,16 +390,22 @@ const MessageInput: Component<Props> = (props) => {
     }
   };
 
-  const syncCaret = (el: HTMLInputElement) => {
+  // A draft that wraps onto a second line keeps Up and Down for moving the
+  // caret between lines; a one-line draft uses them to walk history.
+  const wrapped = () => {
+    if (!inputEl) return false;
+    const line = parseFloat(getComputedStyle(inputEl).lineHeight);
+    return Number.isFinite(line) && inputEl.clientHeight > line * 1.5;
+  };
+
+  const syncCaret = (el: HTMLTextAreaElement) => {
     setCaret(el.selectionStart ?? el.value.length);
   };
 
   const placeholder = () => {
     const c = activeChannel();
     if (!c) return "Pick a channel to chat";
-    return channelBanned()
-      ? bannedText(c.display_name)
-      : `Message ${c.display_name}`;
+    return channelBanned() ? bannedText(c.display_name) : "Send a message";
   };
 
   return (
@@ -429,10 +492,10 @@ const MessageInput: Component<Props> = (props) => {
         )}
       </Show>
       <div class="composer__row">
-        <input
+        <textarea
           ref={(el) => (inputEl = el)}
           class="composer__input"
-          type="text"
+          rows={1}
           aria-label="Send a chat message"
           autocomplete="off"
           spellcheck={false}
@@ -508,6 +571,32 @@ const MessageInput: Component<Props> = (props) => {
           </svg>
         </button>
       </div>
+      <Show
+        when={
+          activeChannel() &&
+          (timedOutLeft() > 0 || slowLeft() > 0 || left() <= COUNTER_FROM)
+        }
+      >
+        <div class="composer__meta">
+          <Show
+            when={timedOutLeft() > 0 || slowLeft() > 0}
+            fallback={
+              <span
+                class="composer__count"
+                classList={{ "composer__count--over": left() < 0 }}
+              >
+                {left()}
+              </span>
+            }
+          >
+            <span class="composer__wait" role="timer">
+              {timedOutLeft() > 0
+                ? `Timed out, ${formatSeconds(timedOutLeft())} left`
+                : `Slow mode, ${formatSeconds(slowLeft())}`}
+            </span>
+          </Show>
+        </div>
+      </Show>
       <Show when={status()}>
         <div class="composer__status" role="status">
           {status()}

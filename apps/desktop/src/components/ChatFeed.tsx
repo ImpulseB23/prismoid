@@ -119,7 +119,8 @@ import { nameStyle } from "../lib/paint";
 import { shownPaint, syncPaints } from "../stores/paintStore";
 import { isLight, logo } from "../stores/themeStore";
 import MessagePieces from "./MessagePieces";
-import UserCard, { type CardUser } from "./UserCard";
+import UserCard from "./UserCard";
+import { cardUser, closeUserCard, openUserCard } from "../stores/userCardStore";
 import EmoteCard from "./EmoteCard";
 import ContextMenu from "./ContextMenu";
 
@@ -197,7 +198,6 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
   const [scrollTop, setScrollTop] = createSignal(0);
   const [stickToBottom, setStickToBottom] = createSignal(true);
   const [fontsLoaded, setFontsLoaded] = createSignal(false);
-  const [cardUser, setCardUser] = createSignal<CardUser | null>(null);
   // Monotonic index of the newest message the user had in view when they
   // scrolled away from the bottom; drives the "N new" count on the pill.
   const [readUpTo, setReadUpTo] = createSignal<number | null>(null);
@@ -267,7 +267,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
           anchor = null;
           setStickToBottom(true);
           setReadUpTo(null);
-          setCardUser(null);
+          closeUserCard();
         }
         if (id !== undefined && viewport().count === 0) {
           history.begin(loadHistory(id));
@@ -420,13 +420,18 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
   });
 
   createEffect(() => {
-    const { messages, totalHeight } = layout();
+    const { messages } = layout();
     if (!containerRef) return;
     const vh = viewportHeight();
     if (vh === 0) return;
 
     if (stickToBottom()) {
-      const target = Math.max(0, totalHeight - vh);
+      // The real bottom, padding included: the canvas height alone stops
+      // short by the feed's top and bottom padding.
+      const target = Math.max(
+        0,
+        containerRef.scrollHeight - containerRef.clientHeight,
+      );
       if (Math.abs(containerRef.scrollTop - target) > 0.5) {
         containerRef.scrollTop = target;
       }
@@ -632,14 +637,17 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
 
   const openCard = (msg: ChatMessage) => {
     if (msg.platform !== "Twitch" || !msg.platform_user_id) return;
-    setCardUser({
-      channel_id: msg.channel_id,
-      platform_user_id: msg.platform_user_id,
-      username: msg.username,
-      display_name: msg.display_name,
-      color: msg.color,
-      badges: msg.badges,
-    });
+    openUserCard(
+      {
+        channel_id: msg.channel_id,
+        platform_user_id: msg.platform_user_id,
+        username: msg.username,
+        display_name: msg.display_name,
+        color: msg.color,
+        badges: msg.badges,
+      },
+      msg.id,
+    );
   };
 
   // Right-click on a row: viewer actions for everyone, moderation for mods.
@@ -1216,11 +1224,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
         )}
       </Show>
 
-      <UserCard
-        user={cardUser()}
-        login={props.login}
-        onClose={() => setCardUser(null)}
-      />
+      <UserCard user={cardUser()} login={props.login} onClose={closeUserCard} />
       <EmoteCard />
       <ContextMenu />
       <Thread />

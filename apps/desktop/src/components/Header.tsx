@@ -1,5 +1,5 @@
-// Top chrome: logo, mentions, fullscreen, the settings gear and the window
-// buttons. Owns the dialogs those buttons open and the
+// Top chrome: logo, mentions, fullscreen, the account avatar, the settings
+// gear and the window buttons. Owns the dialogs those buttons open and the
 // global shortcuts that reach them. The dialogs render beside the header,
 // not in it, so the header can slide away in fullscreen.
 
@@ -37,6 +37,7 @@ import {
   setMentionsOpen,
   unreadMentions,
 } from "../stores/mentionsStore";
+import { cardOrigin, cardUser } from "../stores/userCardStore";
 import {
   chromeShown,
   customChrome,
@@ -50,6 +51,7 @@ import {
 } from "../stores/windowStore";
 import WindowControls from "./WindowControls";
 import Mentions from "./Mentions";
+import AccountAvatar from "./AccountAvatar";
 import ChatSearch from "./ChatSearch";
 import { updateState } from "../stores/updateStore";
 import {
@@ -235,7 +237,12 @@ const Header: Component<HeaderProps> = (props) => {
 
   // In fullscreen the bar stays down while anything opened from it is open.
   createEffect(() =>
-    holdChrome(settingsOpen() || searchOpen() || mentionsOpen()),
+    holdChrome(
+      settingsOpen() ||
+        searchOpen() ||
+        mentionsOpen() ||
+        (cardUser() !== null && cardOrigin() === "self"),
+    ),
   );
 
   onCleanup(() => {
@@ -467,6 +474,8 @@ const Header: Component<HeaderProps> = (props) => {
             </g>
           </svg>
         </button>
+
+        <AccountAvatar login={props.login} />
 
         <button
           type="button"
