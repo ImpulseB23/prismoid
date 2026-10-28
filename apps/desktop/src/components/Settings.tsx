@@ -473,10 +473,7 @@ const Settings: Component<SettingsProps> = (props) => {
             <label class="settings__row settings__row--toggle">
               <div class="settings__text">
                 <span class="settings__name">Viewer count</span>
-                <span class="settings__hint">
-                  How many people are watching. Clicking the number in the bar
-                  hides it too.
-                </span>
+                <span class="settings__hint">How many people are watching</span>
               </div>
               <input
                 type="checkbox"
