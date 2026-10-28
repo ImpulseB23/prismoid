@@ -468,6 +468,76 @@ const Settings: Component<SettingsProps> = (props) => {
                 }
               />
             </label>
+            <div class="settings__group-label">Stream bar</div>
+            <label class="settings__row settings__row--toggle">
+              <div class="settings__text">
+                <span class="settings__name">Viewer count</span>
+                <span class="settings__hint">
+                  How many people are watching. Clicking the number in the bar
+                  hides it too.
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                class="switch"
+                checked={!settings().hideViewers}
+                onChange={(e) =>
+                  run(updateSettings({ hideViewers: !e.currentTarget.checked }))
+                }
+              />
+            </label>
+            <label class="settings__row settings__row--toggle">
+              <div class="settings__text">
+                <span class="settings__name">Uptime</span>
+                <span class="settings__hint">
+                  How long the stream has been live
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                class="switch"
+                checked={!settings().hideUptime}
+                onChange={(e) =>
+                  run(updateSettings({ hideUptime: !e.currentTarget.checked }))
+                }
+              />
+            </label>
+            <label class="settings__row settings__row--toggle">
+              <div class="settings__text">
+                <span class="settings__name">Messages a minute</span>
+                <span class="settings__hint">
+                  Chat messages in the last 60 seconds, counted exactly
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                class="switch"
+                checked={!settings().hideChatRate}
+                onChange={(e) =>
+                  run(
+                    updateSettings({ hideChatRate: !e.currentTarget.checked }),
+                  )
+                }
+              />
+            </label>
+            <label class="settings__row settings__row--toggle">
+              <div class="settings__text">
+                <span class="settings__name">People chatting</span>
+                <span class="settings__hint">
+                  Different people who chatted in the last 5 minutes
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                class="switch"
+                checked={!settings().hideChatters}
+                onChange={(e) =>
+                  run(
+                    updateSettings({ hideChatters: !e.currentTarget.checked }),
+                  )
+                }
+              />
+            </label>
             <label class="settings__row settings__row--toggle">
               <div class="settings__text">
                 <span class="settings__name">Show 7TV name paints</span>

@@ -28,6 +28,11 @@ export interface Settings {
   showTimestamps: boolean;
   /** Shade every other row so long chats are easier to follow. */
   alternateRows: boolean;
+  /** Hide the live viewer count in the stream bar. */
+  hideViewers: boolean;
+  hideUptime: boolean;
+  hideChatRate: boolean;
+  hideChatters: boolean;
   /** Logins whose messages are hidden from the feed. */
   ignoredLogins: string[];
   /** Logins whose every message is highlighted. */
@@ -91,6 +96,10 @@ export const DEFAULT_SETTINGS: Settings = {
   textSize: DEFAULT_TEXT_SIZE,
   showTimestamps: false,
   alternateRows: false,
+  hideViewers: false,
+  hideUptime: false,
+  hideChatRate: false,
+  hideChatters: false,
   ignoredLogins: [],
   highlightUsers: [],
   highlightBadges: [],
@@ -263,6 +272,22 @@ function readSettings(storage: StorageLike | null): Settings {
         typeof p.alternateRows === "boolean"
           ? p.alternateRows
           : DEFAULT_SETTINGS.alternateRows,
+      hideViewers:
+        typeof p.hideViewers === "boolean"
+          ? p.hideViewers
+          : DEFAULT_SETTINGS.hideViewers,
+      hideUptime:
+        typeof p.hideUptime === "boolean"
+          ? p.hideUptime
+          : DEFAULT_SETTINGS.hideUptime,
+      hideChatRate:
+        typeof p.hideChatRate === "boolean"
+          ? p.hideChatRate
+          : DEFAULT_SETTINGS.hideChatRate,
+      hideChatters:
+        typeof p.hideChatters === "boolean"
+          ? p.hideChatters
+          : DEFAULT_SETTINGS.hideChatters,
       ignoredLogins: stringList(p.ignoredLogins),
       highlightUsers: stringList(p.highlightUsers),
       highlightBadges: stringList(p.highlightBadges).filter(
