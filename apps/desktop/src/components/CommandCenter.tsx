@@ -16,7 +16,11 @@ import {
 import { activeChannel } from "../stores/channelStore";
 import { currentUserId } from "../stores/authStore";
 import { canModerate } from "../stores/roleStore";
-import { chatSettings, loadChatSettings } from "../stores/chatSettingsStore";
+import {
+  chatSettings,
+  clearChatSettings,
+  loadChatSettings,
+} from "../stores/chatSettingsStore";
 import ChatModes from "./ChatModes";
 import ModLog from "./ModLog";
 import AutomodQueue from "./AutomodQueue";
@@ -48,9 +52,11 @@ const Chevron: Component = () => (
 );
 
 const CommandCenter: Component = () => {
+  // The only owner of the modes store: it follows the channel on screen.
   createEffect(() => {
     const id = activeChannel()?.id;
     if (id !== undefined && canModerate()) void loadChatSettings(id);
+    else clearChatSettings();
   });
 
   const [open, setOpen] = createSignal(false);

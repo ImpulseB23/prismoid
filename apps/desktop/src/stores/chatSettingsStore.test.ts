@@ -57,4 +57,40 @@ describe("chatSettingsStore", () => {
     store.clear();
     expect(store.settings()).toBeNull();
   });
+
+  it("drops another channel's modes as soon as a new channel loads", async () => {
+    let answer!: (s: ChatSettings) => void;
+    const store = createChatSettingsStore(
+      (channel) =>
+        channel === "c1"
+          ? Promise.resolve({ ...base, emote_mode: true })
+          : new Promise((r) => (answer = r)),
+      async () => base,
+    );
+    await store.load("c1");
+    expect(store.settings()?.emote_mode).toBe(true);
+    const pending = store.load("c2");
+    expect(store.settings()).toBeNull();
+    answer(base);
+    await pending;
+    expect(store.settings()).toEqual(base);
+  });
+
+  it("keeps the shown modes while the same channel reloads", async () => {
+    let answer!: (s: ChatSettings) => void;
+    let calls = 0;
+    const store = createChatSettingsStore(
+      () =>
+        calls++ === 0
+          ? Promise.resolve(base)
+          : new Promise((r) => (answer = r)),
+      async () => base,
+    );
+    await store.load("c1");
+    const pending = store.load("c1");
+    expect(store.settings()).toEqual(base);
+    answer({ ...base, slow_mode: true });
+    await pending;
+    expect(store.settings()?.slow_mode).toBe(true);
+  });
 });
