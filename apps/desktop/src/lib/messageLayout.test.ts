@@ -45,12 +45,12 @@ const msg = (over: Partial<ChatMessage> = {}) =>
 const badge = () => ({ title: "Moderator" }) as unknown as ResolvedBadge;
 
 describe("textMetrics", () => {
-  it("keeps the original proportions at the default size", () => {
+  it("keeps the 15px design proportions at the default size", () => {
     const m = textMetrics(DEFAULT_TEXT_SIZE);
-    expect(m.lineHeight).toBe(22);
-    expect(m.timestampSize).toBe(12);
-    expect(m.badgeSize).toBe(18);
-    expect(m.textFont).toContain("400 15px");
+    expect(m.lineHeight).toBe(29);
+    expect(m.timestampSize).toBe(16);
+    expect(m.badgeSize).toBe(24);
+    expect(m.textFont).toContain("400 20px");
   });
 
   it("scales every size up together and caches per size", () => {

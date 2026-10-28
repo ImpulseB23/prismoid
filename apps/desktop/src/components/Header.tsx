@@ -13,6 +13,7 @@ import {
 import { missingScopes } from "../stores/authStore";
 import {
   applyWindowSettings,
+  reapplyZoom,
   settings,
   textBigger,
   textReset,
@@ -65,6 +66,7 @@ const Header: Component<HeaderProps> = (props) => {
   const [fullscreen, setFullscreen] = createSignal(false);
   let unlisten: UnlistenFn | undefined;
   let unlistenResize: UnlistenFn | undefined;
+  let unlistenScale: UnlistenFn | undefined;
   // listen() is async, so a fast unmount can race the registration: if
   // onCleanup runs first, `unlisten` is still undefined and the listener
   // would leak when the promise resolves later. Track disposal explicitly
@@ -122,6 +124,19 @@ const Header: Component<HeaderProps> = (props) => {
         unlistenResize = next;
       })
       .catch(report("failed to subscribe to window resize"));
+    // Moving to a display with another Windows scale changes the base zoom.
+    getCurrentWindow()
+      .onScaleChanged(
+        () => void reapplyZoom().catch(report("failed to reapply zoom")),
+      )
+      .then((next) => {
+        if (disposed) {
+          next();
+          return;
+        }
+        unlistenScale = next;
+      })
+      .catch(report("failed to subscribe to scale changes"));
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "F11") {
@@ -187,6 +202,7 @@ const Header: Component<HeaderProps> = (props) => {
     disposed = true;
     unlisten?.();
     unlistenResize?.();
+    unlistenScale?.();
     unlisten = undefined;
   });
 

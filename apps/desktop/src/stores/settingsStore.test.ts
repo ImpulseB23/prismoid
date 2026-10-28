@@ -76,7 +76,8 @@ describe("settingsStore", () => {
     expect(JSON.parse(storage.data["prismoid.settings"]!)).toEqual({
       alwaysOnTop: true,
       zoom: 1,
-      textSize: 15,
+      textSize: 20,
+      v: 2,
       showTimestamps: false,
       alternateRows: false,
       ignoredLogins: [],
@@ -114,23 +115,25 @@ describe("settingsStore", () => {
     const a = appliers();
     const store = createSettingsStore(a, memStorage());
     await store.textBigger();
-    expect(store.settings().textSize).toBe(16);
+    expect(store.settings().textSize).toBe(22);
     expect(store.settings().zoom).toBe(1);
     expect(a.zooms).toEqual([]);
     for (let i = 0; i < TEXT_SIZES.length + 2; i++) await store.textSmaller();
     expect(store.settings().textSize).toBe(TEXT_SIZES[0]);
     await store.textReset();
-    expect(store.settings().textSize).toBe(15);
+    expect(store.settings().textSize).toBe(20);
 
     await store.update({ textSize: 17 });
     await store.textBigger();
-    expect(store.settings().textSize).toBe(16);
+    expect(store.settings().textSize).toBe(22);
 
     const odd = createSettingsStore(
       appliers(),
-      memStorage({ "prismoid.settings": JSON.stringify({ textSize: 99 }) }),
+      memStorage({
+        "prismoid.settings": JSON.stringify({ textSize: 99, v: 2 }),
+      }),
     );
-    expect(odd.settings().textSize).toBe(15);
+    expect(odd.settings().textSize).toBe(20);
   });
 
   it("leaves state untouched when the window call fails", async () => {
@@ -155,11 +158,32 @@ describe("settingsStore", () => {
     expect(store.settings().alwaysOnTop).toBe(false);
   });
 
+  it("migrates sizes saved before they became relative", () => {
+    const untouched = createSettingsStore(
+      appliers(),
+      memStorage({
+        "prismoid.settings": JSON.stringify({ zoom: 1, textSize: 15 }),
+      }),
+    );
+    expect(untouched.settings().zoom).toBe(1);
+    expect(untouched.settings().textSize).toBe(20);
+
+    const chosen = createSettingsStore(
+      appliers(),
+      memStorage({
+        "prismoid.settings": JSON.stringify({ zoom: 1.5, textSize: 18 }),
+      }),
+    );
+    expect(chosen.settings().zoom).toBe(1);
+    expect(chosen.settings().textSize).toBe(24);
+  });
+
   it("hydrates valid values and drops malformed ones", () => {
     const good = createSettingsStore(
       appliers(),
       memStorage({
         "prismoid.settings": JSON.stringify({
+          v: 2,
           alwaysOnTop: true,
           zoom: 1.5,
           showTimestamps: "yes",
@@ -174,7 +198,7 @@ describe("settingsStore", () => {
     expect(good.settings()).toEqual({
       alwaysOnTop: true,
       zoom: 1.5,
-      textSize: 15,
+      textSize: 20,
       showTimestamps: false,
       alternateRows: false,
       ignoredLogins: [],
@@ -196,7 +220,7 @@ describe("settingsStore", () => {
 
     const badZoom = createSettingsStore(
       appliers(),
-      memStorage({ "prismoid.settings": JSON.stringify({ zoom: 3.3 }) }),
+      memStorage({ "prismoid.settings": JSON.stringify({ zoom: 3.3, v: 2 }) }),
     );
     expect(badZoom.settings().zoom).toBe(1);
 
@@ -240,6 +264,7 @@ describe("settingsStore", () => {
       a,
       memStorage({
         "prismoid.settings": JSON.stringify({
+          v: 2,
           alwaysOnTop: true,
           zoom: 1.25,
           theme: "light",
@@ -255,7 +280,7 @@ describe("settingsStore", () => {
     const plain = createSettingsStore(b, memStorage());
     await plain.apply();
     expect(b.tops).toEqual([]);
-    expect(b.zooms).toEqual([]);
+    expect(b.zooms).toEqual([1]);
     expect(b.themes).toEqual(["dark"]);
 
     const c = appliers();

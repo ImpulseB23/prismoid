@@ -10,12 +10,18 @@ import { invoke } from "@tauri-apps/api/core";
 import type { StorageLike } from "./channelStore";
 import { parseDuration } from "../lib/slashCommands";
 import { DEFAULT_TEXT_SIZE, TEXT_SIZES } from "../lib/messageLayout";
+import { baseZoom, snapTo, TARGET_UI_SCALE } from "../lib/uiScale";
 
 const SETTINGS_KEY = "prismoid.settings";
+// Bumped when a stored value changes meaning. 2: zoom and text size became
+// relative to the bigger intended size (zoom 1 and text 20 are the new 100%).
+const SETTINGS_VERSION = 2;
+// Text sizes before version 2 used 15px as their 100%.
+const LEGACY_TEXT_DEFAULT = 15;
 
 export interface Settings {
   alwaysOnTop: boolean;
-  /** Whole-window zoom. */
+  /** Whole-window zoom on top of the display-aware base (see uiScale). */
   zoom: number;
   /** Chat message size in px, one of TEXT_SIZES. */
   textSize: number;
@@ -118,11 +124,16 @@ export interface SettingsStore {
   textReset: () => Promise<void>;
   /** Re-applies persisted preferences to the live window. Call once at boot. */
   apply: () => Promise<void>;
+  /** Re-applies zoom, for when the window moves to a display with another scale. */
+  reapplyZoom: () => Promise<void>;
 }
 
 const defaultAppliers: SettingsAppliers = {
   alwaysOnTop: (v) => getCurrentWindow().setAlwaysOnTop(v),
-  zoom: (v) => getCurrentWebview().setZoom(v),
+  zoom: async (v) =>
+    getCurrentWebview().setZoom(
+      v * baseZoom(await getCurrentWindow().scaleFactor()),
+    ),
   followBrowser: (v) => invoke("set_browser_follow", { enabled: v }),
   chatBacklog: (v) => invoke("set_chat_backlog", { enabled: v }),
   closeToTray: (v) => invoke("set_close_to_tray", { enabled: v }),
@@ -171,7 +182,11 @@ export function createSettingsStore(
       await appliers.theme(next.theme);
     }
     setSettings(next);
-    write(storage, SETTINGS_KEY, JSON.stringify(next));
+    write(
+      storage,
+      SETTINGS_KEY,
+      JSON.stringify({ ...next, v: SETTINGS_VERSION }),
+    );
   }
 
   function step(
@@ -189,7 +204,7 @@ export function createSettingsStore(
   async function apply(): Promise<void> {
     const s = settings();
     if (s.alwaysOnTop) await appliers.alwaysOnTop(true);
-    if (s.zoom !== 1) await appliers.zoom(s.zoom);
+    await appliers.zoom(s.zoom);
     if (s.followBrowser) await appliers.followBrowser(true);
     if (!s.chatBacklog) await appliers.chatBacklog(false);
     if (s.closeToTray) await appliers.closeToTray(true);
@@ -208,6 +223,7 @@ export function createSettingsStore(
     textSmaller: () => step("textSize", TEXT_SIZES, -1),
     textReset: () => update({ textSize: DEFAULT_TEXT_SIZE }),
     apply,
+    reapplyZoom: () => appliers.zoom(settings().zoom),
   };
 }
 
@@ -218,19 +234,14 @@ function readSettings(storage: StorageLike | null): Settings {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) return DEFAULT_SETTINGS;
     const p = parsed as Record<string, unknown>;
+    const legacy = p.v !== SETTINGS_VERSION;
     return {
       alwaysOnTop:
         typeof p.alwaysOnTop === "boolean"
           ? p.alwaysOnTop
           : DEFAULT_SETTINGS.alwaysOnTop,
-      zoom:
-        typeof p.zoom === "number" && ZOOM_LEVELS.includes(p.zoom)
-          ? p.zoom
-          : DEFAULT_SETTINGS.zoom,
-      textSize:
-        typeof p.textSize === "number" && TEXT_SIZES.includes(p.textSize)
-          ? p.textSize
-          : DEFAULT_SETTINGS.textSize,
+      zoom: readZoom(p.zoom, legacy),
+      textSize: readTextSize(p.textSize, legacy),
       showTimestamps:
         typeof p.showTimestamps === "boolean"
           ? p.showTimestamps
@@ -366,6 +377,7 @@ export const updateSettings = defaultStore.update;
 export const zoomIn = defaultStore.zoomIn;
 export const zoomOut = defaultStore.zoomOut;
 export const zoomReset = defaultStore.zoomReset;
+export const reapplyZoom = defaultStore.reapplyZoom;
 export const textBigger = defaultStore.textBigger;
 export const textSmaller = defaultStore.textSmaller;
 export const textReset = defaultStore.textReset;
@@ -409,4 +421,21 @@ export function setUserHighlighted(login: string, on: boolean): Promise<void> {
       ? [...current, login]
       : current.filter((l) => l !== login),
   });
+}
+
+// Before version 2 zoom was the raw webview factor. Someone who never
+// changed it starts at the new default; anyone who did keeps roughly the
+// size they chose, read against the base an unscaled display gets.
+function readZoom(v: unknown, legacy: boolean): number {
+  if (typeof v !== "number") return DEFAULT_SETTINGS.zoom;
+  if (!legacy) return ZOOM_LEVELS.includes(v) ? v : DEFAULT_SETTINGS.zoom;
+  return v === 1
+    ? DEFAULT_SETTINGS.zoom
+    : snapTo(ZOOM_LEVELS, v / TARGET_UI_SCALE);
+}
+
+function readTextSize(v: unknown, legacy: boolean): number {
+  if (typeof v !== "number") return DEFAULT_SETTINGS.textSize;
+  if (!legacy) return TEXT_SIZES.includes(v) ? v : DEFAULT_SETTINGS.textSize;
+  return snapTo(TEXT_SIZES, (v * DEFAULT_TEXT_SIZE) / LEGACY_TEXT_DEFAULT);
 }
