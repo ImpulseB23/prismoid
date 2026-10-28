@@ -72,8 +72,8 @@ describe("AutomodQueue", () => {
 
   it("lists held messages and allows one", async () => {
     manage.mockResolvedValue(undefined);
-    render(() => <AutomodQueue open onClose={() => {}} />);
-    expect(screen.getByRole("dialog").textContent).toContain("Nothing held");
+    render(() => <AutomodQueue />);
+    expect(document.body.textContent).toContain("Nothing held");
 
     recordHeldMessage(held("a"));
     recordHeldMessage(held("b", { reason: "blocked_link" }));
@@ -91,7 +91,7 @@ describe("AutomodQueue", () => {
   });
 
   it("shows another mod's decision and an expiry", () => {
-    render(() => <AutomodQueue open onClose={() => {}} />);
+    render(() => <AutomodQueue />);
     recordHeldMessage(held("a"));
     recordHeldMessage(held("b"));
     resolveHeldMessage({
@@ -121,7 +121,7 @@ describe("AutomodQueue", () => {
       code: "helix",
       message: "message not found",
     });
-    render(() => <AutomodQueue open onClose={() => {}} />);
+    render(() => <AutomodQueue />);
     recordHeldMessage(held("a"));
     fireEvent.click(screen.getByRole("button", { name: "Deny" }));
     expect(manage).toHaveBeenCalledWith("1", "a", "DENY");
@@ -144,16 +144,7 @@ describe("AutomodQueue", () => {
       login: "me",
       missing_scopes: ["moderator:manage:automod"],
     });
-    render(() => <AutomodQueue open onClose={() => {}} />);
-    expect(screen.getByRole("dialog").textContent).toContain(
-      "Reconnect in Settings",
-    );
-  });
-
-  it("closes on Escape", () => {
-    const onClose = vi.fn();
-    render(() => <AutomodQueue open onClose={onClose} />);
-    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
-    expect(onClose).toHaveBeenCalledOnce();
+    render(() => <AutomodQueue />);
+    expect(document.body.textContent).toContain("Reconnect in Settings");
   });
 });

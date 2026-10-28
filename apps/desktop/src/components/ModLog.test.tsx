@@ -48,8 +48,8 @@ describe("ModLog", () => {
   });
 
   it("lists the channel's actions newest first and filters them", () => {
-    render(() => <ModLog open onClose={() => {}} />);
-    expect(screen.getByRole("dialog").textContent).toContain("Nothing yet");
+    render(() => <ModLog />);
+    expect(document.body.textContent).toContain("Nothing yet");
     recordModAction(action("timeout", 1));
     recordModAction(action("slow", 2, ""));
     const items = () => screen.getAllByRole("listitem");
@@ -58,12 +58,5 @@ describe("ModLog", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Timeouts and bans" }));
     expect(items()).toHaveLength(1);
     expect(items()[0].textContent).toContain("timed out Spammer");
-  });
-
-  it("closes on Escape", () => {
-    const onClose = vi.fn();
-    render(() => <ModLog open onClose={onClose} />);
-    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
-    expect(onClose).toHaveBeenCalledOnce();
   });
 });

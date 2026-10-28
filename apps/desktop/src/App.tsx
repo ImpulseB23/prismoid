@@ -14,7 +14,7 @@ import ChannelTabs from "./components/ChannelTabs";
 import ChatFeed from "./components/ChatFeed";
 import Header from "./components/Header";
 import MessageInput from "./components/MessageInput";
-import ModBar from "./components/ModBar";
+import CommandCenter from "./components/CommandCenter";
 import StreamBar from "./components/StreamBar";
 import Tour from "./components/Tour";
 import PatchNotes from "./components/PatchNotes";
@@ -198,9 +198,11 @@ const ChatShell: Component<{ login: string; onSignOut: () => void }> = (
       <Header login={props.login} onSignOut={props.onSignOut} />
       <ChannelTabs />
       <StreamBar />
-      <ChatFeed login={props.login} />
+      <div class="chat-area">
+        <ChatFeed login={props.login} />
+        <CommandCenter />
+      </div>
       <MessageInput login={props.login} />
-      <ModBar />
       <Tour />
       <PatchNotes />
     </>

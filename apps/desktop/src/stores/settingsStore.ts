@@ -44,6 +44,10 @@ export interface Settings {
   showModActions: boolean;
   /** Timeout lengths in seconds offered on rows, menus and the user card. */
   timeoutPresets: number[];
+  /** Slow mode wait the Modes panel switches on with, in seconds. */
+  defaultSlowSeconds: number;
+  /** Follow age the Modes panel switches followers-only on with, in minutes. */
+  defaultFollowerMinutes: number;
   /** Open the Twitch channel showing in the front browser window. */
   followBrowser: boolean;
   /** Fetch messages from before the join via the recent-messages service. */
@@ -94,6 +98,8 @@ export const DEFAULT_SETTINGS: Settings = {
   flagNewAccounts: true,
   showModActions: true,
   timeoutPresets: [60, 600, 3600, 86_400],
+  defaultSlowSeconds: 5,
+  defaultFollowerMinutes: 0,
   followBrowser: false,
   chatBacklog: true,
   closeToTray: false,
@@ -276,6 +282,12 @@ function readSettings(storage: StorageLike | null): Settings {
           ? p.showModActions
           : DEFAULT_SETTINGS.showModActions,
       timeoutPresets: durationList(p.timeoutPresets),
+      defaultSlowSeconds:
+        intIn(p.defaultSlowSeconds, 1, 120) ??
+        DEFAULT_SETTINGS.defaultSlowSeconds,
+      defaultFollowerMinutes:
+        intIn(p.defaultFollowerMinutes, 0, 129_600) ??
+        DEFAULT_SETTINGS.defaultFollowerMinutes,
       followBrowser:
         typeof p.followBrowser === "boolean"
           ? p.followBrowser
@@ -444,4 +456,12 @@ function readTextSize(v: unknown, legacy: boolean): number {
   if (typeof v !== "number") return DEFAULT_SETTINGS.textSize;
   if (!legacy) return TEXT_SIZES.includes(v) ? v : DEFAULT_SETTINGS.textSize;
   return snapTo(TEXT_SIZES, (v * DEFAULT_TEXT_SIZE) / LEGACY_TEXT_DEFAULT);
+}
+
+// Twitch accepts slow mode from 1 to 120 seconds and follower age up to
+// three months.
+function intIn(v: unknown, min: number, max: number): number | null {
+  return typeof v === "number" && Number.isInteger(v) && v >= min && v <= max
+    ? v
+    : null;
 }

@@ -53,6 +53,7 @@ import {
 import { authErrorMessage, isAuthError } from "./SignIn";
 import { showPatchNotes } from "../stores/whatsNewStore";
 import { notesFor } from "../releaseNotes";
+import { FOLLOWER_CHOICES, SLOW_CHOICES } from "../lib/chatModes";
 import { startTour } from "../stores/tourStore";
 import { customChrome, fullscreen } from "../stores/windowStore";
 import {
@@ -680,6 +681,54 @@ const Settings: Component<SettingsProps> = (props) => {
             </label>
           </Show>
           <Show when={settingsSection() === "moderation"}>
+            <label class="settings__row">
+              <div class="settings__text">
+                <span class="settings__name">Slow mode</span>
+                <span class="settings__hint">
+                  The wait between messages when you switch it on
+                </span>
+              </div>
+              <select
+                class="modes__select"
+                value={settings().defaultSlowSeconds}
+                onChange={(e) =>
+                  run(
+                    updateSettings({
+                      defaultSlowSeconds: Number(e.currentTarget.value),
+                    }),
+                  )
+                }
+              >
+                <For each={SLOW_CHOICES}>
+                  {(sec) => <option value={sec}>{sec}s</option>}
+                </For>
+              </select>
+            </label>
+            <label class="settings__row">
+              <div class="settings__text">
+                <span class="settings__name">Followers-only</span>
+                <span class="settings__hint">
+                  How long someone must follow before they can chat
+                </span>
+              </div>
+              <select
+                class="modes__select"
+                value={settings().defaultFollowerMinutes}
+                onChange={(e) =>
+                  run(
+                    updateSettings({
+                      defaultFollowerMinutes: Number(e.currentTarget.value),
+                    }),
+                  )
+                }
+              >
+                <For each={FOLLOWER_CHOICES}>
+                  {([label, minutes]) => (
+                    <option value={minutes}>{label}</option>
+                  )}
+                </For>
+              </select>
+            </label>
             <label class="settings__row settings__row--stack">
               <div class="settings__text">
                 <span class="settings__name">Timeout buttons</span>

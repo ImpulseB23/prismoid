@@ -8,7 +8,6 @@ const [channel, setChannel] = createSignal({ id: "100" });
 const [modes, setModes] = createSignal<ChatSettings | null>(null);
 const apply = vi.fn<(patch: unknown) => Promise<void>>(async () => {});
 const load = vi.fn<(id: string) => Promise<void>>(async () => {});
-const openPanel = vi.fn();
 
 vi.mock("../stores/roleStore", () => ({ canModerate: () => canMod() }));
 vi.mock("../stores/channelStore", () => ({ activeChannel: () => channel() }));
@@ -20,17 +19,24 @@ vi.mock("../stores/chatSettingsStore", () => ({
   chatSettings: () => modes(),
   chatSettingsBusy: () => false,
   applyChatSettings: (p: unknown) => apply(p),
+  chatSettingsError: () => null,
   loadChatSettings: (id: string) => load(id),
-}));
-vi.mock("../stores/modesPanelStore", () => ({
-  setModesOpen: (v: boolean) => openPanel(v),
 }));
 const clear = vi.fn<(id: string) => Promise<void>>(async () => {});
 vi.mock("../lib/twitchAuth", () => ({
   clearChat: (id: string) => clear(id),
 }));
 
-const { default: ModBar, CLEAR_CONFIRM_MS } = await import("./ModBar");
+const { default: CommandCenter } = await import("./CommandCenter");
+
+const openPanel_ = () =>
+  fireEvent.click(screen.getByRole("button", { name: "Command center" }));
+// Clear chat sits at the foot of the chat modes section.
+const openModes = () =>
+  fireEvent.click(screen.getByRole("button", { name: /^Chat modes/ }));
+const clearButton = () =>
+  screen.getByRole("button", { name: /^(Clear chat|Tap again)/ });
+const { CLEAR_CONFIRM_MS } = await import("../lib/confirmTap");
 const { clearHeldMessages, recordHeldMessage } =
   await import("../stores/automodStore");
 
@@ -46,41 +52,48 @@ const settings: ChatSettings = {
   non_moderator_chat_delay_duration: null,
 };
 
-describe("ModBar", () => {
+describe("CommandCenter", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
   });
 
-  it("shows the room modes and flips one with a tap", () => {
+  it("shows what modes are on and opens them in place", () => {
     setModes(settings);
-    render(() => <ModBar />);
+    render(() => <CommandCenter />);
     expect(load).toHaveBeenCalledWith("100");
+    openPanel_();
     expect(screen.getByText("Your channel")).toBeTruthy();
-    const slow = screen.getByRole("button", { name: "Slow 30s" });
-    expect(slow.getAttribute("aria-pressed")).toBe("true");
-    fireEvent.click(slow);
-    expect(apply).toHaveBeenCalledWith({ slow_mode: false });
-    fireEvent.click(screen.getByRole("button", { name: "Emotes" }));
-    expect(apply).toHaveBeenCalledWith({ emote_mode: true });
-    fireEvent.click(screen.getByRole("button", { name: "Modes" }));
-    expect(openPanel).toHaveBeenCalledWith(true);
+    const modes = screen.getByRole("button", { name: /^Chat modes/ });
+    expect(modes.textContent).toContain("Slow 30s");
+    setModes({ ...settings, slow_mode: false });
+    expect(modes.textContent).toContain("Open chat");
+    fireEvent.click(modes);
+    expect(modes.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("complementary").textContent).toContain(
+      "Slow mode",
+    );
+    fireEvent.click(modes);
+    expect(modes.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("clears chat only on a second tap", async () => {
     vi.useFakeTimers();
     try {
-      render(() => <ModBar />);
-      fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+      render(() => <CommandCenter />);
+      openPanel_();
+      openModes();
+      fireEvent.click(clearButton());
       expect(clear).not.toHaveBeenCalled();
+      expect(clearButton().textContent).toBe("Tap again to clear for everyone");
       vi.advanceTimersByTime(CLEAR_CONFIRM_MS);
-      expect(screen.getByRole("button", { name: "Clear" })).toBeTruthy();
+      expect(clearButton().textContent).toBe("Clear chat");
 
-      fireEvent.click(screen.getByRole("button", { name: "Clear" }));
-      fireEvent.click(screen.getByRole("button", { name: "Clear chat?" }));
+      fireEvent.click(clearButton());
+      fireEvent.click(clearButton());
       expect(clear).toHaveBeenCalledWith("100");
       await vi.runAllTimersAsync();
-      expect(screen.getByRole("button", { name: "Clear" })).toBeTruthy();
+      expect(clearButton().textContent).toBe("Clear chat");
     } finally {
       vi.useRealTimers();
     }
@@ -92,25 +105,27 @@ describe("ModBar", () => {
       code: "403",
       message: "not a moderator",
     });
-    render(() => <ModBar />);
-    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
-    fireEvent.click(screen.getByRole("button", { name: "Clear chat?" }));
+    render(() => <CommandCenter />);
+    openPanel_();
+    openModes();
+    fireEvent.click(clearButton());
+    fireEvent.click(clearButton());
     expect((await screen.findByRole("alert")).textContent).toContain(
       "not a moderator",
     );
 
     clear.mockRejectedValueOnce("sidecar went away");
-    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
-    fireEvent.click(screen.getByRole("button", { name: "Clear chat?" }));
+    fireEvent.click(clearButton());
+    fireEvent.click(clearButton());
     await vi.waitFor(() =>
       expect(screen.getByRole("alert").textContent).toBe("sidecar went away"),
     );
   });
 
-  it("counts held messages for the open channel and opens the queue", () => {
-    render(() => <ModBar />);
-    const button = () => screen.getByRole("button", { name: /^AutoMod/ });
-    expect(button().textContent).toBe("AutoMod");
+  it("counts held messages for the open channel and shows the queue in place", () => {
+    render(() => <CommandCenter />);
+    const handle = () => screen.getByRole("button", { name: /Command center/ });
+    expect(handle().textContent).toBe("");
     for (const [id, channel] of [
       ["a", "100"],
       ["b", "100"],
@@ -130,18 +145,22 @@ describe("ModBar", () => {
         held_at: 0,
       });
     }
-    expect(button().textContent).toBe("AutoMod2");
-    fireEvent.click(button());
-    expect(screen.getByRole("dialog", { name: "AutoMod queue" })).toBeTruthy();
+    expect(handle().textContent).toBe("2");
+    openPanel_();
+    fireEvent.click(screen.getByRole("button", { name: /^AutoMod/ }));
+    expect(screen.getAllByText("Chatter")).toHaveLength(2);
     clearHeldMessages();
   });
 
   it("labels a moderator and stays hidden without the role", () => {
     setChannel({ id: "200" });
-    render(() => <ModBar />);
+    render(() => <CommandCenter />);
+    openPanel_();
     expect(screen.getByText("Moderator")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("complementary")).toBeNull();
     setCanMod(false);
-    expect(screen.queryByRole("toolbar")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Command center" })).toBeNull();
     setCanMod(true);
     setChannel({ id: "100" });
   });

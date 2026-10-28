@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { chipLabel, isOn, patchFor } from "./chatModes";
+import { activeSummary, chipLabel, isOn, patchFor } from "./chatModes";
 import type { ChatSettings } from "./twitchChannel";
+
+const defaults = { slowSeconds: 5, followerMinutes: 10 };
 
 const off: ChatSettings = {
   emote_mode: false,
@@ -15,23 +17,27 @@ const off: ChatSettings = {
 };
 
 describe("chatModes", () => {
-  it("turns timed modes on with the dashboard defaults", () => {
-    expect(patchFor("slow", true)).toEqual({
+  it("turns timed modes on with the chosen defaults", () => {
+    expect(patchFor("slow", true, defaults)).toEqual({
       slow_mode: true,
-      slow_mode_wait_time: 30,
+      slow_mode_wait_time: 5,
     });
-    expect(patchFor("followers", true)).toEqual({
+    expect(patchFor("followers", true, defaults)).toEqual({
       follower_mode: true,
-      follower_mode_duration: 0,
+      follower_mode_duration: 10,
     });
-    expect(patchFor("delay", true)).toEqual({
+    expect(patchFor("delay", true, defaults)).toEqual({
       non_moderator_chat_delay: true,
       non_moderator_chat_delay_duration: 2,
     });
-    expect(patchFor("slow", false)).toEqual({ slow_mode: false });
-    expect(patchFor("emote", true)).toEqual({ emote_mode: true });
-    expect(patchFor("subscriber", false)).toEqual({ subscriber_mode: false });
-    expect(patchFor("unique", true)).toEqual({ unique_chat_mode: true });
+    expect(patchFor("slow", false, defaults)).toEqual({ slow_mode: false });
+    expect(patchFor("emote", true, defaults)).toEqual({ emote_mode: true });
+    expect(patchFor("subscriber", false, defaults)).toEqual({
+      subscriber_mode: false,
+    });
+    expect(patchFor("unique", true, defaults)).toEqual({
+      unique_chat_mode: true,
+    });
   });
 
   it("reads each mode", () => {
@@ -86,5 +92,20 @@ describe("chatModes", () => {
     expect(chipLabel(off, "subscriber")).toBe("Subs");
     expect(chipLabel(off, "emote")).toBe("Emotes");
     expect(chipLabel(off, "unique")).toBe("Unique");
+  });
+});
+
+describe("activeSummary", () => {
+  it("lists what is on, or nothing for open chat", () => {
+    expect(activeSummary(null)).toBeNull();
+    expect(activeSummary(off)).toBeNull();
+    expect(
+      activeSummary({
+        ...off,
+        slow_mode: true,
+        slow_mode_wait_time: 5,
+        subscriber_mode: true,
+      }),
+    ).toBe("Slow 5s, Subs");
   });
 });
