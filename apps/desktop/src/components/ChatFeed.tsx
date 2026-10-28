@@ -689,7 +689,6 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                   isNewAccount(userInfo(row().msg.platform_user_id), Date.now())
                 );
               };
-              const noted = () => row().msg.username in settings().userNotes;
               const onRetry = () => {
                 const localId = row().msg.local_id;
                 if (!localId) return;
@@ -729,7 +728,6 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                     "msg--notice": row().msg.notice !== null,
                     "msg--deleted": row().msg.deleted === true,
                     "msg--new-account": newAccount(),
-                    "msg--noted": noted(),
                   }}
                   style={{
                     transform: `translateY(${row().top}px)`,
@@ -944,9 +942,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                           title={
                             newAccount()
                               ? "Account created in the last week"
-                              : noted()
-                                ? settings().userNotes[row().msg.username]
-                                : undefined
+                              : undefined
                           }
                           style={{ color: normalizeUserColor(row().msg.color) }}
                           onClick={(e) => {

@@ -37,13 +37,7 @@ import { modActionsFor, modLogRevision } from "../stores/modLogStore";
 import { describeModAction } from "../lib/modActions";
 import { formatSeconds } from "../lib/slashCommands";
 import { canModerate } from "../stores/roleStore";
-import {
-  isIgnored,
-  noteFor,
-  setIgnored,
-  setNote,
-  settings,
-} from "../stores/settingsStore";
+import { isIgnored, setIgnored, settings } from "../stores/settingsStore";
 import {
   ensureUserInfo,
   formatJoined,
@@ -268,19 +262,6 @@ const UserCard: Component<UserCardProps> = (props) => {
                 {ignored() ? "Unignore" : "Ignore"}
               </button>
             </div>
-
-            <div class="card__section">Note</div>
-            <textarea
-              class="user-card__note"
-              rows={2}
-              placeholder="Only you see this"
-              value={noteFor(u().username)}
-              onChange={(e) =>
-                void setNote(u().username, e.currentTarget.value).catch(
-                  (err: unknown) => console.error("save note", err),
-                )
-              }
-            />
 
             <Show when={history().length > 0}>
               <div class="card__section">Moderation history</div>

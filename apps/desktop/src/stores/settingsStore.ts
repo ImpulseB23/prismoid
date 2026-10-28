@@ -22,8 +22,6 @@ export interface Settings {
   highlightPhrases: string[];
   /** Mark messages from accounts created in the last week. */
   flagNewAccounts: boolean;
-  /** Private notes about chatters, by login. Never leave this device. */
-  userNotes: Record<string, string>;
   /** Show moderator actions (timeouts, bans, mode changes) as rows in chat. */
   showModActions: boolean;
   /** Timeout lengths in seconds offered on rows, menus and the user card. */
@@ -47,7 +45,6 @@ export const DEFAULT_SETTINGS: Settings = {
   ignoredLogins: [],
   highlightPhrases: [],
   flagNewAccounts: true,
-  userNotes: {},
   showModActions: true,
   timeoutPresets: [60, 600, 3600, 86_400],
   followBrowser: false,
@@ -163,7 +160,6 @@ function readSettings(storage: StorageLike | null): Settings {
         typeof p.flagNewAccounts === "boolean"
           ? p.flagNewAccounts
           : DEFAULT_SETTINGS.flagNewAccounts,
-      userNotes: stringMap(p.userNotes),
       showModActions:
         typeof p.showModActions === "boolean"
           ? p.showModActions
@@ -227,15 +223,6 @@ export function parseDurations(raw: string): number[] | null {
   return parsed.some((n) => n !== null) ? list : null;
 }
 
-function stringMap(v: unknown): Record<string, string> {
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return {};
-  const out: Record<string, string> = {};
-  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
-    if (typeof val === "string" && val.trim()) out[k] = val;
-  }
-  return out;
-}
-
 function read(storage: StorageLike | null, key: string): string | null {
   if (!storage) return null;
   try {
@@ -283,21 +270,6 @@ export function parseList(raw: string, lowercase = false): string[] {
 
 export function isIgnored(login: string): boolean {
   return settings().ignoredLogins.includes(login);
-}
-
-export function noteFor(login: string): string {
-  return settings().userNotes[login] ?? "";
-}
-
-/** Saves a trimmed note, or removes the entry when the note is blank. */
-export function setNote(login: string, text: string): Promise<void> {
-  const trimmed = text.trim();
-  const current = settings().userNotes;
-  if ((current[login] ?? "") === trimmed) return Promise.resolve();
-  const next = { ...current };
-  if (trimmed) next[login] = trimmed;
-  else delete next[login];
-  return updateSettings({ userNotes: next });
 }
 
 export function setIgnored(login: string, ignored: boolean): Promise<void> {
