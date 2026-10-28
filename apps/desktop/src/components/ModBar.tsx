@@ -12,6 +12,8 @@ import {
   loadChatSettings,
 } from "../stores/chatSettingsStore";
 import { setModesOpen } from "../stores/modesPanelStore";
+import { modLogOpen, setModLogOpen } from "../stores/modLogPanelStore";
+import ModLog from "./ModLog";
 import { chipLabel, isOn, patchFor, type ChatMode } from "../lib/chatModes";
 
 const CHIPS: ChatMode[] = [
@@ -64,11 +66,20 @@ const ModBar: Component = () => {
         <button
           type="button"
           class="modbar__more"
+          title="Every mod action in this channel this session"
+          onClick={() => setModLogOpen(true)}
+        >
+          Log
+        </button>
+        <button
+          type="button"
+          class="modbar__more"
           title="All chat modes and durations"
           onClick={() => setModesOpen(true)}
         >
           Modes
         </button>
+        <ModLog open={modLogOpen()} onClose={() => setModLogOpen(false)} />
       </div>
     </Show>
   );
