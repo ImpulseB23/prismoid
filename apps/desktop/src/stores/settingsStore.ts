@@ -40,6 +40,8 @@ export interface Settings {
   followBrowser: boolean;
   /** Fetch messages from before the join via the recent-messages service. */
   chatBacklog: boolean;
+  /** Closing the window leaves Prismoid running in the tray. */
+  closeToTray: boolean;
   /** The welcome tour has been finished or skipped. */
   tourDone: boolean;
   /** Chime and flash the taskbar when mentioned in the background. */
@@ -77,6 +79,7 @@ export const DEFAULT_SETTINGS: Settings = {
   timeoutPresets: [60, 600, 3600, 86_400],
   followBrowser: false,
   chatBacklog: true,
+  closeToTray: false,
   tourDone: false,
   mentionAlerts: true,
   theme: "dark",
@@ -92,6 +95,7 @@ export interface SettingsAppliers {
   zoom: (value: number) => Promise<void>;
   followBrowser: (value: boolean) => Promise<void>;
   chatBacklog: (value: boolean) => Promise<void>;
+  closeToTray: (value: boolean) => Promise<void>;
   theme: (value: Theme) => Promise<void>;
 }
 
@@ -113,6 +117,7 @@ const defaultAppliers: SettingsAppliers = {
   zoom: (v) => getCurrentWebview().setZoom(v),
   followBrowser: (v) => invoke("set_browser_follow", { enabled: v }),
   chatBacklog: (v) => invoke("set_chat_backlog", { enabled: v }),
+  closeToTray: (v) => invoke("set_close_to_tray", { enabled: v }),
   // "system" hands the title bar back to Windows; midnight shares dark chrome.
   theme: (v) =>
     getCurrentWindow().setTheme(
@@ -143,6 +148,9 @@ export function createSettingsStore(
     if (next.chatBacklog !== current.chatBacklog) {
       await appliers.chatBacklog(next.chatBacklog);
     }
+    if (next.closeToTray !== current.closeToTray) {
+      await appliers.closeToTray(next.closeToTray);
+    }
     if (next.theme !== current.theme) {
       await appliers.theme(next.theme);
     }
@@ -168,6 +176,7 @@ export function createSettingsStore(
     if (s.zoom !== 1) await appliers.zoom(s.zoom);
     if (s.followBrowser) await appliers.followBrowser(true);
     if (!s.chatBacklog) await appliers.chatBacklog(false);
+    if (s.closeToTray) await appliers.closeToTray(true);
     if (s.theme !== "system") await appliers.theme(s.theme);
   }
 
@@ -236,6 +245,10 @@ function readSettings(storage: StorageLike | null): Settings {
         typeof p.chatBacklog === "boolean"
           ? p.chatBacklog
           : DEFAULT_SETTINGS.chatBacklog,
+      closeToTray:
+        typeof p.closeToTray === "boolean"
+          ? p.closeToTray
+          : DEFAULT_SETTINGS.closeToTray,
       tourDone:
         typeof p.tourDone === "boolean"
           ? p.tourDone

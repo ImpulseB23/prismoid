@@ -40,6 +40,11 @@ import { openLogDir } from "../lib/log";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getVersion } from "@tauri-apps/api/app";
 import {
+  disable as disableAutostart,
+  enable as enableAutostart,
+  isEnabled as isAutostartEnabled,
+} from "@tauri-apps/plugin-autostart";
+import {
   checkForUpdates,
   installUpdate,
   updateState,
@@ -148,6 +153,43 @@ const UpdateRow: Component = () => {
         )}
       </Show>
     </div>
+  );
+};
+
+// Windows owns this flag (Task Manager can flip it too), so it is read
+// from the system each time Settings opens rather than stored here.
+const StartupRow: Component<{ run: (p: Promise<void>) => void }> = (props) => {
+  // equals: false so a failed toggle snaps the switch back even though
+  // the value read from Windows did not change.
+  const [on, setOn] = createSignal(false, { equals: false });
+  const refresh = () =>
+    isAutostartEnabled()
+      .then(setOn)
+      .catch((err: unknown) => console.error("autostart state", err));
+  onMount(() => void refresh());
+
+  return (
+    <label class="settings__row settings__row--toggle">
+      <div class="settings__text">
+        <span class="settings__name">Start with Windows</span>
+        <span class="settings__hint">
+          Opens quietly in the tray when you sign in
+        </span>
+      </div>
+      <input
+        type="checkbox"
+        class="switch"
+        checked={on()}
+        onChange={(e) => {
+          props.run(
+            (e.currentTarget.checked
+              ? enableAutostart()
+              : disableAutostart()
+            ).finally(refresh),
+          );
+        }}
+      />
+    </label>
   );
 };
 
@@ -580,6 +622,23 @@ const Settings: Component<SettingsProps> = (props) => {
               }
             />
           </label>
+          <label class="settings__row settings__row--toggle">
+            <div class="settings__text">
+              <span class="settings__name">Close to tray</span>
+              <span class="settings__hint">
+                The X hides Prismoid; quit from the tray icon
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              class="switch"
+              checked={settings().closeToTray}
+              onChange={(e) =>
+                run(updateSettings({ closeToTray: e.currentTarget.checked }))
+              }
+            />
+          </label>
+          <StartupRow run={run} />
 
           <div class="dialog__label">Updates</div>
           <UpdateRow />

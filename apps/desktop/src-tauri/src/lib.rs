@@ -10,6 +10,7 @@ mod sidecar_commands;
 #[cfg(windows)]
 mod sidecar_job;
 mod sidecar_supervisor;
+mod tray;
 pub mod twitch_auth;
 pub mod twitch_channel;
 pub mod twitch_chat_settings;
@@ -28,6 +29,7 @@ pub use host::parse_batch;
 pub use message::UnifiedMessage;
 
 use tauri::{Manager, Runtime};
+use tauri_plugin_window_state::StateFlags;
 
 #[tauri::command]
 fn get_platform() -> &'static str {
@@ -52,20 +54,25 @@ pub fn run() {
     // to the running instance, which brings its window forward, and exits.
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.unminimize();
-            let _ = window.show();
-            let _ = window.set_focus();
-        }
+        tray::show_main(app);
     }));
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_deep_link::init());
     builder
         .plugin(logging::plugin())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        // Visibility is decided at launch (shown, or left in the tray for a
+        // sign-in start), never restored: quitting from the tray would
+        // otherwise bring the next launch up hidden.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(StateFlags::all() - StateFlags::VISIBLE)
+                .build(),
+        )
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
+        .manage(tray::CloseToTray::default())
+        .on_window_event(tray::on_window_event)
         .invoke_handler(tauri::generate_handler![
             get_platform,
             logging::open_log_dir,
@@ -92,6 +99,7 @@ pub fn run() {
             twitch_channel::twitch_rejoin_channel,
             browser_follow::set_browser_follow,
             backlog::set_chat_backlog,
+            tray::set_close_to_tray,
             twitch_channel::twitch_get_channel,
             twitch_channel::twitch_search_channels,
             twitch_channel::twitch_get_stream_info,
@@ -122,6 +130,15 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
     #[cfg(desktop)]
     app.handle()
         .plugin(tauri_plugin_updater::Builder::new().build())?;
+    #[cfg(desktop)]
+    app.handle().plugin(tauri_plugin_autostart::init(
+        tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+        Some(vec![tray::MINIMIZED_ARG]),
+    ))?;
+    tray::install(app.handle())?;
+    if !tray::launched_minimized(std::env::args()) {
+        tray::show_main(app.handle());
+    }
     use tokio::sync::Notify;
     use twitch_auth::{AuthManager, AuthState, KeychainStore, TWITCH_CLIENT_ID};
     use twitch_oauth2::Scope;

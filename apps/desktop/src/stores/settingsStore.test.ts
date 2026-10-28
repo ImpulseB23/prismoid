@@ -44,6 +44,7 @@ function appliers(): SettingsAppliers & {
     },
     followBrowser: async () => {},
     chatBacklog: async () => {},
+    closeToTray: async () => {},
     theme: async (v) => {
       themes.push(v);
     },
@@ -75,6 +76,7 @@ describe("settingsStore", () => {
       timeoutPresets: [60, 600, 3600, 86_400],
       followBrowser: false,
       chatBacklog: true,
+      closeToTray: false,
       tourDone: false,
       mentionAlerts: true,
       theme: "dark",
@@ -126,6 +128,7 @@ describe("settingsStore", () => {
         zoom: async () => {},
         followBrowser: async () => {},
         chatBacklog: async () => {},
+        closeToTray: async () => {},
         theme: async () => {},
       },
       memStorage(),
@@ -166,6 +169,7 @@ describe("settingsStore", () => {
       timeoutPresets: [60, 600, 3600, 86_400],
       followBrowser: false,
       chatBacklog: true,
+      closeToTray: false,
       tourDone: false,
       mentionAlerts: false,
       theme: "dark",
@@ -190,6 +194,25 @@ describe("settingsStore", () => {
       memStorage({ "prismoid.settings": "{nope" }),
     );
     expect(garbage.settings()).toEqual(DEFAULT_SETTINGS);
+  });
+
+  it("applies close to tray at boot and on change", async () => {
+    const trays: boolean[] = [];
+    const a = {
+      ...appliers(),
+      closeToTray: async (v: boolean) => void trays.push(v),
+    };
+    const store = createSettingsStore(
+      a,
+      memStorage({
+        "prismoid.settings": JSON.stringify({ closeToTray: true }),
+      }),
+    );
+    await store.apply();
+    expect(trays).toEqual([true]);
+    await store.update({ closeToTray: false });
+    expect(trays).toEqual([true, false]);
+    expect(store.settings().closeToTray).toBe(false);
   });
 
   it("apply restores window state and pins the title bar theme", async () => {
