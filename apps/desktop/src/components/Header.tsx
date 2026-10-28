@@ -1,8 +1,16 @@
-// Top chrome: logo, the channel switcher, the sidecar connection dot, an
-// always-on-top pin, the settings gear and the window buttons. Owns the two
-// dialogs those buttons open and the global shortcuts that reach them.
+// Top chrome: logo, mentions, fullscreen, the settings gear and the window
+// buttons. Owns the dialogs those buttons open and the
+// global shortcuts that reach them. The dialogs render beside the header,
+// not in it, so the header can slide away in fullscreen.
 
-import { Component, Show, createSignal, onCleanup, onMount } from "solid-js";
+import {
+  Component,
+  Show,
+  createEffect,
+  createSignal,
+  onCleanup,
+  onMount,
+} from "solid-js";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
@@ -14,11 +22,9 @@ import { missingScopes } from "../stores/authStore";
 import {
   applyWindowSettings,
   reapplyZoom,
-  settings,
   textBigger,
   textReset,
   textSmaller,
-  updateSettings,
 } from "../stores/settingsStore";
 import ChannelPicker from "./ChannelPicker";
 import ChatModes from "./ChatModes";
@@ -26,7 +32,23 @@ import { modesOpen, setModesOpen } from "../stores/modesPanelStore";
 import { canModerate } from "../stores/roleStore";
 import { pickerOpen, setPickerOpen } from "../stores/pickerStore";
 import { searchOpen, setSearchOpen } from "../stores/searchStore";
-import { setMentionsOpen, unreadMentions } from "../stores/mentionsStore";
+import {
+  mentionsOpen,
+  setMentionsOpen,
+  unreadMentions,
+} from "../stores/mentionsStore";
+import {
+  chromeShown,
+  customChrome,
+  fullscreen,
+  hideChromeSoon,
+  noteFullscreen,
+  holdChrome,
+  notePointerOnChrome,
+  peekChrome,
+  showChrome,
+} from "../stores/windowStore";
+import WindowControls from "./WindowControls";
 import Mentions from "./Mentions";
 import ChatSearch from "./ChatSearch";
 import { updateState } from "../stores/updateStore";
@@ -37,8 +59,6 @@ import {
 } from "../stores/whatsNewStore";
 import Settings from "./Settings";
 import { logo } from "../stores/themeStore";
-import { customChrome } from "../stores/windowStore";
-import WindowControls from "./WindowControls";
 
 export interface HeaderProps {
   login: string;
@@ -62,10 +82,23 @@ const GEAR_PATH = (() => {
   return `${parts.join(" ")} Z`;
 })();
 
+const CLICK_EASE = "cubic-bezier(0.2, 0.8, 0.2, 1)";
+
+// A short motion on the clicked button's icon. Script animations ignore the
+// CSS reduced-motion rule, so the preference is checked here.
+function animateIcon(
+  e: MouseEvent,
+  keyframes: Keyframe[],
+  duration: number,
+): void {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const svg = (e.currentTarget as HTMLElement).querySelector("svg");
+  svg?.animate?.(keyframes, { duration, easing: CLICK_EASE });
+}
+
 const Header: Component<HeaderProps> = (props) => {
   const [state, setState] = createSignal<SidecarState | null>(null);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
-  const [fullscreen, setFullscreen] = createSignal(false);
   let unlisten: UnlistenFn | undefined;
   let unlistenResize: UnlistenFn | undefined;
   let unlistenScale: UnlistenFn | undefined;
@@ -84,7 +117,7 @@ const Header: Component<HeaderProps> = (props) => {
   const syncFullscreen = () =>
     getCurrentWindow()
       .isFullscreen()
-      .then(setFullscreen)
+      .then(noteFullscreen)
       .catch(report("read fullscreen"));
 
   const toggleFullscreen = async () => {
@@ -200,6 +233,11 @@ const Header: Component<HeaderProps> = (props) => {
     });
   });
 
+  // In fullscreen the bar stays down while anything opened from it is open.
+  createEffect(() =>
+    holdChrome(settingsOpen() || searchOpen() || mentionsOpen()),
+  );
+
   onCleanup(() => {
     disposed = true;
     unlisten?.();
@@ -207,8 +245,6 @@ const Header: Component<HeaderProps> = (props) => {
     unlistenScale?.();
     unlisten = undefined;
   });
-
-  const pinned = () => settings().alwaysOnTop;
 
   // Something in Settings needs the user: a reconnect for new scopes, or a
   // chat connection that is not coming back on its own.
@@ -224,36 +260,233 @@ const Header: Component<HeaderProps> = (props) => {
   };
 
   return (
-    <header
-      class="header"
-      classList={{ "header--chrome": customChrome() }}
-      data-tauri-drag-region
-    >
-      <img
-        class="header__logo"
-        src={logo()}
-        alt=""
-        draggable={false}
+    <>
+      <header
+        class="header"
+        classList={{
+          "header--chrome": customChrome(),
+          "header--autohide": fullscreen(),
+          "header--shown": fullscreen() && chromeShown(),
+        }}
         data-tauri-drag-region
-      />
+        onPointerEnter={() => notePointerOnChrome(true)}
+        onPointerLeave={() => notePointerOnChrome(false)}
+        onFocusIn={() => fullscreen() && showChrome()}
+        onFocusOut={(e) => {
+          const next = e.relatedTarget as Node | null;
+          if (fullscreen() && !e.currentTarget.contains(next)) hideChromeSoon();
+        }}
+      >
+        <img
+          class="header__logo"
+          src={logo()}
+          alt=""
+          draggable={false}
+          data-tauri-drag-region
+        />
 
-      <span class="header__spacer" data-tauri-drag-region />
+        <span class="header__spacer" data-tauri-drag-region />
 
-      <Show when={canModerate()}>
+        <Show when={canModerate()}>
+          <button
+            type="button"
+            class="icon-btn"
+            aria-haspopup="dialog"
+            aria-expanded={modesOpen()}
+            data-tour="chat-modes"
+            title="Chat modes"
+            onClick={() => {
+              setPickerOpen(false);
+              setSettingsOpen(false);
+              setModesOpen(true);
+            }}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M2 4.5h12M2 8h12M2 11.5h12"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linecap="round"
+              />
+              <circle
+                cx="5.5"
+                cy="4.5"
+                r="1.6"
+                fill="var(--bg)"
+                stroke="currentColor"
+                stroke-width="1.4"
+              />
+              <circle
+                cx="10.5"
+                cy="8"
+                r="1.6"
+                fill="var(--bg)"
+                stroke="currentColor"
+                stroke-width="1.4"
+              />
+              <circle
+                cx="6.5"
+                cy="11.5"
+                r="1.6"
+                fill="var(--bg)"
+                stroke="currentColor"
+                stroke-width="1.4"
+              />
+            </svg>
+          </button>
+        </Show>
+
         <button
           type="button"
           class="icon-btn"
           aria-haspopup="dialog"
-          aria-expanded={modesOpen()}
-          data-tour="chat-modes"
-          title="Chat modes"
-          onClick={() => {
+          aria-expanded={searchOpen()}
+          title="Search chat (Ctrl+F)"
+          onClick={(e) => {
+            animateIcon(
+              e,
+              [
+                { transform: "rotate(0) scale(1)" },
+                { transform: "rotate(-18deg) scale(1.15)", offset: 0.4 },
+                { transform: "rotate(0) scale(1)" },
+              ],
+              380,
+            );
             setPickerOpen(false);
             setSettingsOpen(false);
-            setModesOpen(true);
+            setSearchOpen(true);
           }}
         >
           <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            aria-hidden="true"
+          >
+            <circle
+              cx="7"
+              cy="7"
+              r="4.5"
+              stroke="currentColor"
+              stroke-width="1.5"
+            />
+            <path
+              d="m10.5 10.5 3 3"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          class="icon-btn"
+          aria-haspopup="dialog"
+          title={
+            unreadMentions() > 0
+              ? `Mentions: ${unreadMentions()} new`
+              : "Mentions"
+          }
+          onClick={(e) => {
+            animateIcon(
+              e,
+              [
+                { transform: "scale(1) rotate(0)" },
+                { transform: "scale(0.75) rotate(-25deg)", offset: 0.3 },
+                { transform: "scale(1.15) rotate(10deg)", offset: 0.65 },
+                { transform: "scale(1) rotate(0)" },
+              ],
+              420,
+            );
+            setMentionsOpen(true);
+          }}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            aria-hidden="true"
+          >
+            <circle
+              cx="8"
+              cy="8"
+              r="2.6"
+              stroke="currentColor"
+              stroke-width="1.5"
+            />
+            <path
+              d="M10.6 8v1.2a1.9 1.9 0 0 0 3.8 0V8A6.4 6.4 0 1 0 11 13.4"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+          </svg>
+          <Show when={unreadMentions() > 0}>
+            <span class="icon-btn__badge" aria-hidden="true" />
+          </Show>
+        </button>
+
+        <button
+          type="button"
+          class="icon-btn"
+          classList={{ "icon-btn--active": fullscreen() }}
+          aria-pressed={fullscreen()}
+          title={fullscreen() ? "Exit fullscreen" : "Fullscreen"}
+          onClick={() =>
+            void toggleFullscreen().catch(report("toggle fullscreen"))
+          }
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            aria-hidden="true"
+          >
+            {/* Each corner turns in place: outward to enter, inward to exit. */}
+            <g
+              class="fs-icon"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path class="fs-icon__corner" d="M2 6V2h4" />
+              <path class="fs-icon__corner" d="M10 2h4v4" />
+              <path class="fs-icon__corner" d="M14 10v4h-4" />
+              <path class="fs-icon__corner" d="M6 14H2v-4" />
+            </g>
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          class="icon-btn"
+          aria-haspopup="dialog"
+          aria-expanded={settingsOpen()}
+          data-tour="settings"
+          title={attention() ? `Settings: ${attention()}` : "Settings"}
+          onClick={(e) => {
+            animateIcon(
+              e,
+              [{ transform: "rotate(0)" }, { transform: "rotate(180deg)" }],
+              600,
+            );
+            markWhatsNewSeen();
+            setSettingsOpen(true);
+          }}
+        >
+          <svg
+            class="gear-icon"
             width="16"
             height="16"
             viewBox="0 0 16 16"
@@ -261,172 +494,33 @@ const Header: Component<HeaderProps> = (props) => {
             aria-hidden="true"
           >
             <path
-              d="M2 4.5h12M2 8h12M2 11.5h12"
+              d={GEAR_PATH}
               stroke="currentColor"
-              stroke-width="1.4"
-              stroke-linecap="round"
+              stroke-width="1.3"
+              stroke-linejoin="round"
             />
             <circle
-              cx="5.5"
-              cy="4.5"
-              r="1.6"
-              fill="var(--bg)"
-              stroke="currentColor"
-              stroke-width="1.4"
-            />
-            <circle
-              cx="10.5"
+              cx="8"
               cy="8"
-              r="1.6"
-              fill="var(--bg)"
+              r="2.1"
               stroke="currentColor"
-              stroke-width="1.4"
-            />
-            <circle
-              cx="6.5"
-              cy="11.5"
-              r="1.6"
-              fill="var(--bg)"
-              stroke="currentColor"
-              stroke-width="1.4"
+              stroke-width="1.3"
             />
           </svg>
+          <Show when={attention()}>
+            <span class="icon-btn__badge" aria-hidden="true" />
+          </Show>
         </button>
+
+        <WindowControls />
+      </header>
+      <Show when={fullscreen() && !chromeShown()}>
+        <div
+          class="chrome-hotzone"
+          aria-hidden="true"
+          onPointerEnter={peekChrome}
+        />
       </Show>
-
-      <button
-        type="button"
-        class="icon-btn"
-        aria-haspopup="dialog"
-        title={
-          unreadMentions() > 0
-            ? `Mentions: ${unreadMentions()} new`
-            : "Mentions"
-        }
-        onClick={() => setMentionsOpen(true)}
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 16 16"
-          fill="none"
-          aria-hidden="true"
-        >
-          <circle
-            cx="8"
-            cy="8"
-            r="2.6"
-            stroke="currentColor"
-            stroke-width="1.5"
-          />
-          <path
-            d="M10.6 8v1.2a1.9 1.9 0 0 0 3.8 0V8A6.4 6.4 0 1 0 11 13.4"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-          />
-        </svg>
-        <Show when={unreadMentions() > 0}>
-          <span class="icon-btn__badge" aria-hidden="true" />
-        </Show>
-      </button>
-
-      <button
-        type="button"
-        class="icon-btn"
-        classList={{ "icon-btn--active": fullscreen() }}
-        aria-pressed={fullscreen()}
-        title={fullscreen() ? "Exit fullscreen" : "Fullscreen"}
-        onClick={() =>
-          void toggleFullscreen().catch(report("toggle fullscreen"))
-        }
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 16 16"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-      </button>
-
-      <button
-        type="button"
-        class="icon-btn"
-        classList={{ "icon-btn--active": pinned() }}
-        aria-pressed={pinned()}
-        title={pinned() ? "Unpin from top" : "Keep on top of other windows"}
-        onClick={() =>
-          void updateSettings({ alwaysOnTop: !pinned() }).catch(
-            report("failed to toggle always-on-top"),
-          )
-        }
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 16 16"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d="M9.5 1.5 14.5 6.5l-2 .5-3 3 .5 3.5L6 9.5l-4 4L2 11l4-4L2.5 3.5 6 4l3-3 .5-2.5Z"
-            stroke="currentColor"
-            stroke-width="1.4"
-            stroke-linejoin="round"
-            fill={pinned() ? "currentColor" : "none"}
-          />
-        </svg>
-      </button>
-
-      <button
-        type="button"
-        class="icon-btn"
-        aria-haspopup="dialog"
-        aria-expanded={settingsOpen()}
-        data-tour="settings"
-        title={attention() ? `Settings: ${attention()}` : "Settings"}
-        onClick={() => {
-          markWhatsNewSeen();
-          setSettingsOpen(true);
-        }}
-      >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 16 16"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d={GEAR_PATH}
-            stroke="currentColor"
-            stroke-width="1.3"
-            stroke-linejoin="round"
-          />
-          <circle
-            cx="8"
-            cy="8"
-            r="2.1"
-            stroke="currentColor"
-            stroke-width="1.3"
-          />
-        </svg>
-        <Show when={attention()}>
-          <span class="icon-btn__badge" aria-hidden="true" />
-        </Show>
-      </button>
-
-      <WindowControls />
-
       <ChannelPicker open={pickerOpen()} onClose={() => setPickerOpen(false)} />
       <ChatModes open={modesOpen()} onClose={() => setModesOpen(false)} />
       <ChatSearch open={searchOpen()} onClose={() => setSearchOpen(false)} />
@@ -440,7 +534,7 @@ const Header: Component<HeaderProps> = (props) => {
           props.onSignOut();
         }}
       />
-    </header>
+    </>
   );
 };
 

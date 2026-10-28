@@ -1236,6 +1236,28 @@ option::checkmark {
   background: var(--bg-raised);
 }
 
+/* The gear turns a tooth on hover. With eight teeth every 45 degrees looks
+   the same, so the click spin in Header never ends on a visible jump. */
+.gear-icon {
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.icon-btn:hover .gear-icon {
+  transform: rotate(45deg);
+}
+
+/* Fullscreen corners: each bracket flips in place, outward to enter and
+   inward to exit, following the window's real state. */
+.fs-icon__corner {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.icon-btn--active .fs-icon__corner {
+  transform: rotate(180deg);
+}
+
 /* Dialogs (settings, user card) share the picker's card recipe */
 
 .dialog-backdrop {
@@ -3060,6 +3082,49 @@ option::checkmark {
   display: flex;
   justify-content: flex-end;
   height: 32px;
+}
+
+/* Fullscreen: the header folds away and gives its space back; it returns
+   while the pointer is on the hot strip along the top edge or on it, pushing
+   the tabs down rather than covering them. The negative margin moves it out
+   whole instead of squashing its contents. */
+.header--autohide {
+  margin-top: -46px;
+  opacity: 0;
+  transition:
+    margin-top 0.22s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.18s ease;
+}
+
+.header--autohide.header--shown {
+  margin-top: 0;
+  opacity: 1;
+}
+
+/* Over Settings the bare title bar has no space of its own to give back, so
+   it slides over the page instead. */
+.titlebar--autohide {
+  position: fixed;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  transform: translateY(-100%);
+  transition:
+    transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.2s;
+}
+
+.titlebar--shown {
+  transform: none;
+  box-shadow: 0 8px 24px var(--shadow);
+}
+
+.chrome-hotzone {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 70;
+  height: 6px;
 }
 
 /* Prismoid theme: dark with the logo's prism worked through the whole
