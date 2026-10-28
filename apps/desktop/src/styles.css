@@ -2732,3 +2732,20 @@ img {
   gap: 8px;
   padding: 16px 18px 0;
 }
+
+/* Mentions */
+
+.mentions__row {
+  width: 100%;
+  text-align: left;
+}
+
+.mentions__channel {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 18px;
+}
