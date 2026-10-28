@@ -37,6 +37,12 @@ export function createChatSettingsStore(
 
   async function load(channel: string): Promise<void> {
     const gen = ++generation;
+    // Another channel's modes must never show while this one loads.
+    if (channel !== channelId) {
+      setSettings(null);
+      setError(null);
+      setBusy(false);
+    }
     channelId = channel;
     try {
       const next = await fetch(channel);

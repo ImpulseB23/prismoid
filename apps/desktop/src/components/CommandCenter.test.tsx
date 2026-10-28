@@ -21,7 +21,9 @@ vi.mock("../stores/chatSettingsStore", () => ({
   applyChatSettings: (p: unknown) => apply(p),
   chatSettingsError: () => null,
   loadChatSettings: (id: string) => load(id),
+  clearChatSettings: () => clearModes(),
 }));
+const clearModes = vi.fn();
 const clear = vi.fn<(id: string) => Promise<void>>(async () => {});
 vi.mock("../lib/twitchAuth", () => ({
   clearChat: (id: string) => clear(id),
@@ -75,6 +77,18 @@ describe("CommandCenter", () => {
     );
     fireEvent.click(modes);
     expect(modes.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("follows the channel with the modes and drops them without mod rights", () => {
+    render(() => <CommandCenter />);
+    expect(load).toHaveBeenLastCalledWith("100");
+    setChannel({ id: "200" });
+    expect(load).toHaveBeenLastCalledWith("200");
+    expect(clearModes).not.toHaveBeenCalled();
+    setCanMod(false);
+    expect(clearModes).toHaveBeenCalledTimes(1);
+    setCanMod(true);
+    setChannel({ id: "100" });
   });
 
   it("clears chat only on a second tap", async () => {

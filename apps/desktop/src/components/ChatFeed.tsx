@@ -81,11 +81,7 @@ import {
   applyPollUpdate,
   applyPredictionUpdate,
 } from "../stores/streamManagerStore";
-import {
-  MODE_ACTIONS,
-  clearChatSettings,
-  loadChatSettings,
-} from "../stores/chatSettingsStore";
+import { MODE_ACTIONS, loadChatSettings } from "../stores/chatSettingsStore";
 import { modActionMessage, publicModerationMessage } from "../lib/modActions";
 import {
   BANNED_HINT,
@@ -284,7 +280,6 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
           clearMessages();
           clearChatters();
           clearModLog();
-          clearChatSettings();
           entryCache.clear();
           anchor = null;
           setStickToBottom(true);
