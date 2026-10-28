@@ -2041,10 +2041,28 @@ option::checkmark {
 }
 
 .stream-bar__title {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-muted);
+}
+
+/* The numbers sit together at the right end; the title gives way first. */
+.stream-bar__stats {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.stream-bar__stats:empty {
+  display: none;
+}
+
+.stream-bar__skeleton-end {
+  margin-left: auto;
 }
 
 /* Stacked settings rows with a text field */
@@ -2059,6 +2077,17 @@ option::checkmark {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+/* A labelled group inside a Settings section, such as Stream bar. */
+.settings__group-label {
+  margin-top: 18px;
+  padding: 6px 0;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
 }
 
 .settings__input {
@@ -3609,4 +3638,58 @@ option::checkmark {
 .settings__row--soon .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Placeholder blocks shown while something loads, at the size of what will
+   replace them, so the layout never jumps. */
+.skeleton {
+  display: inline-block;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface) 0%,
+    var(--bg-hover) 50%,
+    var(--bg-surface) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton--short {
+  width: 48px;
+}
+
+.skeleton--long {
+  flex: 1;
+  max-width: 220px;
+}
+
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.stream-bar--in {
+  animation: fade-in 0.22s ease;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .stream-bar--in {
+    animation: none;
+  }
 }

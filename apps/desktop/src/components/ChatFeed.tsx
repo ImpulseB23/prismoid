@@ -35,6 +35,7 @@ import type { ChatEvent } from "../lib/chatEvents";
 import {
   activeChannel,
   channelBanned,
+  channelTabs,
   channelStatus,
   markChannelBanned,
   noteUnread,
@@ -72,6 +73,7 @@ import {
 } from "../stores/badgeStore";
 import { loadEmoteBundle, type EmoteBundleSets } from "../stores/emoteStore";
 import { clearChatters, recordChatter } from "../stores/chatterStore";
+import { recordPulse, retainPulse } from "../stores/pulseStore";
 import { canModerate, noteModerator } from "../stores/roleStore";
 import { clearModLog, recordModAction } from "../stores/modLogStore";
 import { recordHeldMessage, resolveHeldMessage } from "../stores/automodStore";
@@ -452,6 +454,9 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     }
   });
 
+  // Closed tabs stop counting toward the pulse.
+  createEffect(() => retainPulse(channelTabs().map((c) => c.id)));
+
   onMount(() => {
     if (!containerRef) return;
 
@@ -496,8 +501,12 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
         (m) => isForChannel(m, id) && !ignored.includes(m.username),
       );
       // Messages for other tabs only move their unread count; the host's
-      // log holds them until that tab is shown.
+      // log holds them until that tab is shown. Every channel's pulse counts
+      // all of its chat, ignored chatters included, whether shown or not.
       for (const m of event.payload) {
+        if (m.platform === "Twitch" && !m.notice && m.platform_user_id) {
+          recordPulse(m.channel_id, m.platform_user_id, m.arrival_time);
+        }
         if (m.platform === "Twitch" && !isForChannel(m, id) && !m.notice) {
           noteUnread(m.channel_id);
         }

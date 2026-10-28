@@ -20,6 +20,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 vi.mock("../stores/channelStore", () => ({
   activeChannel: () => ({ id: "chan", login: "chan", display_name: "Chan" }),
   channelBanned: () => false,
+  channelTabs: () => [],
   channelStatus: () => "connected",
   markChannelBanned: vi.fn(),
   noteUnread: vi.fn(),
