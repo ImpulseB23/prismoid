@@ -2391,11 +2391,21 @@ option::checkmark {
   background: rgba(58, 183, 191, 0.15);
 }
 
+/* Pinned to the row's right edge on the first line. The row keeps that
+   width free for every line, so long messages wrap before reaching it. */
 .msg__first {
-  border-radius: 999px;
-  background: rgba(58, 183, 191, 0.18);
+  position: absolute;
+  right: 10px;
+  display: flex;
+  align-items: center;
   color: var(--color-teal);
   white-space: nowrap;
+  pointer-events: none;
+}
+
+/* The hover actions take the label's spot on the same line. */
+.msg:hover:has(.msg__actions) .msg__first {
+  visibility: hidden;
 }
 
 .msg--mention {
@@ -2816,9 +2826,9 @@ option::checkmark {
 
 .msg__actions {
   position: absolute;
-  top: 2px;
   right: 8px;
   display: none;
+  align-items: center;
   gap: 4px;
 }
 

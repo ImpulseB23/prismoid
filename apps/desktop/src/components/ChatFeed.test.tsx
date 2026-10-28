@@ -37,23 +37,23 @@ vi.mock("../lib/chatHistory", async (importOriginal) => ({
 }));
 vi.mock("../lib/emoteBundle", () => ({ currentEmoteBundle: async () => null }));
 // Pretext needs a canvas, which jsdom lacks; layout is covered by its own
-// module, here only the chip flag matters.
+// module, here only the row classes matter.
 vi.mock("../lib/messageLayout", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/messageLayout")>()),
   prepareMessage: (
     msg: ChatMessage,
     _resolve: unknown,
-    opts: { firstMessage?: boolean; metrics?: TextMetrics },
+    opts: { metrics?: TextMetrics },
   ): Partial<PreparedMessage> => ({
     pieces: [{ kind: "text", text: msg.message_text }],
     badges: [],
     timestamp: "",
     replyParent: null,
     notice: null,
-    firstMessage: opts.firstMessage === true,
     metrics: opts.metrics,
   }),
   measureMessageHeight: () => 26,
+  firstLabelWidth: () => 80,
 }));
 
 const { clearMessages } = await import("../stores/chatStore");
@@ -132,9 +132,6 @@ describe("ChatFeed first messages", () => {
     await tick();
     expect(rowFor(container, "late").classList).toContain("msg--first");
     expect(rowFor(container, "plain").classList).not.toContain("msg--first");
-    expect(rowFor(container, "plain").textContent).not.toContain(
-      "First message",
-    );
   });
 
   it("marks rows that carry the saved flag", async () => {

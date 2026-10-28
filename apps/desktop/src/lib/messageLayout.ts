@@ -63,13 +63,22 @@ export function textMetrics(fontSize: number): TextMetrics {
   return m;
 }
 
-// The chip ahead of a chatter's first message in the channel. Its padding
-// and trailing gap are measured as extra width; the DOM applies the same
-// values inline.
-export const FIRST_CHIP_TEXT = "First message";
-export const FIRST_CHIP_FONT = `600 11px ${MESSAGE_FONT_FAMILY}`;
-export const FIRST_CHIP_PADDING_X = 5;
-export const FIRST_CHIP_GAP_PX = 5;
+// The "First message" label pinned to the right of a chatter's first message.
+// Its font and the gap before it are measured once, and the row keeps that
+// width free so text never runs under it.
+export const FIRST_LABEL_TEXT = "First message";
+export const FIRST_LABEL_FONT = `600 11px ${MESSAGE_FONT_FAMILY}`;
+const FIRST_LABEL_GAP = 10;
+
+let firstLabelReserve: number | undefined;
+/** Width a first-message row holds back on its right for the label. */
+export function firstLabelWidth(): number {
+  firstLabelReserve ??=
+    measureNaturalWidth(
+      prepareWithSegments(FIRST_LABEL_TEXT, FIRST_LABEL_FONT),
+    ) + FIRST_LABEL_GAP;
+  return firstLabelReserve;
+}
 
 // Every distinct face Pretext measures with. The renderer waits for these
 // to decode before laying out so canvas metrics match the painted text;
@@ -80,7 +89,7 @@ export const MEASURED_FONTS = [
   defaults.usernameFont,
   defaults.timestampFont,
   defaults.noticeFont,
-  FIRST_CHIP_FONT,
+  FIRST_LABEL_FONT,
 ];
 
 export const MESSAGE_LINE_HEIGHT = defaults.lineHeight;
@@ -124,15 +133,11 @@ export interface PreparedMessage {
   /** Set on system notices; the row shows this line instead of a username. */
   notice: ChatMessage["notice"];
   metrics: TextMetrics;
-  /** The row leads with the first-message chip. */
-  firstMessage: boolean;
 }
 
 export interface PrepareOptions {
   timestamps: boolean;
   metrics?: TextMetrics;
-  /** Mark the message as its chatter's first in the channel. Ignored on notices. */
-  firstMessage?: boolean;
 }
 
 export function prepareMessage(
@@ -168,16 +173,6 @@ export function prepareMessage(
       text: timestamp,
       font: m.timestampFont,
       break: "never",
-    });
-  }
-
-  const firstMessage = !msg.notice && opts.firstMessage === true;
-  if (firstMessage) {
-    items.push({
-      text: FIRST_CHIP_TEXT,
-      font: FIRST_CHIP_FONT,
-      break: "never",
-      extraWidth: FIRST_CHIP_PADDING_X * 2 + FIRST_CHIP_GAP_PX,
     });
   }
 
@@ -221,18 +216,22 @@ export function prepareMessage(
     replyParent: msg.reply_parent,
     notice: msg.notice,
     metrics: m,
-    firstMessage,
   };
 }
 
+/** `reserveRight` is width kept free on every line, for the first-message label. */
 export function measureMessageHeight(
   msg: PreparedMessage,
   containerWidth: number,
+  reserveRight = 0,
 ): number {
   const { lineHeight } = msg.metrics;
   // The quoted reply line is a single nowrap, ellipsized line in the DOM.
   const extra = msg.replyParent ? lineHeight : 0;
-  const contentWidth = Math.max(0, containerWidth - MESSAGE_PADDING_X * 2);
+  const contentWidth = Math.max(
+    0,
+    containerWidth - MESSAGE_PADDING_X * 2 - reserveRight,
+  );
   if (contentWidth <= 0) return lineHeight + extra + MESSAGE_PADDING_Y;
   const { lineCount } = measureRichInlineStats(msg.prepared, contentWidth);
   return Math.max(1, lineCount) * lineHeight + extra + MESSAGE_PADDING_Y;
