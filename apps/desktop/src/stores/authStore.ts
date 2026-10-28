@@ -31,3 +31,12 @@ export function moderationNeedsReconnect(): boolean {
   const missing = missingScopes();
   return MODERATION_SCOPES.some((s) => missing.includes(s));
 }
+
+/**
+ * True when the grant predates the AutoMod queue. Kept apart from
+ * moderationNeedsReconnect so an older grant keeps the rest of the mod
+ * tools while the queue asks for a reconnect.
+ */
+export function automodNeedsReconnect(): boolean {
+  return missingScopes().includes("moderator:manage:automod");
+}

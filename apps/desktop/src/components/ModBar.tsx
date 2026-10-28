@@ -1,5 +1,6 @@
 // Strip under the composer for whoever can moderate the open channel: who
-// they are here, the room modes as one-tap chips, and the full modes panel.
+// they are here, the room modes as one-tap chips, the AutoMod queue, and
+// the full modes panel.
 
 import {
   Component,
@@ -22,6 +23,8 @@ import {
 import { setModesOpen } from "../stores/modesPanelStore";
 import { modLogOpen, setModLogOpen } from "../stores/modLogPanelStore";
 import ModLog from "./ModLog";
+import AutomodQueue from "./AutomodQueue";
+import { pendingHeldCount } from "../stores/automodStore";
 import { chipLabel, isOn, patchFor, type ChatMode } from "../lib/chatModes";
 import { clearChat, type SendMessageError } from "../lib/twitchAuth";
 import { formatSendError, toSendError } from "../lib/messageInput";
@@ -44,6 +47,12 @@ const ModBar: Component = () => {
   });
 
   const broadcaster = () => activeChannel()?.id === currentUserId();
+
+  const [automodOpen, setAutomodOpen] = createSignal(false);
+  const heldCount = () => {
+    const id = activeChannel()?.id;
+    return id === undefined ? 0 : pendingHeldCount(id);
+  };
 
   const [armed, setArmed] = createSignal(false);
   const [clearing, setClearing] = createSignal(false);
@@ -141,6 +150,17 @@ const ModBar: Component = () => {
         <button
           type="button"
           class="modbar__more"
+          title="Messages AutoMod is holding for review"
+          onClick={() => setAutomodOpen(true)}
+        >
+          AutoMod
+          <Show when={heldCount() > 0}>
+            <span class="modbar__count">{heldCount()}</span>
+          </Show>
+        </button>
+        <button
+          type="button"
+          class="modbar__more"
           title="Every mod action in this channel this session"
           onClick={() => setModLogOpen(true)}
         >
@@ -155,6 +175,10 @@ const ModBar: Component = () => {
           Modes
         </button>
         <ModLog open={modLogOpen()} onClose={() => setModLogOpen(false)} />
+        <AutomodQueue
+          open={automodOpen()}
+          onClose={() => setAutomodOpen(false)}
+        />
       </div>
     </Show>
   );

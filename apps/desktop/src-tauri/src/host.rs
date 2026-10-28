@@ -441,6 +441,54 @@ pub fn build_twitch_clear_chat_line(args: TwitchClearChatArgs<'_>) -> serde_json
     Ok(bytes)
 }
 
+/// What a moderator does with a message AutoMod is holding. Serialized the
+/// way Helix spells it, which is also what the frontend sends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum HeldMessageAction {
+    Allow,
+    Deny,
+}
+
+pub struct TwitchManageHeldMessageArgs<'a> {
+    pub client_id: &'a str,
+    pub access_token: &'a str,
+    pub broadcaster_id: &'a str,
+    pub user_id: &'a str,
+    pub message_id: &'a str,
+    pub action: HeldMessageAction,
+    pub request_id: u64,
+}
+
+pub fn build_twitch_manage_held_message_line(
+    args: TwitchManageHeldMessageArgs<'_>,
+) -> serde_json::Result<Vec<u8>> {
+    #[derive(Serialize)]
+    struct ManageCmd<'a> {
+        cmd: &'a str,
+        client_id: &'a str,
+        token: &'a str,
+        broadcaster_id: &'a str,
+        user_id: &'a str,
+        message_id: &'a str,
+        action: HeldMessageAction,
+        request_id: u64,
+    }
+    let cmd = ManageCmd {
+        cmd: "manage_held_message",
+        client_id: args.client_id,
+        token: args.access_token,
+        broadcaster_id: args.broadcaster_id,
+        user_id: args.user_id,
+        message_id: args.message_id,
+        action: args.action,
+        request_id: args.request_id,
+    };
+    let mut bytes = serde_json::to_vec(&cmd)?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
 /// Arguments for [`build_youtube_send_message_line`]. Mirrors the
 /// Twitch shape but trimmed to what the YouTube Data API needs (no
 /// client_id, no broadcaster/sender split — the access token's owner
@@ -1278,6 +1326,46 @@ mod tests {
         assert_eq!(parsed["broadcaster_id"], "b");
         assert_eq!(parsed["request_id"], 6_u64);
         assert!(parsed.get("message_id").is_none());
+    }
+
+    #[test]
+    fn build_twitch_manage_held_message_line_spells_action_like_helix() {
+        for (action, want) in [
+            (HeldMessageAction::Allow, "ALLOW"),
+            (HeldMessageAction::Deny, "DENY"),
+        ] {
+            let line = build_twitch_manage_held_message_line(TwitchManageHeldMessageArgs {
+                client_id: "cid",
+                access_token: "tok",
+                broadcaster_id: "b",
+                user_id: "u",
+                message_id: "held-1",
+                action,
+                request_id: 8,
+            })
+            .unwrap();
+            assert_eq!(line.last(), Some(&b'\n'));
+            let parsed: serde_json::Value =
+                serde_json::from_slice(&line[..line.len() - 1]).unwrap();
+            assert_eq!(parsed["cmd"], "manage_held_message");
+            assert_eq!(parsed["message_id"], "held-1");
+            assert_eq!(parsed["user_id"], "u");
+            assert_eq!(parsed["action"], want);
+            assert_eq!(parsed["request_id"], 8_u64);
+        }
+    }
+
+    #[test]
+    fn held_message_action_only_accepts_helix_spelling() {
+        assert_eq!(
+            serde_json::from_str::<HeldMessageAction>(r#""ALLOW""#).unwrap(),
+            HeldMessageAction::Allow
+        );
+        assert_eq!(
+            serde_json::from_str::<HeldMessageAction>(r#""DENY""#).unwrap(),
+            HeldMessageAction::Deny
+        );
+        assert!(serde_json::from_str::<HeldMessageAction>(r#""allow""#).is_err());
     }
 
     #[test]

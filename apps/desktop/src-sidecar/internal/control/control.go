@@ -60,6 +60,8 @@ type Command struct {
 	DurationSeconds int    `json:"duration_seconds,omitempty"`
 	Reason          string `json:"reason,omitempty"`
 	MessageID       string `json:"message_id,omitempty"`
+	// Action is ALLOW or DENY for manage_held_message.
+	Action string `json:"action,omitempty"`
 
 	// Message body for send_chat_message. Capped at 500 bytes by Twitch's
 	// Helix POST /chat/messages endpoint; the sidecar enforces the limit

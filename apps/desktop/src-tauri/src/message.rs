@@ -252,6 +252,104 @@ pub enum ChatEvent {
     /// A moderator did something, from `channel.moderate` v2. Only arrives
     /// in channels where the signed-in user moderates.
     ModAction(Box<ModAction>),
+    /// AutoMod is holding a message for review, from
+    /// `automod.message.hold` v2. Moderators only.
+    AutomodHeld(Box<HeldMessage>),
+    /// A held message was approved, denied or expired, from
+    /// `automod.message.update` v2.
+    AutomodResolved {
+        channel_id: String,
+        message_id: String,
+        /// `approved`, `denied` or `expired`.
+        status: String,
+        moderator_login: String,
+        moderator_name: String,
+    },
+}
+
+/// A message AutoMod is holding. `reason` is `automod`, `blocked_term` or
+/// `blocked_link`; `category` and `level` (1 to 4) only come with
+/// `automod`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HeldMessage {
+    pub channel_id: String,
+    pub message_id: String,
+    pub user_id: String,
+    pub user_login: String,
+    pub user_name: String,
+    pub text: String,
+    pub reason: String,
+    pub category: String,
+    pub level: Option<u8>,
+    pub held_at: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct TwitchAutomodHoldEvent {
+    #[serde(default, deserialize_with = "null_default")]
+    broadcaster_user_id: String,
+    #[serde(default, deserialize_with = "null_default")]
+    user_id: String,
+    #[serde(default, deserialize_with = "null_default")]
+    user_login: String,
+    #[serde(default, deserialize_with = "null_default")]
+    user_name: String,
+    message_id: String,
+    #[serde(default, deserialize_with = "null_default")]
+    message: TwitchChatMessage,
+    #[serde(default, deserialize_with = "null_default")]
+    reason: String,
+    #[serde(default)]
+    automod: Option<TwitchAutomodVerdict>,
+    #[serde(default, deserialize_with = "null_default")]
+    held_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TwitchAutomodVerdict {
+    #[serde(default, deserialize_with = "null_default")]
+    category: String,
+    #[serde(default)]
+    level: Option<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TwitchAutomodUpdateEvent {
+    #[serde(default, deserialize_with = "null_default")]
+    broadcaster_user_id: String,
+    message_id: String,
+    #[serde(default, deserialize_with = "null_default")]
+    status: String,
+    #[serde(default, deserialize_with = "null_default")]
+    moderator_user_login: String,
+    #[serde(default, deserialize_with = "null_default")]
+    moderator_user_name: String,
+}
+
+fn held_message(
+    event: TwitchAutomodHoldEvent,
+    message_timestamp: &str,
+) -> Result<HeldMessage, ParseError> {
+    let held_at = match parse_platform_ts(&event.held_at) {
+        Ok(ts) => ts,
+        Err(_) => parse_platform_ts(message_timestamp)?,
+    };
+    let (category, level) = event
+        .automod
+        .map(|a| (a.category, a.level))
+        .unwrap_or_default();
+    Ok(HeldMessage {
+        channel_id: event.broadcaster_user_id,
+        message_id: event.message_id,
+        user_id: event.user_id,
+        user_login: event.user_login,
+        user_name: event.user_name,
+        text: event.message.text,
+        reason: event.reason,
+        category,
+        level,
+        held_at,
+    })
 }
 
 /// One `channel.moderate` event flattened for the frontend. `action` is
@@ -604,6 +702,24 @@ pub fn parse_twitch_envelope(bytes: &[u8]) -> Result<Option<TwitchItem>, ParseEr
         "channel.moderate" => {
             let event: TwitchModerateEvent = serde_json::from_value(event_value)?;
             TwitchItem::Event(ChatEvent::ModAction(Box::new(mod_action(event, stamp)?)))
+        }
+        "automod.message.hold" => {
+            let event: TwitchAutomodHoldEvent = serde_json::from_value(event_value)?;
+            TwitchItem::Event(ChatEvent::AutomodHeld(Box::new(held_message(
+                event, stamp,
+            )?)))
+        }
+        "automod.message.update" => {
+            let event: TwitchAutomodUpdateEvent = serde_json::from_value(event_value)?;
+            // The reference lists the statuses capitalized while its
+            // example payload sends them lowercase.
+            TwitchItem::Event(ChatEvent::AutomodResolved {
+                channel_id: event.broadcaster_user_id,
+                message_id: event.message_id,
+                status: event.status.to_ascii_lowercase(),
+                moderator_login: event.moderator_user_login,
+                moderator_name: event.moderator_user_name,
+            })
         }
         _ => return Ok(None),
     };
@@ -1786,5 +1902,111 @@ mod tests {
         let json = serde_json::to_value(ChatEvent::ModAction(Box::new(s))).unwrap();
         assert_eq!(json["kind"], "mod_action");
         assert_eq!(json["action"], "slow");
+    }
+
+    fn automod(sub_type: &str, body: &str) -> ChatEvent {
+        let raw = format!(
+            r##"{{
+                "metadata": {{ "message_type": "notification", "message_timestamp": "2023-11-06T18:12:05.250Z" }},
+                "payload": {{
+                    "subscription": {{ "type": "{sub_type}", "version": "2" }},
+                    "event": {{
+                        "broadcaster_user_id": "1971641",
+                        "broadcaster_user_login": "streamer",
+                        "broadcaster_user_name": "Streamer",
+                        "user_id": "42",
+                        "user_login": "chatter",
+                        "user_name": "Chatter",
+                        "message_id": "held-1",
+                        "message": {{ "text": "you are bad", "fragments": [{{ "type": "text", "text": "you are bad", "cheermote": null, "emote": null }}] }},
+                        {body}
+                    }}
+                }}
+            }}"##
+        );
+        event(raw.as_bytes())
+    }
+
+    #[test]
+    fn parses_automod_hold_v2() {
+        let e = automod(
+            "automod.message.hold",
+            r#""reason": "automod",
+               "automod": { "category": "aggressive", "level": 2, "boundaries": [{ "start_pos": 8, "end_pos": 10 }] },
+               "blocked_term": null,
+               "held_at": "2023-11-06T18:12:04.000Z""#,
+        );
+        assert_eq!(
+            e,
+            ChatEvent::AutomodHeld(Box::new(HeldMessage {
+                channel_id: "1971641".into(),
+                message_id: "held-1".into(),
+                user_id: "42".into(),
+                user_login: "chatter".into(),
+                user_name: "Chatter".into(),
+                text: "you are bad".into(),
+                reason: "automod".into(),
+                category: "aggressive".into(),
+                level: Some(2),
+                held_at: 1_699_294_324_000,
+            }))
+        );
+        let json = serde_json::to_value(&e).unwrap();
+        assert_eq!(json["kind"], "automod_held");
+        assert_eq!(json["level"], 2);
+    }
+
+    #[test]
+    fn parses_blocked_term_hold_without_automod_verdict() {
+        let e = automod(
+            "automod.message.hold",
+            r#""reason": "blocked_term",
+               "automod": null,
+               "blocked_term": { "terms_found": [{ "term_id": "t1", "boundary": { "start_pos": 0, "end_pos": 2 }, "owner_broadcaster_user_id": "1971641", "owner_broadcaster_user_login": "streamer", "owner_broadcaster_user_name": "Streamer" }] },
+               "held_at": "not a time""#,
+        );
+        let ChatEvent::AutomodHeld(h) = e else {
+            panic!("expected a held message, got {e:?}");
+        };
+        assert_eq!(h.reason, "blocked_term");
+        assert_eq!(h.category, "");
+        assert_eq!(h.level, None);
+        // An unreadable held_at falls back to the envelope timestamp.
+        assert_eq!(h.held_at, 1_699_294_325_250);
+    }
+
+    #[test]
+    fn parses_automod_update_v2_with_any_status_case() {
+        for (status, want) in [
+            ("approved", "approved"),
+            ("Denied", "denied"),
+            ("Expired", "expired"),
+        ] {
+            let e = automod(
+                "automod.message.update",
+                &format!(
+                    r#""moderator_user_id": "7", "moderator_user_login": "modguy", "moderator_user_name": "ModGuy",
+                       "reason": "automod", "automod": null, "blocked_term": null,
+                       "status": "{status}", "held_at": "2023-11-06T18:12:04.000Z""#
+                ),
+            );
+            assert_eq!(
+                e,
+                ChatEvent::AutomodResolved {
+                    channel_id: "1971641".into(),
+                    message_id: "held-1".into(),
+                    status: want.into(),
+                    moderator_login: "modguy".into(),
+                    moderator_name: "ModGuy".into(),
+                }
+            );
+        }
+        let json = serde_json::to_value(automod(
+            "automod.message.update",
+            r#""status": "expired", "moderator_user_login": null, "moderator_user_name": null"#,
+        ))
+        .unwrap();
+        assert_eq!(json["kind"], "automod_resolved");
+        assert_eq!(json["moderator_login"], "");
     }
 }

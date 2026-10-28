@@ -2535,8 +2535,87 @@ img {
   font-size: 12px;
 }
 
+.modbar__count {
+  display: inline-block;
+  min-width: 16px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--color-amber);
+  color: var(--color-base-900);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
 .modlog {
   width: min(460px, 100%);
+}
+
+.automod__row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.automod__row + .automod__row {
+  border-top: 1px solid var(--border);
+}
+
+.automod__row--done {
+  opacity: 0.6;
+}
+
+.automod__meta {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  color: var(--text-muted);
+}
+
+.automod__user {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.automod__reason {
+  margin-left: auto;
+  color: var(--color-amber);
+  font-size: 12px;
+}
+
+.automod__text {
+  color: var(--text);
+}
+
+.automod__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.automod__allow,
+.automod__allow:hover {
+  background: rgba(77, 179, 50, 0.15);
+  border-color: rgba(77, 179, 50, 0.5);
+  color: var(--color-green-light);
+}
+
+.automod__outcome {
+  color: var(--color-green-light);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.automod__outcome--denied {
+  color: var(--color-red-light);
 }
 
 .modlog__filters {

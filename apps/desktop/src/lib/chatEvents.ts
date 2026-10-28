@@ -23,7 +23,33 @@ export interface ModAction {
   moderator_message: string;
 }
 
-export type ChatEvent =
+export interface HeldMessage {
+  kind: "automod_held";
+  channel_id: string;
+  message_id: string;
+  user_id: string;
+  user_login: string;
+  user_name: string;
+  text: string;
+  /** automod, blocked_term or blocked_link */
+  reason: string;
+  /** Only set when reason is automod. */
+  category: string;
+  level: number | null;
+  held_at: number;
+}
+
+export interface HeldMessageResolved {
+  kind: "automod_resolved";
+  channel_id: string;
+  message_id: string;
+  status: "approved" | "denied" | "expired";
+  moderator_login: string;
+  moderator_name: string;
+}
+
+/** What Twitch tells every viewer about a moderation event. */
+export type PublicModerationEvent =
   | {
       kind: "message_deleted";
       channel_id: string;
@@ -37,5 +63,10 @@ export type ChatEvent =
       target_user_login: string;
       target_user_name: string;
     }
-  | { kind: "chat_cleared"; channel_id: string }
-  | ModAction;
+  | { kind: "chat_cleared"; channel_id: string };
+
+export type ChatEvent =
+  | PublicModerationEvent
+  | ModAction
+  | HeldMessage
+  | HeldMessageResolved;

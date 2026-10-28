@@ -33,6 +33,7 @@ import {
   restoreChannels,
   selectChannel,
 } from "./stores/channelStore";
+import { clearHeldMessages } from "./stores/automodStore";
 import { clearMessages } from "./stores/chatStore";
 import { clearMentions } from "./stores/mentionsStore";
 import { clearRoles, loadModeratedChannels } from "./stores/roleStore";
@@ -95,6 +96,7 @@ const App: Component = () => {
     await logout();
     clearMessages();
     clearMentions();
+    clearHeldMessages();
     setAuthStatus({ state: "logged_out" });
   };
 
