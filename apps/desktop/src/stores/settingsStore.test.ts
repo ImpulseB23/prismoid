@@ -44,6 +44,7 @@ function appliers(): SettingsAppliers & {
     },
     followBrowser: async () => {},
     chatBacklog: async () => {},
+    closeToTray: async () => {},
     theme: async (v) => {
       themes.push(v);
     },
@@ -75,6 +76,7 @@ describe("settingsStore", () => {
       timeoutPresets: [60, 600, 3600, 86_400],
       followBrowser: false,
       chatBacklog: true,
+      closeToTray: false,
       tourDone: false,
       mentionAlerts: true,
       theme: "dark",
@@ -126,6 +128,7 @@ describe("settingsStore", () => {
         zoom: async () => {},
         followBrowser: async () => {},
         chatBacklog: async () => {},
+        closeToTray: async () => {},
         theme: async () => {},
       },
       memStorage(),
@@ -166,6 +169,7 @@ describe("settingsStore", () => {
       timeoutPresets: [60, 600, 3600, 86_400],
       followBrowser: false,
       chatBacklog: true,
+      closeToTray: false,
       tourDone: false,
       mentionAlerts: false,
       theme: "dark",
