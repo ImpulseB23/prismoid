@@ -14,6 +14,7 @@ mod sidecar_commands;
 #[cfg(windows)]
 mod sidecar_job;
 mod sidecar_supervisor;
+mod stream_manager_window;
 mod tray;
 pub mod twitch_auth;
 pub mod twitch_channel;
@@ -35,7 +36,7 @@ pub use host::parse_batch;
 #[doc(hidden)]
 pub use message::UnifiedMessage;
 
-use tauri::{Manager, Runtime};
+use tauri::{Manager, Runtime, Window, WindowEvent};
 use tauri_plugin_window_state::StateFlags;
 
 /// Visibility is decided at launch (shown, or left in the tray for a
@@ -82,7 +83,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .manage(tray::CloseToTray::default())
-        .on_window_event(tray::on_window_event)
+        .on_window_event(on_window_event)
         .invoke_handler(tauri::generate_handler![
             get_platform,
             logging::support_bundle,
@@ -128,6 +129,8 @@ pub fn run() {
             seventv_paints::set_seventv_paints,
             seventv_users::seventv_users,
             chat_history::chat_history,
+            stream_manager_window::stream_manager_open,
+            stream_manager_window::stream_manager_ready,
             twitch_chat_settings::twitch_get_chat_settings,
             twitch_chat_settings::twitch_update_chat_settings,
             twitch_channel_info::twitch_get_channel_info,
@@ -145,6 +148,13 @@ pub fn run() {
         .setup(setup)
         .run(tauri::generate_context!())
         .expect("failed to run prismoid");
+}
+
+fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
+    tray::on_window_event(window, event);
+    if window.label() == "main" && matches!(event, WindowEvent::Destroyed) {
+        stream_manager_window::close(window.app_handle());
+    }
 }
 
 /// Tauri setup hook. Builds the shared `AuthManager` + wakeup notifier,
