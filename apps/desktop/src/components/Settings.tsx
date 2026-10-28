@@ -505,6 +505,12 @@ const TwitchReconnect: Component = () => {
   const [error, setError] = createSignal<string | null>(null);
   let generation = 0;
 
+  const openTwitch = (url: string) =>
+    openTwitchUrl(url).catch((err: unknown) => {
+      console.error("open twitch", err);
+      setError(`Your browser did not open. Copy this link into it: ${url}`);
+    });
+
   const begin = async () => {
     const gen = ++generation;
     setError(null);
@@ -513,7 +519,7 @@ const TwitchReconnect: Component = () => {
       const view = await startLogin();
       if (gen !== generation) return;
       setPending(view);
-      void openTwitchUrl(view.authorize_url).catch(() => {});
+      openTwitch(view.authorize_url);
       const status = await completeLogin();
       if (gen !== generation) return;
       setAuthStatus(status);
@@ -538,7 +544,9 @@ const TwitchReconnect: Component = () => {
     generation++;
     setPending(null);
     setBusy(false);
-    void cancelLogin().catch(() => {});
+    void cancelLogin().catch((err: unknown) =>
+      console.error("cancel reconnect", err),
+    );
   };
 
   onCleanup(() => {
@@ -576,7 +584,7 @@ const TwitchReconnect: Component = () => {
                 href={p().authorize_url}
                 onClick={(e) => {
                   e.preventDefault();
-                  void openTwitchUrl(p().authorize_url).catch(() => {});
+                  openTwitch(p().authorize_url);
                 }}
               >
                 Open it again

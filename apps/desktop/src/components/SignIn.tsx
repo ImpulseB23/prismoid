@@ -26,14 +26,26 @@ const SignIn: Component<SignInProps> = (props) => {
   const [pending, setPending] = createSignal<LoginView | null>(null);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+  const [browserFailed, setBrowserFailed] = createSignal(false);
+  // Cancelling tells the host| null>(null);
   // Cancelling tells the host to stop listening, but the in-flight
   // completeLogin() Promise still settles. The generation counter lets us
   // ignore that stale result.
   let generation = 0;
 
   onMount(() => {
-    void cancelLogin().catch(() => {});
+    void cancelLogin().catch((err: unknown) =>
+      console.error("cancel stale sign-in", err),
+    );
   });
+
+  const openTwitch = (url: string) => {
+    setBrowserFailed(false);
+    openTwitchUrl(url).catch((err: unknown) => {
+      console.error("open twitch", err);
+      setBrowserFailed(true);
+    });
+  };
 
   const beginFlow = async () => {
     generation += 1;
@@ -44,7 +56,7 @@ const SignIn: Component<SignInProps> = (props) => {
       const view = await startLogin();
       if (gen !== generation) return;
       setPending(view);
-      void openTwitchUrl(view.authorize_url).catch(() => {});
+      openTwitch(view.authorize_url);
 
       const status = await completeLogin();
       if (gen !== generation) return;
@@ -73,7 +85,10 @@ const SignIn: Component<SignInProps> = (props) => {
     setPending(null);
     setBusy(false);
     setError(null);
-    await cancelLogin().catch(() => {});
+    setBrowserFailed(false);
+    await cancelLogin().catch((err: unknown) =>
+      console.error("cancel sign-in", err),
+    );
   };
 
   return (
@@ -112,12 +127,24 @@ const SignIn: Component<SignInProps> = (props) => {
                 href={p().authorize_url}
                 onClick={(e) => {
                   e.preventDefault();
-                  void openTwitchUrl(p().authorize_url).catch(() => {});
+                  openTwitch(p().authorize_url);
                 }}
               >
                 Open Twitch again
               </a>
             </small>
+            <Show when={browserFailed()}>
+              <div class="signin__manual" role="alert">
+                <span>Your browser did not open. Copy this link into it:</span>
+                <input
+                  type="text"
+                  readOnly
+                  value={p().authorize_url}
+                  aria-label="Twitch sign-in link"
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+              </div>
+            </Show>
             <button type="button" class="btn btn--outline" onClick={cancel}>
               Cancel
             </button>

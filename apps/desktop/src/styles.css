@@ -2472,3 +2472,23 @@ img {
 .modlog__row:hover {
   background: var(--bg-surface);
 }
+
+.signin__manual {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  font-size: 12px;
+  color: var(--color-red-light);
+}
+
+.signin__manual input {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
