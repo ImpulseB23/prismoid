@@ -9,7 +9,7 @@ import { activeChannel } from "../stores/channelStore";
 import { currentUserId } from "../stores/authStore";
 import { canModerate } from "../stores/roleStore";
 import { badgeRevision, resolveBadge } from "../stores/badgeStore";
-import { openUserCard } from "../stores/userCardStore";
+import { cardLoading, openUserCard } from "../stores/userCardStore";
 import {
   ensureUserInfo,
   userInfo,
@@ -67,6 +67,8 @@ const AccountAvatar: Component<{ login: string }> = (props) => {
         <button
           type="button"
           class="avatar"
+          classList={{ "avatar--loading": cardLoading() === "self" }}
+          aria-busy={cardLoading() === "self"}
           title={`Chatting as ${s().display_name}`}
           aria-label={`Your card, chatting as ${s().display_name}`}
           onClick={() => openUserCard(s(), "self")}

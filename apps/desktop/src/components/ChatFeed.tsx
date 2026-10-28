@@ -122,7 +122,12 @@ import { shownPaint, syncPaints } from "../stores/paintStore";
 import { isLight, logo } from "../stores/themeStore";
 import MessagePieces from "./MessagePieces";
 import UserCard from "./UserCard";
-import { cardUser, closeUserCard, openUserCard } from "../stores/userCardStore";
+import {
+  cardUser,
+  closeUserCard,
+  cardLoading,
+  openUserCard,
+} from "../stores/userCardStore";
 import EmoteCard from "./EmoteCard";
 import ContextMenu from "./ContextMenu";
 import EmoteTooltip from "./EmoteTooltip";
@@ -1154,7 +1159,12 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                         </For>
                         <span
                           class="msg__user"
-                          classList={{ "name--painted": name().painted }}
+                          classList={{
+                            "name--painted": name().painted,
+                            "msg__user--loading":
+                              cardLoading() === row().msg.id,
+                          }}
+                          aria-busy={cardLoading() === row().msg.id}
                           role="button"
                           tabIndex={0}
                           title={
