@@ -16,6 +16,7 @@ import { isEmpty, matches, parseQuery } from "../lib/chatSearch";
 import { formatTimestamp, normalizeUserColor } from "../lib/messageStyle";
 import { splitMessage } from "../lib/emoteSpans";
 import { MESSAGE_LINE_HEIGHT } from "../lib/messageLayout";
+import { isLight } from "../stores/themeStore";
 import MessagePieces from "./MessagePieces";
 
 export const MAX_RESULTS = 200;
@@ -89,7 +90,7 @@ const ChatSearch: Component<ChatSearchProps> = (props) => {
                     </span>
                     <span
                       class="search__name"
-                      style={{ color: normalizeUserColor(m.color) }}
+                      style={{ color: normalizeUserColor(m.color, isLight()) }}
                     >
                       {m.display_name}
                     </span>
