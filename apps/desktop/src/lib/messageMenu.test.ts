@@ -90,7 +90,7 @@ describe("messageMenuItems", () => {
     expect(act.timeout).toHaveBeenCalledWith(600);
   });
 
-  it("never offers moderation or ignore on your own message", () => {
+  it("lets a mod delete their own message but never punish themselves", () => {
     const got = labels(
       messageMenuItems(
         msg,
@@ -98,7 +98,9 @@ describe("messageMenuItems", () => {
         actions(),
       ),
     );
+    expect(got).toContain("Delete message");
     expect(got).not.toContain("Ban");
+    expect(got.some((l) => l.startsWith("Timeout"))).toBe(false);
     expect(got).not.toContain("Ignore");
     expect(got).toContain("Copy message");
   });

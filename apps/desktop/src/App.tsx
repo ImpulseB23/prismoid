@@ -48,6 +48,8 @@ import { trackActiveStream } from "./stores/streamStore";
 import { initWhatsNew } from "./stores/whatsNewStore";
 import { trackWindowChrome } from "./stores/windowStore";
 import TitleBar from "./components/TitleBar";
+import ContextMenu from "./components/ContextMenu";
+import { installContextMenus } from "./lib/appContextMenu";
 import { settingsOpen } from "./stores/settingsPanelStore";
 import {
   dismissUpdate,
@@ -80,6 +82,7 @@ const App: Component = () => {
   // Runs for the whole session, sign-in screen included, so a release that
   // fixes a sign-in bug still reaches whoever is stuck there.
   onMount(() => onCleanup(scheduleUpdateChecks()));
+  onMount(() => onCleanup(installContextMenus()));
   onMount(() => {
     initWhatsNew().catch((err: unknown) => console.error("whats new", err));
   });
@@ -145,6 +148,7 @@ const App: Component = () => {
           )}
         </Match>
       </Switch>
+      <ContextMenu />
       <UpdateScreen
         state={updateState}
         onRetry={() => void installUpdate()}

@@ -53,11 +53,15 @@ export function messageMenuItems(
     }
   }
 
-  if (ctx.canModerate && hasUser && !ctx.own) {
+  // Mods can delete their own messages too; timeouts and bans never target
+  // themselves.
+  const deletable =
+    ctx.canModerate && !isNotice && msg.status === undefined && !msg.deleted;
+  if (deletable || (ctx.canModerate && hasUser && !ctx.own)) {
     items.push(separator);
-    if (!isNotice && msg.status === undefined && !msg.deleted) {
-      items.push(item("Delete message", act.deleteMessage));
-    }
+  }
+  if (deletable) items.push(item("Delete message", act.deleteMessage, true));
+  if (ctx.canModerate && hasUser && !ctx.own) {
     for (const seconds of ctx.timeouts) {
       items.push(
         item(`Timeout ${formatSeconds(seconds)}`, () => act.timeout(seconds)),

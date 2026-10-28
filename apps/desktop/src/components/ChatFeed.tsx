@@ -129,7 +129,6 @@ import {
   openUserCard,
 } from "../stores/userCardStore";
 import EmoteCard from "./EmoteCard";
-import ContextMenu from "./ContextMenu";
 import EmoteTooltip from "./EmoteTooltip";
 
 const OVERSCAN = 6;
@@ -701,6 +700,11 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     });
 
   // Hover icons for moderators: delete, the first timeout preset, ban.
+  // Mods can delete any message, their own included; timeouts and bans
+  // never target themselves.
+  const canDelete = (msg: ChatMessage) =>
+    canModerate() && msg.platform === "Twitch";
+
   const showModIcons = (msg: ChatMessage) =>
     canModerate() &&
     msg.platform === "Twitch" &&
@@ -965,10 +969,10 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                           </svg>
                         </button>
                       </Show>
-                      <Show when={showModIcons(row().msg)}>
+                      <Show when={canDelete(row().msg)}>
                         <button
                           type="button"
-                          class="msg__action"
+                          class="msg__action msg__action--danger"
                           title="Delete message"
                           aria-label="Delete message"
                           onClick={(e) => {
@@ -980,16 +984,20 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                             width="12"
                             height="12"
                             viewBox="0 0 12 12"
+                            fill="none"
                             aria-hidden="true"
                           >
                             <path
-                              d="M3 3l6 6M9 3l-6 6"
+                              d="M2 3.5h8M4.75 3.5V2.25h2.5V3.5M3.25 3.5l.5 6.25h4.5l.5-6.25"
                               stroke="currentColor"
-                              stroke-width="1.5"
+                              stroke-width="1.2"
                               stroke-linecap="round"
+                              stroke-linejoin="round"
                             />
                           </svg>
                         </button>
+                      </Show>
+                      <Show when={showModIcons(row().msg)}>
                         <Show when={settings().timeoutPresets[0]}>
                           {(seconds) => (
                             <button
@@ -1042,32 +1050,23 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                       <button
                         type="button"
                         class="msg__action"
-                        title={`Reply to ${row().msg.display_name}`}
-                        aria-label={`Reply to ${row().msg.display_name}`}
+                        title="More"
+                        aria-label="More actions"
+                        aria-haspopup="menu"
                         onClick={(e) => {
                           e.stopPropagation();
-                          requestReply({
-                            message_id: row().msg.id,
-                            user_login: row().msg.username,
-                            user_name: row().msg.display_name,
-                            body: row().msg.message_text,
-                          });
+                          openMenuFor(e, row().msg);
                         }}
                       >
                         <svg
                           width="12"
                           height="12"
                           viewBox="0 0 12 12"
-                          fill="none"
                           aria-hidden="true"
                         >
-                          <path
-                            d="M4.5 2.5 1.5 5.5l3 3M2 5.5h5a3 3 0 0 1 3 3V10"
-                            stroke="currentColor"
-                            stroke-width="1.4"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                          />
+                          <circle cx="2.5" cy="6" r="1.1" fill="currentColor" />
+                          <circle cx="6" cy="6" r="1.1" fill="currentColor" />
+                          <circle cx="9.5" cy="6" r="1.1" fill="currentColor" />
                         </svg>
                       </button>
                     </div>
@@ -1248,7 +1247,6 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
 
       <UserCard user={cardUser()} login={props.login} onClose={closeUserCard} />
       <EmoteCard />
-      <ContextMenu />
       <EmoteTooltip />
       <Thread />
     </div>
