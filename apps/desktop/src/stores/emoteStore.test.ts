@@ -29,4 +29,15 @@ describe("emoteStore", () => {
     expect(s.byCode("Kappa")?.provider).toBe("7tv");
     expect(s.revision()).toBe(1);
   });
+
+  it("knows whether an emote is from the channel or global", () => {
+    const s = createEmoteStore();
+    s.loadBundle({
+      seventv_global: { emotes: [emote("peepoHappy", "7tv")] },
+      bttv_channel: { emotes: [emote("catJAM", "bttv")] },
+    });
+    expect(s.scopeOf(emote("catJAM", "bttv"))).toBe("channel");
+    expect(s.scopeOf(emote("peepoHappy", "7tv"))).toBe("global");
+    expect(s.scopeOf(emote("catJAM", "7tv"))).toBeUndefined();
+  });
 });

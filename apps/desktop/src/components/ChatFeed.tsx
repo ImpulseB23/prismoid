@@ -125,6 +125,7 @@ import UserCard from "./UserCard";
 import { cardUser, closeUserCard, openUserCard } from "../stores/userCardStore";
 import EmoteCard from "./EmoteCard";
 import ContextMenu from "./ContextMenu";
+import EmoteTooltip from "./EmoteTooltip";
 
 const OVERSCAN = 6;
 const STICK_THRESHOLD = 40;
@@ -1238,6 +1239,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       <UserCard user={cardUser()} login={props.login} onClose={closeUserCard} />
       <EmoteCard />
       <ContextMenu />
+      <EmoteTooltip />
       <Thread />
     </div>
   );

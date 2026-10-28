@@ -22,8 +22,11 @@ export interface EmoteBundleSets {
   ffz_channel?: EmoteSet;
 }
 
+export type EmoteScope = "channel" | "global";
+
 export interface EmoteGroup {
   label: string;
+  scope: EmoteScope;
   emotes: EmoteMeta[];
 }
 
@@ -36,6 +39,8 @@ export interface EmoteStore {
   byCode: (code: string) => EmoteMeta | undefined;
   /** Display label of the set an emote came from ("Channel · 7TV"), if loaded. */
   scopeLabel: (emote: EmoteMeta) => string | undefined;
+  /** Whether the emote came from the channel's sets or a global one. */
+  scopeOf: (emote: EmoteMeta) => EmoteScope | undefined;
   revision: () => number;
 }
 
@@ -77,22 +82,24 @@ export function createEmoteStore(): EmoteStore {
     sorted = [...next.values()].sort((a, b) => a.code.localeCompare(b.code));
     groups = DISPLAY_ORDER.flatMap(([key, label]) => {
       const emotes = bundle[key]?.emotes ?? [];
-      return emotes.length > 0 ? [{ label, emotes }] : [];
+      const scope: EmoteScope = key.includes("channel") ? "channel" : "global";
+      return emotes.length > 0 ? [{ label, scope, emotes }] : [];
     });
     setRevision((r) => r + 1);
   }
+
+  const groupOf = (emote: EmoteMeta) =>
+    groups.find((g) =>
+      g.emotes.some((e) => e.id === emote.id && e.provider === emote.provider),
+    );
 
   return {
     loadBundle,
     all: () => sorted,
     groups: () => groups,
     byCode: (code) => byCode.get(code),
-    scopeLabel: (emote) =>
-      groups.find((g) =>
-        g.emotes.some(
-          (e) => e.id === emote.id && e.provider === emote.provider,
-        ),
-      )?.label,
+    scopeLabel: (emote) => groupOf(emote)?.label,
+    scopeOf: (emote) => groupOf(emote)?.scope,
     revision,
   };
 }
@@ -102,5 +109,6 @@ export const loadEmoteBundle = defaultStore.loadBundle;
 export const allEmotes = defaultStore.all;
 export const emoteGroups = defaultStore.groups;
 export const emoteScopeLabel = defaultStore.scopeLabel;
+export const emoteScope = defaultStore.scopeOf;
 export const emoteByCode = defaultStore.byCode;
 export const emoteRevision = defaultStore.revision;
