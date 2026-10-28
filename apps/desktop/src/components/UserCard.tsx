@@ -38,7 +38,13 @@ import { modActionsFor, modLogRevision } from "../stores/modLogStore";
 import { describeModAction } from "../lib/modActions";
 import { formatSeconds } from "../lib/slashCommands";
 import { canModerate } from "../stores/roleStore";
-import { isIgnored, setIgnored, settings } from "../stores/settingsStore";
+import {
+  isIgnored,
+  isUserHighlighted,
+  setIgnored,
+  setUserHighlighted,
+  settings,
+} from "../stores/settingsStore";
 import { isHighlighted } from "../lib/highlight";
 import {
   ensureUserInfo,
@@ -102,6 +108,11 @@ const UserCard: Component<UserCardProps> = (props) => {
   const ignored = () => {
     settings();
     return props.user ? isIgnored(props.user.username) : false;
+  };
+
+  const spotlit = () => {
+    settings();
+    return props.user ? isUserHighlighted(props.user.username) : false;
   };
 
   const profile = () => {
@@ -264,6 +275,18 @@ const UserCard: Component<UserCardProps> = (props) => {
                 }
               >
                 {ignored() ? "Unignore" : "Ignore"}
+              </button>
+              <button
+                type="button"
+                class="btn btn--small"
+                aria-pressed={spotlit()}
+                onClick={() =>
+                  void setUserHighlighted(u().username, !spotlit()).catch(
+                    (err: unknown) => console.error("highlight user", err),
+                  )
+                }
+              >
+                {spotlit() ? "Stop highlighting" : "Highlight"}
               </button>
             </div>
 

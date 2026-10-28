@@ -41,7 +41,7 @@ import {
   rejoinChannel,
 } from "../stores/channelStore";
 import { isIgnored, setIgnored, settings } from "../stores/settingsStore";
-import { isHighlighted } from "../lib/highlight";
+import { isHighlighted, isSpotlit } from "../lib/highlight";
 import { createMentionAlert, playChime } from "../lib/mentionAlert";
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import {
@@ -760,6 +760,15 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                     "msg--notice": row().msg.notice !== null,
                     "msg--deleted": row().msg.deleted === true,
                     "msg--new-account": newAccount(),
+                    "msg--spotlight":
+                      status() === undefined &&
+                      !row().msg.notice &&
+                      isSpotlit(
+                        row().msg.username,
+                        row().msg.badges,
+                        settings().highlightUsers,
+                        settings().highlightBadges,
+                      ),
                   }}
                   style={{
                     transform: `translateY(${row().top}px)`,

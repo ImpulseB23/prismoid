@@ -19,6 +19,7 @@ import {
 } from "../lib/twitchAuth";
 import { missingScopes, setAuthStatus } from "../stores/authStore";
 import {
+  HIGHLIGHT_BADGES,
   THEMES,
   parseDurations,
   parseList,
@@ -27,6 +28,7 @@ import {
   zoomIn,
   zoomOut,
   zoomReset,
+  type HighlightBadge,
   type Theme,
 } from "../stores/settingsStore";
 import { formatSeconds } from "../lib/slashCommands";
@@ -48,6 +50,13 @@ export interface SettingsProps {
   onClose: () => void;
   onSignOut: () => void;
 }
+
+const BADGE_LABELS: Record<HighlightBadge, string> = {
+  broadcaster: "Streamer",
+  moderator: "Mods",
+  vip: "VIPs",
+  subscriber: "Subs",
+};
 
 const THEME_LABELS: Record<Theme, string> = {
   system: "Match Windows",
@@ -217,7 +226,7 @@ const Settings: Component<SettingsProps> = (props) => {
           <div class="dialog__label">Appearance</div>
           <div class="settings__row settings__row--stack">
             <span class="settings__name">Theme</span>
-            <div class="settings__themes" role="group" aria-label="Theme">
+            <div class="settings__chips" role="group" aria-label="Theme">
               <For each={THEMES}>
                 {(t) => (
                   <button
@@ -336,6 +345,62 @@ const Settings: Component<SettingsProps> = (props) => {
               }
             />
           </label>
+          <label class="settings__row settings__row--stack">
+            <div class="settings__text">
+              <span class="settings__name">Highlighted users</span>
+              <span class="settings__hint">
+                Comma separated logins. Everything they say stands out.
+              </span>
+            </div>
+            <input
+              type="text"
+              class="settings__input"
+              placeholder="bestfriend, cohost"
+              value={settings().highlightUsers.join(", ")}
+              onChange={(e) =>
+                run(
+                  updateSettings({
+                    highlightUsers: parseList(e.currentTarget.value, true),
+                  }),
+                )
+              }
+            />
+          </label>
+          <div class="settings__row settings__row--stack">
+            <span class="settings__name">Highlight by badge</span>
+            <div
+              class="settings__chips"
+              role="group"
+              aria-label="Highlight by badge"
+            >
+              <For each={HIGHLIGHT_BADGES}>
+                {(b) => {
+                  const on = () => settings().highlightBadges.includes(b);
+                  return (
+                    <button
+                      type="button"
+                      class="modbar__chip"
+                      classList={{ "modbar__chip--on": on() }}
+                      aria-pressed={on()}
+                      onClick={() =>
+                        run(
+                          updateSettings({
+                            highlightBadges: on()
+                              ? settings().highlightBadges.filter(
+                                  (x) => x !== b,
+                                )
+                              : [...settings().highlightBadges, b],
+                          }),
+                        )
+                      }
+                    >
+                      {BADGE_LABELS[b]}
+                    </button>
+                  );
+                }}
+              </For>
+            </div>
+          </div>
           <label class="settings__row settings__row--stack">
             <div class="settings__text">
               <span class="settings__name">Ignored users</span>
