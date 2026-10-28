@@ -34,9 +34,9 @@ export default function Privacy() {
             Delete the folder to erase it.
           </li>
           <li>
-            <strong>Settings.</strong> Ignored users, highlight phrases, notes
-            you write about chatters, window position and the like, in the app's
-            data folders under <code>%APPDATA%</code> and{" "}
+            <strong>Settings.</strong> Ignored users, highlight phrases, window
+            position and the like, in the app's data folders under{" "}
+            <code>%APPDATA%</code> and{" "}
             <code>%LOCALAPPDATA%\org.prismoid.app</code>.
           </li>
           <li>

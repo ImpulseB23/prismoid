@@ -59,7 +59,6 @@ describe("settingsStore", () => {
       ignoredLogins: [],
       highlightPhrases: [],
       flagNewAccounts: true,
-      userNotes: {},
       showModActions: true,
       timeoutPresets: [60, 600, 3600, 86_400],
       followBrowser: false,
@@ -117,7 +116,6 @@ describe("settingsStore", () => {
       ignoredLogins: [],
       highlightPhrases: [],
       flagNewAccounts: true,
-      userNotes: {},
       showModActions: true,
       timeoutPresets: [60, 600, 3600, 86_400],
       followBrowser: false,
@@ -188,18 +186,6 @@ describe("settingsStore lists", () => {
     expect(parseDurations("5m, nope, 5m")).toEqual([300]);
     expect(parseDurations("nope")).toBeNull();
     expect(parseDurations("3w")).toEqual([60, 600, 3600, 86_400]);
-  });
-
-  it("hydrates user notes and drops blank or non-string entries", () => {
-    const storage = memStorage({
-      "prismoid.settings": JSON.stringify({
-        userNotes: { alice: "regular, nice", bob: "   ", eve: 7 },
-        flagNewAccounts: false,
-      }),
-    });
-    const s = createSettingsStore(appliers(), storage);
-    expect(s.settings().userNotes).toEqual({ alice: "regular, nice" });
-    expect(s.settings().flagNewAccounts).toBe(false);
   });
 
   it("parseList trims, dedupes and optionally lowercases", () => {

@@ -1777,15 +1777,6 @@ img {
   border-left-color: var(--color-amber);
 }
 
-.msg--noted {
-  border-left-color: var(--color-teal);
-}
-
-.msg--new-account.msg--noted {
-  border-left-color: var(--color-teal);
-  box-shadow: inset 2px 0 0 var(--color-amber);
-}
-
 .user-card__facts {
   display: flex;
   gap: 10px;
@@ -1810,30 +1801,6 @@ img {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-
-.user-card__note {
-  display: block;
-  width: calc(100% - 20px);
-  margin: 0 10px 6px;
-  padding: 6px 8px;
-  resize: vertical;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  line-height: 1.4;
-  outline: 0;
-}
-
-.user-card__note:focus {
-  border-color: var(--color-teal);
-}
-
-.user-card__note::placeholder {
-  color: var(--text-faint);
 }
 
 /* Emote inspect */
@@ -2329,14 +2296,6 @@ img {
 
 .user-card .user-card__actions {
   padding: 12px 10px 4px;
-}
-
-.user-card .user-card__note {
-  font-size: 13px;
-  padding: 8px 10px;
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-  border-color: transparent;
 }
 
 .user-card__mod {
