@@ -1,11 +1,11 @@
 // Tells the user when an update has installed itself. The version that last
-// ran is remembered; launching a different one raises a flag that lights
-// the Settings icon until Settings is opened, where a link to the release
-// notes stays for the rest of the session.
+// ran is remembered; launching a different one opens that version's patch
+// notes, or lights the Settings icon when a release has none written.
 
 import { createSignal } from "solid-js";
 import { getVersion } from "@tauri-apps/api/app";
 import type { StorageLike } from "./channelStore";
+import { notesFor, type ReleaseNote } from "../releaseNotes";
 
 const KEY = "prismoid.lastVersion";
 export const RELEASES_URL = "https://github.com/ImpulseB23/Prismoid/releases";
@@ -18,14 +18,20 @@ export interface WhatsNewStore {
   /** Compares the running version with the one that ran last. */
   init: () => Promise<void>;
   markSeen: () => void;
+  /** Patch notes on screen, if any. */
+  notes: () => ReleaseNote | null;
+  showNotes: (note: ReleaseNote) => void;
+  closeNotes: () => void;
 }
 
 export function createWhatsNewStore(
   storage: StorageLike | null = defaultStorage(),
   version: () => Promise<string> = getVersion,
+  lookup: (version: string) => ReleaseNote | undefined = notesFor,
 ): WhatsNewStore {
   const [updatedTo, setUpdatedTo] = createSignal<string | null>(null);
   const [unseen, setUnseen] = createSignal(false);
+  const [notes, setNotes] = createSignal<ReleaseNote | null>(null);
 
   async function init(): Promise<void> {
     const current = await version();
@@ -33,7 +39,9 @@ export function createWhatsNewStore(
     // A first install has nothing to announce.
     if (last !== null && last !== current) {
       setUpdatedTo(current);
-      setUnseen(true);
+      const note = lookup(current);
+      if (note) setNotes(note);
+      else setUnseen(true);
     }
     write(storage, current);
   }
@@ -43,6 +51,9 @@ export function createWhatsNewStore(
     unseen,
     init,
     markSeen: () => setUnseen(false),
+    notes,
+    showNotes: setNotes,
+    closeNotes: () => setNotes(null),
   };
 }
 
@@ -79,3 +90,6 @@ export const updatedTo = defaultStore.updatedTo;
 export const whatsNewUnseen = defaultStore.unseen;
 export const initWhatsNew = defaultStore.init;
 export const markWhatsNewSeen = defaultStore.markSeen;
+export const patchNotes = defaultStore.notes;
+export const showPatchNotes = defaultStore.showNotes;
+export const closePatchNotes = defaultStore.closeNotes;

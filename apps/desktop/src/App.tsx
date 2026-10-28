@@ -16,6 +16,7 @@ import MessageInput from "./components/MessageInput";
 import ModBar from "./components/ModBar";
 import StreamBar from "./components/StreamBar";
 import Tour from "./components/Tour";
+import PatchNotes from "./components/PatchNotes";
 import { offerTour } from "./stores/tourStore";
 import { logo, palette } from "./stores/themeStore";
 import SignIn from "./components/SignIn";
@@ -174,6 +175,7 @@ const ChatShell: Component<{ login: string; onSignOut: () => void }> = (
       <MessageInput login={props.login} />
       <ModBar />
       <Tour />
+      <PatchNotes />
     </>
   );
 };
