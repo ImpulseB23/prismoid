@@ -2727,16 +2727,6 @@ option::checkmark {
 
 /* Mod bar */
 
-.modbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px 10px;
-  flex-shrink: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
 .modbar__role {
   flex-shrink: 0;
   padding: 3px 8px;
@@ -2750,13 +2740,6 @@ option::checkmark {
 .modbar__role--owner {
   background: var(--prism-tint-strong);
   color: var(--text);
-}
-
-.modbar__modes {
-  display: flex;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
 }
 
 .modbar__chip,
@@ -2800,10 +2783,6 @@ option::checkmark {
 
 .modbar__more {
   background: var(--bg-raised);
-}
-
-.modbar__modes + .modbar__more {
-  margin-left: auto;
 }
 
 .modbar__more--danger,
@@ -3361,6 +3340,234 @@ option::checkmark {
   .settings-page__content {
     padding: 14px 16px 20px;
   }
+}
+
+/* Chat plus the command center tab and panel, which sit over its right edge. */
+.chat-area {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* A tab peeking from the right edge. It slides out a little on hover so it
+   reads as something that opens. */
+.cc-handle {
+  position: absolute;
+  right: 0;
+  bottom: 14px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 34px;
+  padding: 0 8px 0 10px;
+  border-radius: 999px 0 0 999px;
+  border: 1px solid var(--border-strong);
+  border-right: 0;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  box-shadow: 0 4px 16px var(--shadow);
+  transform: translateX(6px);
+  transition:
+    transform 0.2s ease,
+    color 0.2s,
+    background-color 0.2s;
+}
+
+.cc-handle svg {
+  transition: transform 0.2s ease;
+}
+
+.cc-handle:hover {
+  transform: translateX(0);
+  color: var(--text);
+}
+
+.cc-handle:hover svg {
+  transform: translateX(-2px);
+}
+
+.cc-handle--open {
+  transform: translateX(0);
+  color: var(--text);
+  background: var(--bg-surface);
+}
+
+.cc-handle--open svg {
+  transform: rotate(180deg);
+}
+
+.cc-handle__count {
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--color-amber);
+  color: #000000;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.cc {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  bottom: 56px;
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(340px, calc(100% - 16px));
+  padding: 10px;
+  overflow-y: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-raised);
+  box-shadow: 0 16px 40px var(--shadow);
+  animation: cc-in 0.18s ease;
+}
+
+@keyframes cc-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cc,
+  .cc-handle,
+  .cc-handle svg {
+    animation: none;
+    transition: none;
+  }
+}
+
+.cc__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0 4px 2px;
+}
+
+.cc__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  text-align: left;
+  font: inherit;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+}
+
+.cc__item:hover:not(:disabled) {
+  background: var(--hover);
+  border-color: var(--border-strong);
+}
+
+.cc__item--on {
+  border-color: var(--select-border);
+}
+
+.cc__item--open {
+  background: var(--hover);
+  border-color: var(--border-strong);
+}
+
+.cc__item-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cc__chevron {
+  flex-shrink: 0;
+  color: var(--text-faint);
+  transition: rotate 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.cc__item--open .cc__chevron {
+  rotate: 180deg;
+}
+
+.cc__sections {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* A section's content, opened in place under its header. */
+.cc__body {
+  padding: 2px 2px 6px;
+  animation: cc-body-in 0.16s ease;
+}
+
+@keyframes cc-body-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.cc__body .settings__row {
+  padding: 8px 6px;
+}
+
+.cc__empty {
+  padding: 8px 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.cc__danger {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 4px 6px 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.cc__item--on .cc__desc {
+  color: var(--select-text);
+}
+
+.cc__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.cc__desc {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.cc__item--danger .cc__title {
+  color: var(--color-red-light);
+}
+
+.cc__item--armed {
+  background: rgba(234, 50, 71, 0.12);
+  border-color: rgba(234, 50, 71, 0.5);
 }
 
 .settings-page__back {

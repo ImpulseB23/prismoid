@@ -1,7 +1,7 @@
 // Every moderator action seen in the open channel this session, newest
 // first: timeouts, bans, deletions and mode changes, by any mod.
 
-import { Component, For, Show, createEffect, createSignal } from "solid-js";
+import { Component, For, Show, createSignal } from "solid-js";
 import { activeChannel } from "../stores/channelStore";
 import { modActionsIn, modLogRevision } from "../stores/modLogStore";
 import { describeModAction } from "../lib/modActions";
@@ -43,18 +43,8 @@ const FILTERS: [ModLogFilter, string][] = [
   ["modes", "Modes and roles"],
 ];
 
-export interface ModLogProps {
-  open: boolean;
-  onClose: () => void;
-}
-
-const ModLog: Component<ModLogProps> = (props) => {
+const ModLog: Component = () => {
   const [filter, setFilter] = createSignal<ModLogFilter>("all");
-  let dialogRef: HTMLDivElement | undefined;
-
-  createEffect(() => {
-    if (props.open) queueMicrotask(() => dialogRef?.focus());
-  });
 
   const rows = () => {
     modLogRevision();
@@ -64,65 +54,44 @@ const ModLog: Component<ModLogProps> = (props) => {
   };
 
   return (
-    <Show when={props.open}>
-      <div class="dialog-backdrop" onMouseDown={props.onClose}>
-        <div
-          ref={(el) => (dialogRef = el)}
-          tabIndex={-1}
-          class="dialog modlog"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Mod log"
-          onMouseDown={(e) => e.stopPropagation()}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") props.onClose();
-          }}
-        >
-          <div class="dialog__title">
-            Mod log
-            <span class="modes__channel">{activeChannel()?.display_name}</span>
-          </div>
-          <div class="modlog__filters" role="tablist">
-            <For each={FILTERS}>
-              {([key, label]) => (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={filter() === key}
-                  class="modbar__chip"
-                  classList={{ "modbar__chip--on": filter() === key }}
-                  onClick={() => setFilter(key)}
-                >
-                  {label}
-                </button>
-              )}
-            </For>
-          </div>
-          <Show
-            when={rows().length > 0}
-            fallback={
-              <div class="dialog__empty">
-                Nothing yet this session. Timeouts, bans, deletions and mode
-                changes by any mod in this channel show up here.
-              </div>
-            }
-          >
-            <ol class="modlog__list">
-              <For each={rows()}>
-                {(a) => (
-                  <li class="modlog__row">
-                    <span class="msg__time">
-                      {formatTimestamp(a.timestamp)}
-                    </span>
-                    <span>{describeModAction(a)}</span>
-                  </li>
-                )}
-              </For>
-            </ol>
-          </Show>
-        </div>
+    <div class="cc__body">
+      <div class="modlog__filters" role="tablist">
+        <For each={FILTERS}>
+          {([key, label]) => (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filter() === key}
+              class="modbar__chip"
+              classList={{ "modbar__chip--on": filter() === key }}
+              onClick={() => setFilter(key)}
+            >
+              {label}
+            </button>
+          )}
+        </For>
       </div>
-    </Show>
+      <Show
+        when={rows().length > 0}
+        fallback={
+          <div class="cc__empty">
+            Nothing yet this session. Timeouts, bans, deletions and mode changes
+            by any mod in this channel show up here.
+          </div>
+        }
+      >
+        <ol class="modlog__list">
+          <For each={rows()}>
+            {(a) => (
+              <li class="modlog__row">
+                <span class="msg__time">{formatTimestamp(a.timestamp)}</span>
+                <span>{describeModAction(a)}</span>
+              </li>
+            )}
+          </For>
+        </ol>
+      </Show>
+    </div>
   );
 };
 

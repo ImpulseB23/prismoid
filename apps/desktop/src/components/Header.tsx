@@ -27,9 +27,6 @@ import {
   textSmaller,
 } from "../stores/settingsStore";
 import ChannelPicker from "./ChannelPicker";
-import ChatModes from "./ChatModes";
-import { modesOpen, setModesOpen } from "../stores/modesPanelStore";
-import { canModerate } from "../stores/roleStore";
 import {
   openSettings,
   settingsOpen,
@@ -313,61 +310,6 @@ const Header: Component<HeaderProps> = (props) => {
 
         <span class="header__spacer" data-tauri-drag-region />
 
-        <Show when={canModerate()}>
-          <button
-            type="button"
-            class="icon-btn"
-            aria-haspopup="dialog"
-            aria-expanded={modesOpen()}
-            data-tour="chat-modes"
-            title="Chat modes"
-            onClick={() => {
-              setPickerOpen(false);
-              setSettingsOpen(false);
-              setModesOpen(true);
-            }}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path
-                d="M2 4.5h12M2 8h12M2 11.5h12"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-              />
-              <circle
-                cx="5.5"
-                cy="4.5"
-                r="1.6"
-                fill="var(--bg)"
-                stroke="currentColor"
-                stroke-width="1.4"
-              />
-              <circle
-                cx="10.5"
-                cy="8"
-                r="1.6"
-                fill="var(--bg)"
-                stroke="currentColor"
-                stroke-width="1.4"
-              />
-              <circle
-                cx="6.5"
-                cy="11.5"
-                r="1.6"
-                fill="var(--bg)"
-                stroke="currentColor"
-                stroke-width="1.4"
-              />
-            </svg>
-          </button>
-        </Show>
-
         <button
           type="button"
           class="icon-btn"
@@ -551,7 +493,6 @@ const Header: Component<HeaderProps> = (props) => {
         />
       </Show>
       <ChannelPicker open={pickerOpen()} onClose={() => setPickerOpen(false)} />
-      <ChatModes open={modesOpen()} onClose={() => setModesOpen(false)} />
       <ChatSearch open={searchOpen()} onClose={() => setSearchOpen(false)} />
       <Mentions />
       <Settings

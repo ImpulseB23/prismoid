@@ -2,7 +2,7 @@
 // Allow and Deny. Whatever happens to one, by any mod or by Twitch letting
 // it expire, shows on its row for a moment before it drops off.
 
-import { Component, For, Show, createEffect, createSignal } from "solid-js";
+import { Component, For, Show, createSignal } from "solid-js";
 import { activeChannel } from "../stores/channelStore";
 import { automodNeedsReconnect } from "../stores/authStore";
 import {
@@ -127,63 +127,33 @@ const HeldRow: Component<{ entry: HeldEntry }> = (props) => {
   );
 };
 
-export interface AutomodQueueProps {
-  open: boolean;
-  onClose: () => void;
-}
-
-const AutomodQueue: Component<AutomodQueueProps> = (props) => {
-  let dialogRef: HTMLDivElement | undefined;
-
-  createEffect(() => {
-    if (props.open) queueMicrotask(() => dialogRef?.focus());
-  });
-
+const AutomodQueue: Component = () => {
   const rows = () => {
     const id = activeChannel()?.id;
     return id === undefined ? [] : heldMessagesIn(id);
   };
 
   return (
-    <Show when={props.open}>
-      <div class="dialog-backdrop" onMouseDown={props.onClose}>
-        <div
-          ref={(el) => (dialogRef = el)}
-          tabIndex={-1}
-          class="dialog modlog"
-          role="dialog"
-          aria-modal="true"
-          aria-label="AutoMod queue"
-          onMouseDown={(e) => e.stopPropagation()}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") props.onClose();
-          }}
-        >
-          <div class="dialog__title">
-            AutoMod
-            <span class="modes__channel">{activeChannel()?.display_name}</span>
-          </div>
-          <Show when={automodNeedsReconnect()}>
-            <div class="dialog__error">
-              Held messages need a new Twitch permission. Reconnect in Settings.
-            </div>
-          </Show>
-          <Show
-            when={rows().length > 0}
-            fallback={
-              <div class="dialog__empty">
-                Nothing held right now. Messages AutoMod holds for review in
-                this channel show up here.
-              </div>
-            }
-          >
-            <ol class="modlog__list">
-              <For each={rows()}>{(entry) => <HeldRow entry={entry} />}</For>
-            </ol>
-          </Show>
+    <div class="cc__body">
+      <Show when={automodNeedsReconnect()}>
+        <div class="dialog__error">
+          Held messages need a new Twitch permission. Reconnect in Settings.
         </div>
-      </div>
-    </Show>
+      </Show>
+      <Show
+        when={rows().length > 0}
+        fallback={
+          <div class="cc__empty">
+            Nothing held right now. Messages AutoMod holds for review in this
+            channel show up here.
+          </div>
+        }
+      >
+        <ol class="modlog__list">
+          <For each={rows()}>{(entry) => <HeldRow entry={entry} />}</For>
+        </ol>
+      </Show>
+    </div>
   );
 };
 
