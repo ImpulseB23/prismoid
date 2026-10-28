@@ -4,6 +4,7 @@
 
 import { Component, For, Show, createEffect } from "solid-js";
 import { formatChannelError } from "../lib/twitchChannel";
+import { patchFor, type ChatMode } from "../lib/chatModes";
 import { activeChannel } from "../stores/channelStore";
 import {
   applyChatSettings,
@@ -41,38 +42,8 @@ const ChatModes: Component<ChatModesProps> = (props) => {
     }
   });
 
-  const toggle = (label: string, checked: boolean) => {
-    const s = chatSettings();
-    if (!s) return;
-    switch (label) {
-      case "emote":
-        return void applyChatSettings({ emote_mode: checked });
-      case "subscriber":
-        return void applyChatSettings({ subscriber_mode: checked });
-      case "unique":
-        return void applyChatSettings({ unique_chat_mode: checked });
-      case "slow":
-        return void applyChatSettings(
-          checked
-            ? { slow_mode: true, slow_mode_wait_time: 30 }
-            : { slow_mode: false },
-        );
-      case "followers":
-        return void applyChatSettings(
-          checked
-            ? { follower_mode: true, follower_mode_duration: 0 }
-            : { follower_mode: false },
-        );
-      case "delay":
-        return void applyChatSettings(
-          checked
-            ? {
-                non_moderator_chat_delay: true,
-                non_moderator_chat_delay_duration: 2,
-              }
-            : { non_moderator_chat_delay: false },
-        );
-    }
+  const toggle = (mode: ChatMode, checked: boolean) => {
+    if (chatSettings()) void applyChatSettings(patchFor(mode, checked));
   };
 
   return (

@@ -21,6 +21,7 @@ import {
 } from "../stores/settingsStore";
 import ChannelPicker from "./ChannelPicker";
 import ChatModes from "./ChatModes";
+import { modesOpen, setModesOpen } from "../stores/modesPanelStore";
 import { canModerate } from "../stores/roleStore";
 import { pickerOpen, setPickerOpen } from "../stores/pickerStore";
 import { updateState } from "../stores/updateStore";
@@ -57,7 +58,6 @@ const GEAR_PATH = (() => {
 const Header: Component<HeaderProps> = (props) => {
   const [state, setState] = createSignal<SidecarState | null>(null);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
-  const [modesOpen, setModesOpen] = createSignal(false);
   const [fullscreen, setFullscreen] = createSignal(false);
   let unlisten: UnlistenFn | undefined;
   let unlistenResize: UnlistenFn | undefined;

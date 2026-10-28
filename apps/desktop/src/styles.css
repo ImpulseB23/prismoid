@@ -2356,3 +2356,81 @@ img {
   flex-wrap: wrap;
   gap: 6px;
 }
+
+/* Mod bar */
+
+.modbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 10px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.modbar__role {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(77, 179, 50, 0.16);
+  color: var(--color-green-light);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.modbar__role--owner {
+  background: rgba(124, 58, 237, 0.2);
+  color: #c4a6ff;
+}
+
+.modbar__modes {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.modbar__chip,
+.modbar__more {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.modbar__chip:hover:not(:disabled),
+.modbar__more:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.modbar__chip--on {
+  background: rgba(224, 168, 46, 0.16);
+  border-color: rgba(224, 168, 46, 0.4);
+  color: var(--color-amber);
+}
+
+.modbar__chip--on:hover:not(:disabled) {
+  color: var(--color-amber);
+}
+
+.modbar__chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.modbar__more {
+  margin-left: auto;
+  background: var(--bg-raised);
+}

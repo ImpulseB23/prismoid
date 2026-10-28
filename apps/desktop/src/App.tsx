@@ -12,6 +12,7 @@ import ChannelTabs from "./components/ChannelTabs";
 import ChatFeed from "./components/ChatFeed";
 import Header from "./components/Header";
 import MessageInput from "./components/MessageInput";
+import ModBar from "./components/ModBar";
 import StreamBar from "./components/StreamBar";
 import Tour from "./components/Tour";
 import { offerTour } from "./stores/tourStore";
@@ -165,6 +166,7 @@ const ChatShell: Component<{ login: string; onSignOut: () => void }> = (
       <StreamBar />
       <ChatFeed login={props.login} />
       <MessageInput login={props.login} />
+      <ModBar />
       <Tour />
     </>
   );
