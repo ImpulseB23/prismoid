@@ -261,6 +261,15 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       (id, prev) => {
         if (id === prev) return;
         if (prev !== undefined) {
+          // A short cross-fade so the new channel arrives instead of
+          // snapping in. Script animations ignore the CSS reduced-motion
+          // rule, so the preference is checked here; jsdom has no animate.
+          if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            containerRef?.animate?.([{ opacity: 0.35 }, { opacity: 1 }], {
+              duration: 200,
+              easing: "ease-out",
+            });
+          }
           clearMessages();
           clearChatters();
           clearModLog();
