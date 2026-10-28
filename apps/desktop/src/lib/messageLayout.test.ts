@@ -2,25 +2,33 @@ import { describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "../stores/chatStore";
 import type { ResolvedBadge } from "../stores/badgeStore";
 
+const widths: number[] = [];
+
 // Pretext measures on a canvas jsdom does not have. The stubs keep the
 // items it is handed so the tests can check what the layout asked for.
 vi.mock("@chenglou/pretext/rich-inline", () => ({
   prepareRichInline: (items: unknown[]) => ({ items }),
-  measureRichInlineStats: () => ({ lineCount: 2 }),
+  measureRichInlineStats: (_p: unknown, width: number) => {
+    widths.push(width);
+    return { lineCount: 2 };
+  },
 }));
 vi.mock("@chenglou/pretext", () => ({
-  prepareWithSegments: () => ({}),
+  prepareWithSegments: vi.fn(() => ({})),
   measureNaturalWidth: () => 4,
 }));
 
 const {
   DEFAULT_TEXT_SIZE,
+  FIRST_LABEL_FONT,
   MESSAGE_PADDING_Y,
+  firstLabelWidth,
   TEXT_SIZES,
   measureMessageHeight,
   prepareMessage,
   textMetrics,
 } = await import("./messageLayout");
+const { prepareWithSegments } = await import("@chenglou/pretext");
 
 interface Item {
   text: string;
@@ -73,6 +81,25 @@ describe("prepareMessage", () => {
     expect(p.metrics).toBe(m);
     expect(measureMessageHeight(p, 300)).toBe(
       2 * m.lineHeight + MESSAGE_PADDING_Y,
+    );
+  });
+
+  it("keeps the first-message label's width free on every line", () => {
+    const p = prepareMessage(msg(), badge);
+    widths.length = 0;
+    measureMessageHeight(p, 300);
+    measureMessageHeight(p, 300, 80);
+    expect(widths[1]).toBe(widths[0]! - 80);
+  });
+
+  it("reserves the label's measured width plus a gap, measured once", () => {
+    vi.mocked(prepareWithSegments).mockClear();
+    expect(firstLabelWidth()).toBe(14);
+    expect(firstLabelWidth()).toBe(14);
+    expect(prepareWithSegments).toHaveBeenCalledOnce();
+    expect(prepareWithSegments).toHaveBeenCalledWith(
+      "First message",
+      FIRST_LABEL_FONT,
     );
   });
 

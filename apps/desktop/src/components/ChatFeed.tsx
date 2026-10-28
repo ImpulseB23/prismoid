@@ -103,14 +103,13 @@ import {
 } from "../stores/firstMessageStore";
 import {
   BADGE_GAP_PX,
-  FIRST_CHIP_FONT,
-  FIRST_CHIP_GAP_PX,
-  FIRST_CHIP_PADDING_X,
-  FIRST_CHIP_TEXT,
   MESSAGE_FONT_FAMILY,
   MEASURED_FONTS,
   MESSAGE_PADDING_X,
   MESSAGE_PADDING_Y,
+  FIRST_LABEL_FONT,
+  FIRST_LABEL_TEXT,
+  firstLabelWidth,
   measureMessageHeight,
   prepareMessage,
   textMetrics,
@@ -145,12 +144,15 @@ interface PositionedMessage {
   prepared: PreparedMessage;
   top: number;
   height: number;
+  /** Width kept free on the right for the first-message label, 0 if none. */
+  reserve: number;
 }
 
 interface CachedEntry {
   prepared: PreparedMessage;
   height: number;
   measuredWidth: number;
+  reserve: number;
 }
 
 /** Index of the first message whose bottom edge is below `y`. */
@@ -320,8 +322,8 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     // pending entries re-render with their new content.
     const msgRev = messageRevision();
     const timestamps = settings().showTimestamps;
-    const metrics = textMetrics(settings().textSize);
     const markFirsts = settings().highlightFirstMessages;
+    const metrics = textMetrics(settings().textSize);
     if (!fontsLoaded() || w <= 0 || v.count === 0) {
       return { messages: [], byMono: new Map(), totalHeight: 0 };
     }
@@ -357,27 +359,25 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       const msg = getMessage(mono);
       if (!msg) continue;
       // The first-message mark can land after the row was measured; the
-      // chip takes width, so the row is prepared again.
-      const first =
+      // label needs room on the right, so only the height is measured again.
+      const reserve =
         markFirsts &&
         !msg.notice &&
-        (msg.first_message === true || isFirstMessage(msg.id));
+        (msg.first_message === true || isFirstMessage(msg.id))
+          ? firstLabelWidth()
+          : 0;
       let entry = entryCache.get(mono);
       if (
         entry === undefined ||
         entry.measuredWidth !== w ||
-        entry.prepared.firstMessage !== first
+        entry.reserve !== reserve
       ) {
         const prepared =
-          entry !== undefined && entry.prepared.firstMessage === first
+          entry !== undefined
             ? entry.prepared
-            : prepareMessage(msg, resolveBadge, {
-                timestamps,
-                metrics,
-                firstMessage: first,
-              });
-        const height = measureMessageHeight(prepared, w);
-        entry = { prepared, height, measuredWidth: w };
+            : prepareMessage(msg, resolveBadge, { timestamps, metrics });
+        const height = measureMessageHeight(prepared, w, reserve);
+        entry = { prepared, height, measuredWidth: w, reserve };
         entryCache.set(mono, entry);
       }
       const positioned: PositionedMessage = {
@@ -386,6 +386,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
         prepared: entry.prepared,
         top: y,
         height: entry.height,
+        reserve: entry.reserve,
       };
       messages[writeIdx++] = positioned;
       byMono.set(mono, positioned);
@@ -837,6 +838,15 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                   },
                 );
               };
+              // Hover actions and the first-message label share the first
+              // text line's box on the right edge.
+              const firstLine = () => {
+                const p = row().prepared;
+                return {
+                  top: `${MESSAGE_PADDING_Y / 2 + (p.replyParent ? p.metrics.lineHeight : 0)}px`,
+                  height: `${p.metrics.lineHeight}px`,
+                };
+              };
               return (
                 <div
                   class="msg"
@@ -865,12 +875,12 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                         settings().highlightUsers,
                         settings().highlightBadges,
                       ),
-                    "msg--first": row().prepared.firstMessage,
+                    "msg--first": row().reserve > 0,
                   }}
                   style={{
                     transform: `translateY(${row().top}px)`,
                     height: `${row().height}px`,
-                    padding: `${MESSAGE_PADDING_Y / 2}px ${MESSAGE_PADDING_X}px`,
+                    padding: `${MESSAGE_PADDING_Y / 2}px ${MESSAGE_PADDING_X + row().reserve}px ${MESSAGE_PADDING_Y / 2}px ${MESSAGE_PADDING_X}px`,
                     "line-height": `${row().prepared.metrics.lineHeight}px`,
                     "font-family": MESSAGE_FONT_FAMILY,
                     "font-size": `${row().prepared.metrics.fontSize}px`,
@@ -907,7 +917,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                       !row().msg.deleted
                     }
                   >
-                    <div class="msg__actions">
+                    <div class="msg__actions" style={firstLine()}>
                       <Show when={canReply(row().msg)}>
                         <button
                           type="button"
@@ -1071,6 +1081,14 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                       </button>
                     </div>
                   </Show>
+                  <Show when={row().reserve > 0}>
+                    <span
+                      class="msg__first"
+                      style={{ ...firstLine(), font: FIRST_LABEL_FONT }}
+                    >
+                      {FIRST_LABEL_TEXT}
+                    </span>
+                  </Show>
                   <Show when={row().prepared.replyParent}>
                     {(r) => (
                       <button
@@ -1121,18 +1139,6 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                     when={row().prepared.notice}
                     fallback={
                       <>
-                        <Show when={row().prepared.firstMessage}>
-                          <span
-                            class="msg__first"
-                            style={{
-                              font: FIRST_CHIP_FONT,
-                              padding: `1px ${FIRST_CHIP_PADDING_X}px`,
-                              "margin-right": `${FIRST_CHIP_GAP_PX}px`,
-                            }}
-                          >
-                            {FIRST_CHIP_TEXT}
-                          </span>
-                        </Show>
                         <For each={row().prepared.badges}>
                           {(b) => (
                             <img
