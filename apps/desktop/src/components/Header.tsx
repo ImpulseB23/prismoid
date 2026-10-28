@@ -204,6 +204,7 @@ const Header: Component<HeaderProps> = (props) => {
           class="icon-btn"
           aria-haspopup="dialog"
           aria-expanded={modesOpen()}
+          data-tour="chat-modes"
           title="Chat modes"
           onClick={() => {
             setPickerOpen(false);
@@ -313,6 +314,7 @@ const Header: Component<HeaderProps> = (props) => {
         class="icon-btn"
         aria-haspopup="dialog"
         aria-expanded={settingsOpen()}
+        data-tour="settings"
         title={attention() ? `Settings: ${attention()}` : "Settings"}
         onClick={() => {
           markWhatsNewSeen();

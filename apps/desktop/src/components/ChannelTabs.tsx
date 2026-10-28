@@ -127,6 +127,7 @@ const ChannelTabs: Component = () => {
       <button
         type="button"
         class="tabs__add"
+        data-tour="add-channel"
         title="Open a channel (Ctrl+K)"
         aria-label="Open a channel"
         onClick={() => setPickerOpen(true)}

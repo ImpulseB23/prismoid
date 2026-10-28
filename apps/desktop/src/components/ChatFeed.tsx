@@ -657,7 +657,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
   };
 
   return (
-    <div class="feed">
+    <div class="feed" data-tour="feed">
       <div
         class="feed__scroll"
         ref={(el) => (containerRef = el)}

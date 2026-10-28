@@ -37,6 +37,7 @@ import {
 } from "../stores/updateStore";
 import { authErrorMessage, isAuthError } from "./SignIn";
 import { releaseNotesUrl, updatedTo } from "../stores/whatsNewStore";
+import { startTour } from "../stores/tourStore";
 
 export interface SettingsProps {
   open: boolean;
@@ -423,6 +424,27 @@ const Settings: Component<SettingsProps> = (props) => {
 
           <div class="dialog__label">Updates</div>
           <UpdateRow />
+
+          <div class="dialog__label">Help</div>
+          <div class="settings__row">
+            <div class="settings__text">
+              <span class="settings__name">Welcome tour</span>
+              <span class="settings__hint">
+                A one-minute walk through tabs, moderation and the switches
+                worth turning on.
+              </span>
+            </div>
+            <button
+              type="button"
+              class="btn btn--outline"
+              onClick={() => {
+                props.onClose();
+                startTour();
+              }}
+            >
+              Take the tour
+            </button>
+          </div>
 
           <div class="dialog__label">Logs</div>
           <div class="settings__row">

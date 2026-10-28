@@ -32,6 +32,8 @@ export interface Settings {
   followBrowser: boolean;
   /** Fetch messages from before the join via the recent-messages service. */
   chatBacklog: boolean;
+  /** The welcome tour has been finished or skipped. */
+  tourDone: boolean;
 }
 
 /** Twitch caps timeouts at two weeks. */
@@ -50,6 +52,7 @@ export const DEFAULT_SETTINGS: Settings = {
   timeoutPresets: [60, 600, 3600, 86_400],
   followBrowser: false,
   chatBacklog: true,
+  tourDone: false,
 };
 
 /** Same ladder browsers use between 75% and 200%. */
@@ -174,6 +177,10 @@ function readSettings(storage: StorageLike | null): Settings {
         typeof p.chatBacklog === "boolean"
           ? p.chatBacklog
           : DEFAULT_SETTINGS.chatBacklog,
+      tourDone:
+        typeof p.tourDone === "boolean"
+          ? p.tourDone
+          : DEFAULT_SETTINGS.tourDone,
     };
   } catch {
     return DEFAULT_SETTINGS;
