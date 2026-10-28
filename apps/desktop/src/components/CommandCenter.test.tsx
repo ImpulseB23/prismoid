@@ -32,7 +32,7 @@ vi.mock("../lib/twitchAuth", () => ({
 const { default: CommandCenter } = await import("./CommandCenter");
 
 const openPanel_ = () =>
-  fireEvent.click(screen.getByRole("button", { name: "Command center" }));
+  fireEvent.click(screen.getByRole("button", { name: "Chat manager" }));
 // Clear chat sits at the foot of the chat modes section.
 const openModes = () =>
   fireEvent.click(screen.getByRole("button", { name: /^Chat modes/ }));
@@ -138,7 +138,7 @@ describe("CommandCenter", () => {
 
   it("counts held messages for the open channel and shows the queue in place", () => {
     render(() => <CommandCenter />);
-    const handle = () => screen.getByRole("button", { name: /Command center/ });
+    const handle = () => screen.getByRole("button", { name: /Chat manager/ });
     expect(handle().textContent).toBe("");
     for (const [id, channel] of [
       ["a", "100"],
@@ -174,7 +174,7 @@ describe("CommandCenter", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("complementary")).toBeNull();
     setCanMod(false);
-    expect(screen.queryByRole("button", { name: "Command center" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Chat manager" })).toBeNull();
     setCanMod(true);
     setChannel({ id: "100" });
   });
