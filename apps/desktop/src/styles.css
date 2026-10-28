@@ -2203,3 +2203,197 @@ img {
     animation: none;
   }
 }
+
+/* Cards: user and emote */
+
+.btn--small {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  border-color: transparent;
+  color: var(--text);
+}
+
+.btn--small:hover:not(:disabled) {
+  background: var(--color-base-600);
+}
+
+.btn--small:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn--small.btn--danger {
+  background: rgba(234, 50, 71, 0.15);
+  color: var(--color-red-light);
+}
+
+.btn--small.btn--danger:hover:not(:disabled) {
+  background: rgba(234, 50, 71, 0.28);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.chip--warn {
+  background: rgba(224, 168, 46, 0.16);
+  color: var(--color-amber);
+}
+
+.chip--twitch {
+  background: rgba(145, 70, 255, 0.18);
+  color: #bf94ff;
+}
+
+.chip--7tv {
+  background: rgba(41, 182, 246, 0.16);
+  color: #6fd0ff;
+}
+
+.chip--bttv {
+  background: rgba(214, 57, 63, 0.16);
+  color: #ff7a80;
+}
+
+.chip--ffz {
+  background: rgba(120, 170, 255, 0.14);
+  color: #a9c6ff;
+}
+
+.card__section {
+  padding: 14px 10px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-faint);
+}
+
+.card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 10px 4px;
+}
+
+.user-card {
+  width: min(400px, 100%);
+}
+
+.user-card .user-card__head {
+  padding: 12px 10px 4px;
+}
+
+.user-card .user-card__identity {
+  gap: 12px;
+}
+
+.user-card .user-card__names {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.user-card .user-card__name {
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.user-card .user-card__facts {
+  gap: 6px;
+  margin-top: 10px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+}
+
+.user-card .user-card__bio {
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.user-card .user-card__badge {
+  background: var(--bg-surface);
+  border-color: transparent;
+}
+
+.user-card .user-card__actions {
+  padding: 12px 10px 4px;
+}
+
+.user-card .user-card__note {
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  border-color: transparent;
+}
+
+.user-card__mod {
+  margin: 0 10px 4px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.user-card__mod .user-card__reason {
+  width: 100%;
+  margin: 0 0 8px;
+}
+
+.user-card__mod .user-card__actions {
+  padding: 0;
+}
+
+.user-card .user-card__messages {
+  padding: 0 6px 4px;
+}
+
+.user-card .user-card__msg {
+  font-size: 14px;
+}
+
+.emote-card .emote-card__preview {
+  min-height: 96px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background:
+    radial-gradient(
+      circle at 50% 40%,
+      rgba(124, 58, 237, 0.12),
+      transparent 70%
+    ),
+    var(--bg);
+}
+
+.emote-card .emote-card__preview img {
+  max-width: 84px;
+  max-height: 84px;
+}
+
+.emote-card .emote-card__meta {
+  gap: 8px;
+  padding: 12px 10px 0;
+}
+
+.emote-card .emote-card__code {
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+
+.emote-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

@@ -59,16 +59,22 @@ const EmoteCard: Component = () => {
             </div>
             <div class="emote-card__meta">
               <span class="emote-card__code">{e().code}</span>
-              <span class="emote-card__source">
-                {scope() ?? providerLabel(e().provider)}
-                <Show when={e().animated}> · animated</Show>
-                <Show when={e().zero_width}> · overlay</Show>
-              </span>
+              <div class="emote-card__tags">
+                <span class={`chip chip--${e().provider}`}>
+                  {scope() ?? providerLabel(e().provider)}
+                </span>
+                <Show when={e().animated}>
+                  <span class="chip">Animated</span>
+                </Show>
+                <Show when={e().zero_width}>
+                  <span class="chip">Overlay</span>
+                </Show>
+              </div>
             </div>
-            <div class="user-card__actions">
+            <div class="card__actions">
               <button
                 type="button"
-                class="btn btn--outline"
+                class="btn btn--small"
                 onClick={() => {
                   requestInsert(e().code);
                   closeEmoteCard();
@@ -78,7 +84,7 @@ const EmoteCard: Component = () => {
               </button>
               <button
                 type="button"
-                class="btn btn--outline"
+                class="btn btn--small"
                 onClick={() =>
                   void copy(e().code).catch((err: unknown) =>
                     console.error("copy emote", err),
@@ -91,7 +97,7 @@ const EmoteCard: Component = () => {
                 {(url) => (
                   <button
                     type="button"
-                    class="btn btn--outline"
+                    class="btn btn--small"
                     onClick={() =>
                       void openUrl(url()).catch((err: unknown) =>
                         console.error("open emote page", err),
