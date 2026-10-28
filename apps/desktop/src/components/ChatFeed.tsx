@@ -764,6 +764,8 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                       ),
                     "msg--notice": row().msg.notice !== null,
                     "msg--deleted": row().msg.deleted === true,
+                    "msg--alt":
+                      settings().alternateRows && row().monoIndex % 2 === 1,
                     "msg--new-account": newAccount(),
                     "msg--spotlight":
                       status() === undefined &&

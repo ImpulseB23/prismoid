@@ -327,6 +327,22 @@ const Settings: Component<SettingsProps> = (props) => {
           </label>
           <label class="settings__row settings__row--toggle">
             <div class="settings__text">
+              <span class="settings__name">Alternating rows</span>
+              <span class="settings__hint">
+                Shade every other message so busy chat is easier to follow
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              class="switch"
+              checked={settings().alternateRows}
+              onChange={(e) =>
+                run(updateSettings({ alternateRows: e.currentTarget.checked }))
+              }
+            />
+          </label>
+          <label class="settings__row settings__row--toggle">
+            <div class="settings__text">
               <span class="settings__name">Load earlier messages</span>
               <span class="settings__hint">
                 When you open a channel, fetch what was said before you joined
