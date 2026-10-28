@@ -21,6 +21,7 @@ use tokio::sync::oneshot;
 
 use crate::message::{ChatEvent, UnifiedMessage};
 
+const FILE_NAME: &str = "chat.sqlite3";
 /// Newest rows kept per channel; older ones go once this is exceeded.
 const KEEP_PER_CHANNEL: i64 = 10_000;
 /// Rows older than this go at startup regardless of count.
@@ -75,12 +76,19 @@ enum Op {
     },
 }
 
+enum Msg {
+    Op(Op),
+    /// Closes the database and ends the thread, then answers with how the
+    /// close went.
+    Close(oneshot::Sender<rusqlite::Result<()>>),
+}
+
 /// Handle to the history thread. Empty when the store could not be opened,
 /// in which case writes are dropped and loads come back empty so the feed
 /// still works without a backlog.
 #[derive(Clone, Default)]
 pub struct History {
-    tx: Option<mpsc::Sender<Op>>,
+    tx: Option<mpsc::Sender<Msg>>,
 }
 
 impl History {
@@ -88,7 +96,7 @@ impl History {
     /// thread.
     pub fn open(dir: &Path) -> Result<Self, Box<dyn Error + Send + Sync>> {
         std::fs::create_dir_all(dir)?;
-        let conn = Connection::open(dir.join("chat.sqlite3"))?;
+        let conn = Connection::open(dir.join(FILE_NAME))?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.execute_batch(SCHEMA)?;
@@ -127,11 +135,11 @@ impl History {
         };
         let (reply, rx) = oneshot::channel();
         if tx
-            .send(Op::Load {
+            .send(Msg::Op(Op::Load {
                 channel_id,
                 limit,
                 reply,
-            })
+            }))
             .is_err()
         {
             return Vec::new();
@@ -147,11 +155,11 @@ impl History {
         };
         let (reply, rx) = oneshot::channel();
         if tx
-            .send(Op::SentCounts {
+            .send(Msg::Op(Op::SentCounts {
                 user_id,
                 since_ms,
                 reply,
-            })
+            }))
             .is_err()
         {
             return HashMap::new();
@@ -159,11 +167,24 @@ impl History {
         rx.await.unwrap_or_default()
     }
 
+    /// Closes the database for good and waits until its files are released,
+    /// so they can be deleted. Every handle goes quiet afterwards: writes
+    /// are dropped and loads come back empty. A store that never opened or
+    /// is already closed has nothing to release.
+    pub async fn close(&self) -> rusqlite::Result<()> {
+        let (done, rx) = oneshot::channel();
+        match &self.tx {
+            Some(tx) if tx.send(Msg::Close(done)).is_ok() => rx.await.unwrap_or(Ok(())),
+            _ => Ok(()),
+        }
+    }
+
     fn send(&self, op: Op) {
-        // The thread only stops once every sender is gone, so a failed send
-        // here means it panicked and the error is already in the log.
+        // The thread only stops once closed or once every sender is gone, so
+        // a failed send means it was closed or panicked; a panic is already
+        // in the log.
         if let Some(tx) = &self.tx {
-            let _ = tx.send(op);
+            let _ = tx.send(Msg::Op(op));
         }
     }
 }
@@ -198,12 +219,21 @@ impl Store {
         }
     }
 
-    fn run(mut self, rx: mpsc::Receiver<Op>) {
+    fn run(mut self, rx: mpsc::Receiver<Msg>) {
         if let Err(e) = self.prune_old(chrono::Utc::now().timestamp_millis()) {
             tracing::error!(error = %e, "chat history age prune failed");
         }
-        for op in rx {
-            self.handle(op);
+        for msg in rx {
+            match msg {
+                Msg::Op(op) => self.handle(op),
+                Msg::Close(done) => {
+                    // Closing the last connection checkpoints the WAL and
+                    // removes its side files. Parked loads get dropped
+                    // replies, which read as empty.
+                    let _ = done.send(self.conn.close().map_err(|(_, e)| e));
+                    return;
+                }
+            }
         }
     }
 
@@ -633,6 +663,30 @@ mod tests {
         assert_eq!(ids(&rows), ["z", "a", "b"]);
         assert!(rows[1].deleted);
         assert_eq!(rows[1].message.message_text, "hello a");
+    }
+
+    #[tokio::test]
+    async fn close_releases_the_files_and_quiets_every_handle() {
+        let dir = tempfile::tempdir().unwrap();
+        let history = History::open(dir.path()).unwrap();
+        let other = history.clone();
+        history.store(&[msg("a", "c", "u", 1, 0)]);
+        assert_eq!(ids(&history.load("c".into(), 10).await), ["a"]);
+        assert_eq!(history.sent_counts("u".into(), 0).await["c"], 1);
+
+        history.close().await.unwrap();
+        std::fs::remove_dir_all(dir.path()).unwrap();
+
+        other.store(&[msg("b", "c", "u", 2, 1)]);
+        assert!(other.load("c".into(), 10).await.is_empty());
+        assert!(other.sent_counts("u".into(), 0).await.is_empty());
+        other.close().await.unwrap();
+        assert!(!dir.path().exists());
+    }
+
+    #[tokio::test]
+    async fn closing_a_store_that_never_opened_is_fine() {
+        History::default().close().await.unwrap();
     }
 
     #[test]

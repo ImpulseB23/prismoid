@@ -6,6 +6,7 @@ mod host;
 pub mod logging;
 mod message;
 pub mod oauth_pkce;
+mod reset;
 pub mod ringbuf;
 mod seventv_paints;
 mod seventv_users;
@@ -18,6 +19,7 @@ pub mod twitch_auth;
 pub mod twitch_channel;
 pub mod twitch_chat_settings;
 pub mod twitch_irc;
+mod uninstall;
 pub mod youtube_auth;
 
 pub mod emote_index;
@@ -33,6 +35,11 @@ pub use message::UnifiedMessage;
 
 use tauri::{Manager, Runtime};
 use tauri_plugin_window_state::StateFlags;
+
+/// Visibility is decided at launch (shown, or left in the tray for a
+/// sign-in start), never restored: quitting from the tray would otherwise
+/// bring the next launch up hidden.
+const WINDOW_STATE: StateFlags = StateFlags::all().difference(StateFlags::VISIBLE);
 
 #[tauri::command]
 fn get_platform() -> &'static str {
@@ -64,12 +71,9 @@ pub fn run() {
     builder
         .plugin(logging::plugin())
         .plugin(tauri_plugin_opener::init())
-        // Visibility is decided at launch (shown, or left in the tray for a
-        // sign-in start), never restored: quitting from the tray would
-        // otherwise bring the next launch up hidden.
         .plugin(
             tauri_plugin_window_state::Builder::default()
-                .with_state_flags(StateFlags::all() - StateFlags::VISIBLE)
+                .with_state_flags(WINDOW_STATE)
                 .build(),
         )
         .plugin(tauri_plugin_shell::init())
@@ -79,6 +83,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_platform,
             logging::open_log_dir,
+            logging::support_bundle,
+            reset::reset_settings,
+            reset::reset_all_data,
+            uninstall::uninstall_app,
             twitch_auth::commands::twitch_auth_status,
             twitch_auth::commands::twitch_start_login,
             twitch_auth::commands::twitch_complete_login,

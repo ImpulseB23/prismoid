@@ -41,10 +41,13 @@ rusqlite = { version = "0.41", features = ["bundled"] }
 tauri-plugin-process = "2.4"
 tauri-plugin-log = "2"
 log = "0.4"
+os_info = { version = "3", default-features = false }
+regex = "1"
 
 [dev-dependencies]
 criterion = "0.8"
 httpmock = "0.8"
+tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time", "test-util"] }
 
 [target.'cfg(windows)'.dependencies]
