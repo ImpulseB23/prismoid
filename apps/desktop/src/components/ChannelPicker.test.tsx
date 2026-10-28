@@ -16,7 +16,8 @@ import type { RecentChannel } from "../stores/channelStore";
 const mocks = vi.hoisted(() => ({
   followedLive: vi.fn<() => Promise<FollowedLive[]>>(),
   search: vi.fn<(q: string) => Promise<ChannelSearchResult[]>>(),
-  select: vi.fn<(login: string) => Promise<void>>(),
+  select:
+    vi.fn<(login: string, opts?: { remember?: boolean }) => Promise<void>>(),
   load: vi.fn<(ids: string[]) => Promise<void>>(),
   missing: [] as string[],
   recents: [] as RecentChannel[],
@@ -95,10 +96,10 @@ describe("ChannelPicker", () => {
   });
   afterEach(cleanup);
 
-  it("lists live follows above recents without repeating them", async () => {
+  it("lists recents, then live follows with recent ones first", async () => {
     mocks.followedLive.mockResolvedValue([
-      live("home", 150, "Chess"),
       live("big", 50_000),
+      live("home", 150, "Chess"),
     ]);
     mocks.recents = [recent("home"), recent("old")];
     mocks.profiles.set("home", {
@@ -111,12 +112,12 @@ describe("ChannelPicker", () => {
     });
     (await setup()).openPicker();
     await screen.findByText("BIG");
-    expect(options()).toEqual(["HOME", "BIG", "OLD"]);
-    expect(mocks.load).toHaveBeenCalledWith(["home", "big"]);
-    const [home, big] = screen.getAllByRole("option");
-    expect(home!.textContent).toContain("150 watching · Chess");
-    expect(home!.querySelector(".palette__live")).not.toBeNull();
-    expect(home!.querySelector("img")!.getAttribute("src")).toBe(
+    expect(options()).toEqual(["HOME", "OLD", "HOME", "BIG"]);
+    expect(mocks.load).toHaveBeenCalledWith(["big", "home"]);
+    const [recentHome, , liveHome, big] = screen.getAllByRole("option");
+    expect(recentHome!.querySelector(".palette__live")).toBeNull();
+    expect(liveHome!.textContent).toContain("150 watching · Chess");
+    expect(liveHome!.querySelector("img")!.getAttribute("src")).toBe(
       "https://img/home.png",
     );
     expect(big!.querySelector("img")).toBeNull();
@@ -134,7 +135,7 @@ describe("ChannelPicker", () => {
     resolve([live("a", 10)]);
     await screen.findByText("A");
     expect(store.pickerLoading()).toBe(false);
-    expect(options()).toEqual(["A", "OLD"]);
+    expect(options()).toEqual(["OLD", "A"]);
     const input = screen.getByRole("textbox");
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "ArrowDown" });
@@ -144,7 +145,7 @@ describe("ChannelPicker", () => {
     expect(selected).toEqual(["false", "true"]);
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(mocks.select).toHaveBeenCalledWith("old");
+    expect(mocks.select).toHaveBeenCalledWith("a", { remember: true });
   });
 
   it("opens a live channel on click", async () => {
@@ -153,7 +154,7 @@ describe("ChannelPicker", () => {
     (await setup(onClose)).openPicker();
     fireEvent.click(await screen.findByText("A"));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(mocks.select).toHaveBeenCalledWith("a");
+    expect(mocks.select).toHaveBeenCalledWith("a", { remember: true });
   });
 
   it("says so when nobody followed is live", async () => {

@@ -34,6 +34,7 @@ export interface ChannelCommands {
 
 export const MAX_RECENTS = 8;
 const RECENTS_KEY = "prismoid.channels.recent";
+export const RECENT_DWELL_MS = 2 * 60_000;
 const LAST_KEY = "prismoid.channels.last";
 const TABS_KEY = "prismoid.channels.tabs";
 
@@ -50,9 +51,11 @@ export interface ChannelStore {
   /**
    * Opens `login` as a tab (or finds its tab) and shows it. Concurrent
    * calls are safe: only the most recent one may update state. Rejects
-   * with the resolver's error after recording it in `error()`.
+   * with the resolver's error after recording it in `error()`. With
+   * `remember` (a channel the user picked) it joins recents at once;
+   * otherwise only after it has been on screen for a while.
    */
-  select: (login: string) => Promise<Channel>;
+  select: (login: string, opts?: { remember?: boolean }) => Promise<Channel>;
   /**
    * Reopens the tabs from the previous session, showing the one that was
    * on screen, or `fallbackLogin` on a fresh install. Channels that fail
@@ -98,6 +101,17 @@ export function createChannelStore(
     readRecents(storage),
   );
   let generation = 0;
+  let dwell: ReturnType<typeof setTimeout> | undefined;
+
+  function remember(channel: Channel): void {
+    persistRecents(
+      pushRecent(recents(), {
+        login: channel.login,
+        display_name: channel.display_name,
+        profile_image_url: channel.profile_image_url,
+      }),
+    );
+  }
 
   function persistRecents(list: RecentChannel[]): void {
     setRecents(list);
@@ -110,7 +124,19 @@ export function createChannelStore(
     if (a) write(storage, LAST_KEY, a.login);
   }
 
+  // A channel opened some other way (the browser, last session) only
+  // counts as recent once it has stayed on screen, so a misclick or a
+  // passing browser tab does not land there.
+  function watch(channel: Channel | null): void {
+    clearTimeout(dwell);
+    if (!channel) return;
+    dwell = setTimeout(() => {
+      if (active()?.id === channel.id) remember(channel);
+    }, RECENT_DWELL_MS);
+  }
+
   function show(channel: Channel): void {
+    watch(channel);
     setActive(channel);
     setUnreadById((m) => {
       if (!m.has(channel.id)) return m;
@@ -126,16 +152,12 @@ export function createChannelStore(
     if (!tabs().some((c) => c.id === channel.id)) {
       setTabs((list) => [...list, channel]);
     }
-    persistRecents(
-      pushRecent(recents(), {
-        login: channel.login,
-        display_name: channel.display_name,
-        profile_image_url: channel.profile_image_url,
-      }),
-    );
   }
 
-  async function select(login: string): Promise<Channel> {
+  async function select(
+    login: string,
+    opts: { remember?: boolean } = {},
+  ): Promise<Channel> {
     const gen = ++generation;
     setStatus("connecting");
     setError(null);
@@ -143,6 +165,7 @@ export function createChannelStore(
       const channel = await commands.join(login);
       if (gen !== generation) return channel;
       addTab(channel);
+      if (opts.remember) remember(channel);
       show(channel);
       return channel;
     } catch (e) {
@@ -210,6 +233,7 @@ export function createChannelStore(
     });
     if (active()?.id === channelId) {
       const next = remaining[pos] ?? remaining.at(-1) ?? null;
+      watch(next);
       setActive(next);
       if (next) {
         setUnreadById((m) => {
