@@ -102,6 +102,16 @@ describe("settingsStore", () => {
     expect(store.settings().textSize).toBe(TEXT_SIZES[0]);
     await store.textReset();
     expect(store.settings().textSize).toBe(15);
+
+    await store.update({ textSize: 17 });
+    await store.textBigger();
+    expect(store.settings().textSize).toBe(16);
+
+    const odd = createSettingsStore(
+      appliers(),
+      memStorage({ "prismoid.settings": JSON.stringify({ textSize: 99 }) }),
+    );
+    expect(odd.settings().textSize).toBe(15);
   });
 
   it("leaves state untouched when the window call fails", async () => {
