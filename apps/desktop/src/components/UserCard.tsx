@@ -178,8 +178,8 @@ const UserCard: Component<UserCardProps> = (props) => {
                       class="user-card__avatar"
                       src={url()}
                       alt=""
-                      width={36}
-                      height={36}
+                      width={56}
+                      height={56}
                     />
                   )}
                 </Show>
@@ -200,8 +200,8 @@ const UserCard: Component<UserCardProps> = (props) => {
                   {(p) => (
                     <span
                       classList={{
-                        "user-card__fact": true,
-                        "user-card__fact--new": isNewAccount(p(), Date.now()),
+                        chip: true,
+                        "chip--warn": isNewAccount(p(), Date.now()),
                       }}
                     >
                       {formatJoined(p().created_at, Date.now())}
@@ -210,7 +210,7 @@ const UserCard: Component<UserCardProps> = (props) => {
                 </Show>
                 <Show when={stats()}>
                   {(s) => (
-                    <span class="user-card__fact">
+                    <span class="chip">
                       {s().messages}{" "}
                       {s().messages === 1 ? "message" : "messages"} this session
                     </span>
@@ -237,7 +237,7 @@ const UserCard: Component<UserCardProps> = (props) => {
             <div class="user-card__actions">
               <button
                 type="button"
-                class="btn btn--outline"
+                class="btn btn--small"
                 onClick={() => {
                   requestMention(u().username);
                   close();
@@ -247,7 +247,7 @@ const UserCard: Component<UserCardProps> = (props) => {
               </button>
               <button
                 type="button"
-                class="btn btn--outline"
+                class="btn btn--small"
                 onClick={() =>
                   void openUrl(`https://www.twitch.tv/${u().username}`).catch(
                     (err: unknown) => console.error("open profile", err),
@@ -258,7 +258,7 @@ const UserCard: Component<UserCardProps> = (props) => {
               </button>
               <button
                 type="button"
-                class="btn btn--outline"
+                class="btn btn--small"
                 onClick={() =>
                   void setIgnored(u().username, !ignored()).catch(
                     (err: unknown) => console.error("ignore", err),
@@ -269,11 +269,11 @@ const UserCard: Component<UserCardProps> = (props) => {
               </button>
             </div>
 
-            <div class="dialog__label">Your note</div>
+            <div class="card__section">Note</div>
             <textarea
               class="user-card__note"
               rows={2}
-              placeholder="Only you see this. Why they are on your radar, what they said last stream."
+              placeholder="Only you see this"
               value={noteFor(u().username)}
               onChange={(e) =>
                 void setNote(u().username, e.currentTarget.value).catch(
@@ -283,7 +283,7 @@ const UserCard: Component<UserCardProps> = (props) => {
             />
 
             <Show when={history().length > 0}>
-              <div class="dialog__label">Moderation history</div>
+              <div class="card__section">Moderation history</div>
               <div class="user-card__history">
                 <For each={history()}>
                   {(a) => (
@@ -299,91 +299,93 @@ const UserCard: Component<UserCardProps> = (props) => {
             </Show>
 
             <Show when={moderationNeedsReconnect()}>
-              <div class="dialog__label">Moderation</div>
+              <div class="card__section">Moderation</div>
               <div class="dialog__empty">
                 Moderation needs new Twitch permissions. Reconnect in Settings.
               </div>
             </Show>
             <Show when={canModerate()}>
-              <div class="dialog__label">Moderation</div>
-              <input
-                type="text"
-                class="settings__input user-card__reason"
-                placeholder="Reason (other mods see it)"
-                value={reason()}
-                onInput={(e) => setReason(e.currentTarget.value)}
-              />
-              <div class="user-card__actions">
-                <For each={settings().timeoutPresets}>
-                  {(seconds) => (
+              <div class="card__section">Moderation</div>
+              <div class="user-card__mod">
+                <input
+                  type="text"
+                  class="settings__input user-card__reason"
+                  placeholder="Reason (other mods see it)"
+                  value={reason()}
+                  onInput={(e) => setReason(e.currentTarget.value)}
+                />
+                <div class="user-card__actions">
+                  <For each={settings().timeoutPresets}>
+                    {(seconds) => (
+                      <button
+                        type="button"
+                        class="btn btn--small"
+                        disabled={pending() !== "none"}
+                        onClick={() =>
+                          void runMod(
+                            "timeout",
+                            () =>
+                              timeoutUser(
+                                u().channel_id,
+                                u().platform_user_id,
+                                seconds,
+                                reason().trim() || undefined,
+                              ),
+                            `Timed out ${u().display_name} for ${formatSeconds(seconds)}.`,
+                          )
+                        }
+                      >
+                        {formatSeconds(seconds)}
+                      </button>
+                    )}
+                  </For>
+                  <Show
+                    when={pending() === "confirm_ban"}
+                    fallback={
+                      <button
+                        type="button"
+                        class="btn btn--small btn--danger"
+                        disabled={pending() !== "none"}
+                        onClick={() => setPending("confirm_ban")}
+                      >
+                        Ban
+                      </button>
+                    }
+                  >
                     <button
                       type="button"
-                      class="btn btn--outline"
-                      disabled={pending() !== "none"}
+                      class="btn btn--small btn--danger"
                       onClick={() =>
                         void runMod(
-                          "timeout",
+                          "ban",
                           () =>
-                            timeoutUser(
+                            banUser(
                               u().channel_id,
                               u().platform_user_id,
-                              seconds,
                               reason().trim() || undefined,
                             ),
-                          `Timed out ${u().display_name} for ${formatSeconds(seconds)}.`,
+                          `Banned ${u().display_name}.`,
                         )
                       }
                     >
-                      {formatSeconds(seconds)}
+                      Confirm ban
                     </button>
-                  )}
-                </For>
-                <Show
-                  when={pending() === "confirm_ban"}
-                  fallback={
-                    <button
-                      type="button"
-                      class="btn btn--outline btn--danger"
-                      disabled={pending() !== "none"}
-                      onClick={() => setPending("confirm_ban")}
-                    >
-                      Ban
-                    </button>
-                  }
-                >
+                  </Show>
                   <button
                     type="button"
-                    class="btn btn--outline btn--danger"
+                    class="btn btn--small"
+                    disabled={pending() !== "none"}
                     onClick={() =>
                       void runMod(
-                        "ban",
-                        () =>
-                          banUser(
-                            u().channel_id,
-                            u().platform_user_id,
-                            reason().trim() || undefined,
-                          ),
-                        `Banned ${u().display_name}.`,
+                        "unban",
+                        () => unbanUser(u().channel_id, u().platform_user_id),
+                        `Unbanned ${u().display_name}.`,
                       )
                     }
                   >
-                    Confirm ban
+                    {pending() === "unban" ? "Unbanning…" : "Unban"}
                   </button>
-                </Show>
-                <button
-                  type="button"
-                  class="btn btn--outline"
-                  disabled={pending() !== "none"}
-                  onClick={() =>
-                    void runMod(
-                      "unban",
-                      () => unbanUser(u().channel_id, u().platform_user_id),
-                      `Unbanned ${u().display_name}.`,
-                    )
-                  }
-                >
-                  {pending() === "unban" ? "Unbanning…" : "Unban"}
-                </button>
+                </div>
               </div>
             </Show>
 
@@ -395,7 +397,7 @@ const UserCard: Component<UserCardProps> = (props) => {
               )}
             </Show>
 
-            <div class="dialog__label">Recent messages</div>
+            <div class="card__section">Recent messages</div>
             <div class="user-card__messages">
               <Show
                 when={recent().length > 0}
