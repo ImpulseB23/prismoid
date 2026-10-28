@@ -36,6 +36,7 @@ import {
   updateState,
 } from "../stores/updateStore";
 import { authErrorMessage, isAuthError } from "./SignIn";
+import { releaseNotesUrl, updatedTo } from "../stores/whatsNewStore";
 
 export interface SettingsProps {
   open: boolean;
@@ -95,6 +96,21 @@ const UpdateRow: Component = () => {
         </span>
         <span class="settings__hint">{status()}</span>
       </div>
+      <Show when={updatedTo()}>
+        {(v) => (
+          <button
+            type="button"
+            class="btn btn--outline"
+            onClick={() =>
+              void openUrl(releaseNotesUrl(v())).catch((err: unknown) =>
+                console.error("release notes", err),
+              )
+            }
+          >
+            What's new
+          </button>
+        )}
+      </Show>
       <Show when={action()}>
         {(label) => (
           <button

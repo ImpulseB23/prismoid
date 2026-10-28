@@ -24,6 +24,11 @@ import ChatModes from "./ChatModes";
 import { canModerate } from "../stores/roleStore";
 import { pickerOpen, setPickerOpen } from "../stores/pickerStore";
 import { updateState } from "../stores/updateStore";
+import {
+  markWhatsNewSeen,
+  updatedTo,
+  whatsNewUnseen,
+} from "../stores/whatsNewStore";
 import Settings from "./Settings";
 import logo from "../assets/logo.svg";
 
@@ -183,6 +188,7 @@ const Header: Component<HeaderProps> = (props) => {
     const s = state();
     if (s === "terminated" || s === "unhealthy") return "Chat is disconnected";
     if (s === "waiting_for_auth") return "Waiting for sign-in";
+    if (whatsNewUnseen()) return `Updated to ${updatedTo()}`;
     return null;
   };
 
@@ -308,7 +314,10 @@ const Header: Component<HeaderProps> = (props) => {
         aria-haspopup="dialog"
         aria-expanded={settingsOpen()}
         title={attention() ? `Settings: ${attention()}` : "Settings"}
-        onClick={() => setSettingsOpen(true)}
+        onClick={() => {
+          markWhatsNewSeen();
+          setSettingsOpen(true);
+        }}
       >
         <svg
           width="16"
