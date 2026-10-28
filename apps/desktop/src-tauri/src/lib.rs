@@ -84,6 +84,7 @@ pub fn run() {
             sidecar_commands::twitch_unban_user,
             sidecar_commands::twitch_timeout_user,
             sidecar_commands::twitch_delete_message,
+            sidecar_commands::twitch_clear_chat,
             sidecar_commands::youtube_send_message,
             twitch_channel::twitch_join_channel,
             twitch_channel::twitch_leave_channel,

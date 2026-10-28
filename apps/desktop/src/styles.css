@@ -2502,6 +2502,24 @@ img {
   margin-left: auto;
 }
 
+.modbar__more--danger,
+.modbar__more--danger:hover {
+  background: rgba(234, 50, 71, 0.15);
+  border-color: rgba(234, 50, 71, 0.5);
+  color: var(--color-red-light);
+}
+
+.modbar__more:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.modbar__error {
+  flex-shrink: 0;
+  color: var(--color-red-light);
+  font-size: 12px;
+}
+
 .modlog {
   width: min(460px, 100%);
 }

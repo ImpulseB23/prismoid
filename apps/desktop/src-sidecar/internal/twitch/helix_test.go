@@ -370,6 +370,35 @@ func TestDeleteChatMessage(t *testing.T) {
 	}
 }
 
+func TestClearChat(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if r.Method != http.MethodDelete || r.URL.Path != "/moderation/chat" || q.Has("message_id") {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.String())
+		}
+		if q.Get("broadcaster_id") != "b1" || q.Get("moderator_id") != "m1" {
+			t.Fatalf("unexpected query: %s", r.URL.RawQuery)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	c := &HelixClient{BaseURL: srv.URL, ClientID: "cid", AccessToken: "tok"}
+	if err := c.ClearChat(context.Background(), "b1", "m1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestClearChatRequiresIDs(t *testing.T) {
+	c := &HelixClient{BaseURL: "http://unused", ClientID: "cid", AccessToken: "tok"}
+	if err := c.ClearChat(context.Background(), "b1", ""); err == nil {
+		t.Fatal("expected error without a moderator id")
+	}
+	if err := c.ClearChat(context.Background(), "", "m1"); err == nil {
+		t.Fatal("expected error without a broadcaster id")
+	}
+}
+
 func TestSendChatMessageReply(t *testing.T) {
 	var body map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

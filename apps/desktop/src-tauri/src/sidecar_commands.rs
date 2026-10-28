@@ -26,10 +26,10 @@ use tokio::sync::oneshot;
 use tauri_plugin_shell::process::CommandChild;
 
 use crate::host::{
-    build_send_chat_message_line, build_twitch_delete_message_line, build_twitch_timeout_line,
-    build_twitch_user_mod_action_line, build_youtube_send_message_line, SendChatMessageArgs,
-    SendChatResult, TwitchDeleteMessageArgs, TwitchTimeoutArgs, TwitchUserModActionArgs,
-    YouTubeSendMessageArgs,
+    build_send_chat_message_line, build_twitch_clear_chat_line, build_twitch_delete_message_line,
+    build_twitch_timeout_line, build_twitch_user_mod_action_line, build_youtube_send_message_line,
+    SendChatMessageArgs, SendChatResult, TwitchClearChatArgs, TwitchDeleteMessageArgs,
+    TwitchTimeoutArgs, TwitchUserModActionArgs, YouTubeSendMessageArgs,
 };
 use crate::twitch_auth::{AuthError, AuthState, TwitchTokens, TWITCH_CLIENT_ID};
 use crate::youtube_auth::{AuthError as YouTubeAuthError, AuthState as YouTubeAuthState};
@@ -628,6 +628,29 @@ pub async fn twitch_delete_message(
                 broadcaster_id,
                 user_id,
                 message_id: &message_id,
+                request_id,
+            })
+        },
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn twitch_clear_chat(
+    auth: State<'_, AuthState>,
+    sender: State<'_, SidecarCommandSender>,
+    channel_id: String,
+) -> Result<(), SendCommandError> {
+    send_twitch_mod_command(
+        auth,
+        sender,
+        channel_id,
+        |access_token, broadcaster_id, user_id, request_id| {
+            build_twitch_clear_chat_line(TwitchClearChatArgs {
+                client_id: TWITCH_CLIENT_ID,
+                access_token,
+                broadcaster_id,
+                user_id,
                 request_id,
             })
         },

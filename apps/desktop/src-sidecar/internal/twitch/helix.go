@@ -458,3 +458,15 @@ func (c *HelixClient) DeleteChatMessage(ctx context.Context, broadcasterID, mode
 	q.Set("message_id", messageID)
 	return c.Delete(ctx, "/moderation/chat?"+q.Encode(), nil)
 }
+
+// ClearChat removes every message in the channel: the same endpoint as
+// DeleteChatMessage with no message id.
+func (c *HelixClient) ClearChat(ctx context.Context, broadcasterID, moderatorID string) error {
+	if broadcasterID == "" || moderatorID == "" {
+		return errors.New("twitch helix: missing broadcaster or moderator id")
+	}
+	q := url.Values{}
+	q.Set("broadcaster_id", broadcasterID)
+	q.Set("moderator_id", moderatorID)
+	return c.Delete(ctx, "/moderation/chat?"+q.Encode(), nil)
+}
