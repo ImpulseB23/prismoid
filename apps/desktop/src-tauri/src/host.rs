@@ -410,6 +410,37 @@ pub fn build_twitch_delete_message_line(
     Ok(bytes)
 }
 
+pub struct TwitchClearChatArgs<'a> {
+    pub client_id: &'a str,
+    pub access_token: &'a str,
+    pub broadcaster_id: &'a str,
+    pub user_id: &'a str,
+    pub request_id: u64,
+}
+
+pub fn build_twitch_clear_chat_line(args: TwitchClearChatArgs<'_>) -> serde_json::Result<Vec<u8>> {
+    #[derive(Serialize)]
+    struct ClearCmd<'a> {
+        cmd: &'a str,
+        client_id: &'a str,
+        token: &'a str,
+        broadcaster_id: &'a str,
+        user_id: &'a str,
+        request_id: u64,
+    }
+    let cmd = ClearCmd {
+        cmd: "clear_chat",
+        client_id: args.client_id,
+        token: args.access_token,
+        broadcaster_id: args.broadcaster_id,
+        user_id: args.user_id,
+        request_id: args.request_id,
+    };
+    let mut bytes = serde_json::to_vec(&cmd)?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
 /// Arguments for [`build_youtube_send_message_line`]. Mirrors the
 /// Twitch shape but trimmed to what the YouTube Data API needs (no
 /// client_id, no broadcaster/sender split — the access token's owner
@@ -1229,6 +1260,24 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_slice(&line[..line.len() - 1]).unwrap();
         assert_eq!(parsed["cmd"], "delete_message");
         assert_eq!(parsed["message_id"], "m1");
+    }
+
+    #[test]
+    fn build_twitch_clear_chat_line_has_no_message_id() {
+        let line = build_twitch_clear_chat_line(TwitchClearChatArgs {
+            client_id: "cid",
+            access_token: "tok",
+            broadcaster_id: "b",
+            user_id: "u",
+            request_id: 6,
+        })
+        .unwrap();
+        assert_eq!(line.last(), Some(&b'\n'));
+        let parsed: serde_json::Value = serde_json::from_slice(&line[..line.len() - 1]).unwrap();
+        assert_eq!(parsed["cmd"], "clear_chat");
+        assert_eq!(parsed["broadcaster_id"], "b");
+        assert_eq!(parsed["request_id"], 6_u64);
+        assert!(parsed.get("message_id").is_none());
     }
 
     #[test]

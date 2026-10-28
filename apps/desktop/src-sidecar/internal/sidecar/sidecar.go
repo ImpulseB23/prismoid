@@ -293,6 +293,8 @@ func DispatchCommand(ctx context.Context, cmd control.Command, clients map[strin
 		HandleTimeoutUser(ctx, cmd, notify, logger)
 	case "delete_message":
 		HandleDeleteMessage(ctx, cmd, notify, logger)
+	case "clear_chat":
+		HandleClearChat(ctx, cmd, notify, logger)
 	case "send_chat_message":
 		HandleSendChatMessage(ctx, cmd, notify, logger)
 	case "youtube_send_message":
@@ -437,6 +439,19 @@ func HandleDeleteMessage(ctx context.Context, cmd control.Command, notify twitch
 	err := newTwitchHelixClient(cmd).DeleteChatMessage(ctx, cmd.BroadcasterID, cmd.UserID, cmd.MessageID)
 	if err != nil {
 		logger.Warn().Err(err).Str("broadcaster", cmd.BroadcasterID).Str("message_id", cmd.MessageID).Msg("delete_message failed")
+	}
+	reply(err)
+}
+
+func HandleClearChat(ctx context.Context, cmd control.Command, notify twitch.Notify, logger zerolog.Logger) {
+	reply := modReply(cmd, notify)
+	if msg := validateModAuth(cmd); msg != "" {
+		reply(errors.New(msg))
+		return
+	}
+	err := newTwitchHelixClient(cmd).ClearChat(ctx, cmd.BroadcasterID, cmd.UserID)
+	if err != nil {
+		logger.Warn().Err(err).Str("broadcaster", cmd.BroadcasterID).Msg("clear_chat failed")
 	}
 	reply(err)
 }

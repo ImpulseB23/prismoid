@@ -370,6 +370,16 @@ func TestDeleteChatMessage(t *testing.T) {
 	}
 }
 
+func TestClearChatRequiresIDs(t *testing.T) {
+	c := &HelixClient{BaseURL: "http://unused", ClientID: "cid", AccessToken: "tok"}
+	if err := c.ClearChat(context.Background(), "b1", ""); err == nil {
+		t.Fatal("expected error without a moderator id")
+	}
+	if err := c.ClearChat(context.Background(), "", "m1"); err == nil {
+		t.Fatal("expected error without a broadcaster id")
+	}
+}
+
 func TestSendChatMessageReply(t *testing.T) {
 	var body map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

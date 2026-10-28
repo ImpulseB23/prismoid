@@ -153,3 +153,7 @@ export function deleteMessage(
 ): Promise<void> {
   return invoke("twitch_delete_message", { channelId, messageId });
 }
+
+export function clearChat(channelId: string): Promise<void> {
+  return invoke("twitch_clear_chat", { channelId });
+}

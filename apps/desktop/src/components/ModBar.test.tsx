@@ -22,8 +22,12 @@ vi.mock("../stores/chatSettingsStore", () => ({
 vi.mock("../stores/modesPanelStore", () => ({
   setModesOpen: (v: boolean) => openPanel(v),
 }));
+const clear = vi.fn<(id: string) => Promise<void>>(async () => {});
+vi.mock("../lib/twitchAuth", () => ({
+  clearChat: (id: string) => clear(id),
+}));
 
-const { default: ModBar } = await import("./ModBar");
+const { default: ModBar, CLEAR_CONFIRM_MS } = await import("./ModBar");
 
 const settings: ChatSettings = {
   emote_mode: false,
@@ -56,6 +60,33 @@ describe("ModBar", () => {
     expect(apply).toHaveBeenCalledWith({ emote_mode: true });
     fireEvent.click(screen.getByRole("button", { name: "Modes" }));
     expect(openPanel).toHaveBeenCalledWith(true);
+  });
+
+  it("clears chat only on a second tap", async () => {
+    vi.useFakeTimers();
+    try {
+      render(() => <ModBar />);
+      fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+      expect(clear).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(CLEAR_CONFIRM_MS);
+      expect(screen.getByRole("button", { name: "Clear" })).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+      fireEvent.click(screen.getByRole("button", { name: "Clear chat?" }));
+      expect(clear).toHaveBeenCalledWith("100");
+      await vi.runAllTimersAsync();
+      expect(screen.getByRole("button", { name: "Clear" })).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows why a clear failed", async () => {
+    clear.mockRejectedValueOnce({ kind: "not_moderator" });
+    render(() => <ModBar />);
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear chat?" }));
+    expect((await screen.findByRole("alert")).textContent).not.toBe("");
   });
 
   it("labels a moderator and stays hidden without the role", () => {
