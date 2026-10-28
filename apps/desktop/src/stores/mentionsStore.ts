@@ -1,49 +1,150 @@
-// Every message that mentioned the user this session, across all open
-// channels, newest first. Unread counts what arrived since the panel was
-// last opened.
+// Every message that mentioned the user, across all open channels, newest
+// first: live ones as they arrive, plus what each channel's stored history
+// holds (which includes the recent-messages backlog from before the app was
+// open). Unread counts mentions newer than the last time the panel was
+// opened; that moment is remembered, so old mentions do not ping again on
+// every launch.
 
 import { createSignal } from "solid-js";
 import type { ChatMessage } from "./chatStore";
+import type { StorageLike } from "./channelStore";
+import { loadHistory } from "../lib/chatHistory";
+import { isHighlighted } from "../lib/highlight";
 
 export const MAX_MENTIONS = 200;
+const SEEN_KEY = "prismoid.mentionsSeenAt";
+const CLEARED_KEY = "prismoid.mentionsClearedAt";
+
+/** A message that should land in Mentions: it names the user or hits a highlight phrase, and is not theirs, a notice, or from someone ignored. */
+export function isMentionFor(
+  m: ChatMessage,
+  login: string,
+  phrases: string[],
+  ignored: string[],
+): boolean {
+  return (
+    !m.notice &&
+    m.username !== login &&
+    !ignored.includes(m.username) &&
+    isHighlighted(m.message_text, login, phrases)
+  );
+}
 
 export interface MentionsStore {
   mentions: () => ChatMessage[];
   unread: () => number;
   open: () => boolean;
   record: (msg: ChatMessage) => void;
+  /** Looks through a channel's stored history once per session. */
+  scanHistory: (
+    channelId: string,
+    isMention: (m: ChatMessage) => boolean,
+  ) => Promise<void>;
   setOpen: (open: boolean) => void;
+  /** The user cleared the list: hides everything up to now, for good. */
   clear: () => void;
+  /** Sign-out: forgets this session's list without hiding anything. */
+  reset: () => void;
 }
 
-export function createMentionsStore(): MentionsStore {
+export function createMentionsStore(
+  storage: StorageLike | null = defaultStorage(),
+  load: (channelId: string) => Promise<ChatMessage[]> = loadHistory,
+  now: () => number = Date.now,
+): MentionsStore {
   const [mentions, setMentions] = createSignal<ChatMessage[]>([]);
-  const [unread, setUnread] = createSignal(0);
   const [open, setOpenSignal] = createSignal(false);
-  // History replays and reconnects can deliver a message twice.
+  const [seenAt, setSeenAtSignal] = createSignal(readTime(storage, SEEN_KEY));
+  // Clear hides everything up to that moment for good, so history scans on
+  // later launches do not bring cleared mentions back.
+  let clearedAt = readTime(storage, CLEARED_KEY);
+  // History replays, reconnects and the live feed can all deliver a message.
   const seen = new Set<string>();
+  const scanned = new Set<string>();
 
-  function record(msg: ChatMessage): void {
-    if (seen.has(msg.id)) return;
-    seen.add(msg.id);
-    const next = [msg, ...mentions()];
+  const setSeenAt = (t: number) => {
+    setSeenAtSignal(t);
+    write(storage, SEEN_KEY, String(t));
+  };
+
+  function add(batch: ChatMessage[]): void {
+    const fresh = batch.filter(
+      (m) => !seen.has(m.id) && m.timestamp > clearedAt,
+    );
+    if (fresh.length === 0) return;
+    for (const m of fresh) seen.add(m.id);
+    const next = [...fresh, ...mentions()].sort(
+      (a, b) => b.timestamp - a.timestamp,
+    );
     for (const dropped of next.splice(MAX_MENTIONS)) seen.delete(dropped.id);
     setMentions(next);
-    if (!open()) setUnread((n) => n + 1);
+    if (open()) setSeenAt(Math.max(seenAt(), now()));
   }
 
-  function setOpen(value: boolean): void {
-    setOpenSignal(value);
-    if (value) setUnread(0);
+  async function scanHistory(
+    channelId: string,
+    isMention: (m: ChatMessage) => boolean,
+  ): Promise<void> {
+    if (scanned.has(channelId)) return;
+    scanned.add(channelId);
+    try {
+      add((await load(channelId)).filter(isMention));
+    } catch (err) {
+      scanned.delete(channelId);
+      console.error("mention history", err);
+    }
   }
 
-  function clear(): void {
-    seen.clear();
-    setMentions([]);
-    setUnread(0);
-  }
+  const unread = () => mentions().filter((m) => m.timestamp > seenAt()).length;
 
-  return { mentions, unread, open, record, setOpen, clear };
+  return {
+    mentions,
+    unread,
+    open,
+    record: (msg) => add([msg]),
+    scanHistory,
+    setOpen: (value) => {
+      setOpenSignal(value);
+      if (value) setSeenAt(now());
+    },
+    clear: () => {
+      clearedAt = now();
+      write(storage, CLEARED_KEY, String(clearedAt));
+      seen.clear();
+      setMentions([]);
+    },
+    reset: () => {
+      seen.clear();
+      scanned.clear();
+      setMentions([]);
+    },
+  };
+}
+
+function readTime(storage: StorageLike | null, key: string): number {
+  try {
+    const raw = storage?.getItem(key);
+    const n = raw ? Number(raw) : 0;
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function write(storage: StorageLike | null, key: string, value: string): void {
+  try {
+    storage?.setItem(key, value);
+  } catch {
+    // best-effort persistence
+  }
+}
+
+function defaultStorage(): StorageLike | null {
+  try {
+    return typeof localStorage === "undefined" ? null : localStorage;
+  } catch {
+    return null;
+  }
 }
 
 const defaultStore = createMentionsStore();
@@ -51,5 +152,7 @@ export const mentions = defaultStore.mentions;
 export const unreadMentions = defaultStore.unread;
 export const mentionsOpen = defaultStore.open;
 export const recordMention = defaultStore.record;
+export const scanMentionHistory = defaultStore.scanHistory;
 export const setMentionsOpen = defaultStore.setOpen;
 export const clearMentions = defaultStore.clear;
+export const resetMentions = defaultStore.reset;

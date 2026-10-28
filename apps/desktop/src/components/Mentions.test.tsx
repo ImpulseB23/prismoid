@@ -15,7 +15,7 @@ const { default: Mentions } = await import("./Mentions");
 const said = {
   id: "m1",
   channel_id: "1",
-  timestamp: 0,
+  timestamp: Date.now(),
   display_name: "Viewer",
   color: null,
   message_text: "hi @me",
@@ -43,7 +43,10 @@ describe("Mentions", () => {
     render(() => <Mentions />);
     recordMention({ ...said, id: "m2" });
     setMentionsOpen(true);
+    const before = mentions().length;
     fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(mentions()).toHaveLength(before);
+    fireEvent.click(screen.getByRole("button", { name: "Clear all?" }));
     expect(mentions()).toEqual([]);
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(mentionsOpen()).toBe(false);

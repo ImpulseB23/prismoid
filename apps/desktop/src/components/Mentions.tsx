@@ -2,6 +2,7 @@
 // jumps to its channel.
 
 import { Component, For, Show, createEffect } from "solid-js";
+import { createConfirmTap } from "../lib/confirmTap";
 import { channelTabs, focusChannel } from "../stores/channelStore";
 import {
   clearMentions,
@@ -27,6 +28,12 @@ const Mentions: Component = () => {
 
   const close = () => setMentionsOpen(false);
 
+  // Clearing cannot be undone, so the first tap only arms the button.
+  const { armed, tap } = createConfirmTap();
+  const onClear = () => {
+    if (tap()) clearMentions();
+  };
+
   return (
     <Show when={mentionsOpen()}>
       <div class="dialog-backdrop" onMouseDown={close}>
@@ -48,9 +55,11 @@ const Mentions: Component = () => {
               <button
                 type="button"
                 class="btn btn--small"
-                onClick={clearMentions}
+                classList={{ "btn--danger": armed() }}
+                title="Removes these mentions for good"
+                onClick={onClear}
               >
-                Clear
+                {armed() ? "Clear all?" : "Clear"}
               </button>
             </Show>
           </div>

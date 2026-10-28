@@ -31,12 +31,18 @@ import {
 } from "./stores/authStore";
 import {
   activeChannel,
+  channelTabs,
   restoreChannels,
   selectChannel,
 } from "./stores/channelStore";
 import { clearHeldMessages } from "./stores/automodStore";
 import { clearMessages } from "./stores/chatStore";
-import { clearMentions } from "./stores/mentionsStore";
+import {
+  isMentionFor,
+  resetMentions,
+  scanMentionHistory,
+} from "./stores/mentionsStore";
+import { settings } from "./stores/settingsStore";
 import { clearRoles, loadModeratedChannels } from "./stores/roleStore";
 import { trackActiveStream } from "./stores/streamStore";
 import { initWhatsNew } from "./stores/whatsNewStore";
@@ -108,7 +114,7 @@ const App: Component = () => {
   const signOut = async () => {
     await logout();
     clearMessages();
-    clearMentions();
+    resetMentions();
     clearHeldMessages();
     setAuthStatus({ state: "logged_out" });
   };
@@ -162,6 +168,19 @@ const ChatShell: Component<{ login: string; onSignOut: () => void }> = (
   props,
 ) => {
   trackActiveStream();
+
+  // Mentions from before the app was open sit in each channel's stored
+  // history (backlog included), and only the tab on screen loads its own.
+  // Every open tab is looked through once, as it joins.
+  createEffect(() => {
+    const phrases = settings().highlightPhrases;
+    const ignored = settings().ignoredLogins;
+    for (const tab of channelTabs()) {
+      void scanMentionHistory(tab.id, (m) =>
+        isMentionFor(m, props.login, phrases, ignored),
+      );
+    }
+  });
 
   onMount(() => {
     // Reopen last session's tabs, or the user's own chat on a fresh
