@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createChannelStore,
   pushRecent,
+  RECENT_DWELL_MS,
   MAX_RECENTS,
   type ChannelCommands,
   type StorageLike,
@@ -59,7 +60,7 @@ describe("createChannelStore", () => {
     const store = createChannelStore(fakeCommands(), storage);
 
     expect(store.status()).toBe("idle");
-    const p = store.select("xqc");
+    const p = store.select("xqc", { remember: true });
     expect(store.status()).toBe("connecting");
     await p;
 
@@ -217,8 +218,8 @@ describe("createChannelStore", () => {
   it("forgetRecent removes and persists", async () => {
     const storage = memStorage();
     const store = createChannelStore(fakeCommands(), storage);
-    await store.select("a");
-    await store.select("b");
+    await store.select("a", { remember: true });
+    await store.select("b", { remember: true });
     store.forgetRecent("a");
     expect(store.recents().map((r) => r.login)).toEqual(["b"]);
     expect(
@@ -226,6 +227,33 @@ describe("createChannelStore", () => {
         (r: { login: string }) => r.login,
       ),
     ).toEqual(["b"]);
+  });
+
+  describe("recents from other opens", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("joins recents only after staying on screen", async () => {
+      vi.useFakeTimers();
+      const store = createChannelStore(fakeCommands(), memStorage());
+      await store.select("a");
+      expect(store.recents()).toEqual([]);
+      vi.advanceTimersByTime(RECENT_DWELL_MS);
+      expect(store.recents().map((r) => r.login)).toEqual(["a"]);
+    });
+
+    it("drops a channel left before the dwell ends", async () => {
+      vi.useFakeTimers();
+      const store = createChannelStore(fakeCommands(), memStorage());
+      await store.select("a");
+      vi.advanceTimersByTime(RECENT_DWELL_MS - 1);
+      await store.select("b");
+      vi.advanceTimersByTime(RECENT_DWELL_MS - 1);
+      await store.close("id-b");
+      vi.advanceTimersByTime(RECENT_DWELL_MS);
+      expect(store.recents().map((r) => r.login)).toEqual(["a"]);
+    });
   });
 
   it("survives a throwing storage", async () => {
