@@ -24,6 +24,8 @@ import ChatModes from "./ChatModes";
 import { modesOpen, setModesOpen } from "../stores/modesPanelStore";
 import { canModerate } from "../stores/roleStore";
 import { pickerOpen, setPickerOpen } from "../stores/pickerStore";
+import { searchOpen, setSearchOpen } from "../stores/searchStore";
+import ChatSearch from "./ChatSearch";
 import { updateState } from "../stores/updateStore";
 import {
   markWhatsNewSeen,
@@ -127,6 +129,13 @@ const Header: Component<HeaderProps> = (props) => {
       }
       if (!(e.ctrlKey || e.metaKey)) return;
       switch (e.key) {
+        case "f":
+        case "F":
+          e.preventDefault();
+          setPickerOpen(false);
+          setSettingsOpen(false);
+          setSearchOpen(true);
+          break;
         case "k":
         case "K":
           e.preventDefault();
@@ -349,6 +358,7 @@ const Header: Component<HeaderProps> = (props) => {
 
       <ChannelPicker open={pickerOpen()} onClose={() => setPickerOpen(false)} />
       <ChatModes open={modesOpen()} onClose={() => setModesOpen(false)} />
+      <ChatSearch open={searchOpen()} onClose={() => setSearchOpen(false)} />
       <Settings
         open={settingsOpen()}
         login={props.login}

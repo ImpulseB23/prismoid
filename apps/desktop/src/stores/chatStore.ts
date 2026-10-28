@@ -168,6 +168,11 @@ export interface ChatStore {
    * by the ring size, not the session length.
    */
   recentByUser: (platformUserId: string, limit: number) => ChatMessage[];
+  /** Confirmed messages that pass `match`, newest first, up to `limit`. */
+  search: (
+    match: (msg: ChatMessage) => boolean,
+    limit: number,
+  ) => ChatMessage[];
   /** Marks one message deleted by id. No-op if it is not in the ring. */
   markDeleted: (messageId: string) => void;
   /** Marks every message by one author deleted (ban or timeout). */
@@ -468,6 +473,23 @@ export function createChatStore(maxMessages = DEFAULT_MAX_MESSAGES): ChatStore {
     return out.reverse();
   }
 
+  function search(
+    match: (msg: ChatMessage) => boolean,
+    limit: number,
+  ): ChatMessage[] {
+    const out: ChatMessage[] = [];
+    const stop = oldestLive();
+    for (
+      let mono = writeIndex - 1;
+      mono >= stop && out.length < limit;
+      mono--
+    ) {
+      const msg = ring[mono % maxMessages];
+      if (msg && msg.status === undefined && match(msg)) out.push(msg);
+    }
+    return out;
+  }
+
   function findById(id: string): ChatMessage | undefined {
     const stop = oldestLive();
     for (let mono = writeIndex - 1; mono >= stop; mono--) {
@@ -515,6 +537,7 @@ export function createChatStore(maxMessages = DEFAULT_MAX_MESSAGES): ChatStore {
     retryPending,
     clear,
     recentByUser,
+    search,
     markDeleted,
     markUserCleared,
     markAllDeleted,
@@ -535,6 +558,7 @@ export const failPending = defaultStore.failPending;
 export const retryPending = defaultStore.retryPending;
 export const clearMessages = defaultStore.clear;
 export const recentMessagesByUser = defaultStore.recentByUser;
+export const searchMessages = defaultStore.search;
 export const markMessageDeleted = defaultStore.markDeleted;
 export const markUserMessagesCleared = defaultStore.markUserCleared;
 export const markAllMessagesDeleted = defaultStore.markAllDeleted;
