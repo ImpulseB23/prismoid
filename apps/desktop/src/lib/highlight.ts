@@ -26,3 +26,15 @@ export function isHighlighted(
 ): boolean {
   return mentionsLogin(text, login) || matchesPhrase(text, phrases);
 }
+
+/** The sender is someone the user always wants to see: a listed login or a holder of a listed badge. */
+export function isSpotlit(
+  login: string,
+  badges: { set_id: string }[],
+  users: string[],
+  badgeSets: string[],
+): boolean {
+  return (
+    users.includes(login) || badges.some((b) => badgeSets.includes(b.set_id))
+  );
+}

@@ -1760,7 +1760,7 @@ img {
   gap: 8px;
 }
 
-.settings__themes {
+.settings__chips {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -1839,6 +1839,15 @@ img {
 
 .msg--new-account {
   border-left-color: var(--color-amber);
+}
+
+.msg--spotlight {
+  background: rgba(58, 183, 191, 0.1);
+  border-left-color: var(--color-teal);
+}
+
+.msg--spotlight:hover {
+  background: rgba(58, 183, 191, 0.18);
 }
 
 .user-card__facts {

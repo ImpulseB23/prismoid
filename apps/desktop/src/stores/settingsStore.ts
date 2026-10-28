@@ -22,6 +22,10 @@ export interface Settings {
   showTimestamps: boolean;
   /** Logins whose messages are hidden from the feed. */
   ignoredLogins: string[];
+  /** Logins whose every message is highlighted. */
+  highlightUsers: string[];
+  /** Badge sets (streamer, mods, VIPs, subs) whose messages are highlighted. */
+  highlightBadges: HighlightBadge[];
   /** Extra words or phrases that highlight a message like a mention. */
   highlightPhrases: string[];
   /** Mark messages from accounts created in the last week. */
@@ -44,6 +48,14 @@ export interface Settings {
 export type Theme = "system" | "dark" | "midnight" | "light";
 export const THEMES: Theme[] = ["system", "dark", "midnight", "light"];
 
+export const HIGHLIGHT_BADGES = [
+  "broadcaster",
+  "moderator",
+  "vip",
+  "subscriber",
+] as const;
+export type HighlightBadge = (typeof HIGHLIGHT_BADGES)[number];
+
 /** Twitch caps timeouts at two weeks. */
 export const MAX_TIMEOUT_SECONDS = 1_209_600;
 export const MAX_TIMEOUT_PRESETS = 8;
@@ -54,6 +66,8 @@ export const DEFAULT_SETTINGS: Settings = {
   textSize: DEFAULT_TEXT_SIZE,
   showTimestamps: false,
   ignoredLogins: [],
+  highlightUsers: [],
+  highlightBadges: [],
   highlightPhrases: [],
   flagNewAccounts: true,
   showModActions: true,
@@ -192,6 +206,11 @@ function readSettings(storage: StorageLike | null): Settings {
           ? p.showTimestamps
           : DEFAULT_SETTINGS.showTimestamps,
       ignoredLogins: stringList(p.ignoredLogins),
+      highlightUsers: stringList(p.highlightUsers),
+      highlightBadges: stringList(p.highlightBadges).filter(
+        (b): b is HighlightBadge =>
+          HIGHLIGHT_BADGES.includes(b as HighlightBadge),
+      ),
       highlightPhrases: stringList(p.highlightPhrases),
       flagNewAccounts:
         typeof p.flagNewAccounts === "boolean"
@@ -330,4 +349,18 @@ export function setIgnored(login: string, ignored: boolean): Promise<void> {
   return next === current
     ? Promise.resolve()
     : updateSettings({ ignoredLogins: next });
+}
+
+export function isUserHighlighted(login: string): boolean {
+  return settings().highlightUsers.includes(login);
+}
+
+export function setUserHighlighted(login: string, on: boolean): Promise<void> {
+  const current = settings().highlightUsers;
+  if (current.includes(login) === on) return Promise.resolve();
+  return updateSettings({
+    highlightUsers: on
+      ? [...current, login]
+      : current.filter((l) => l !== login),
+  });
 }

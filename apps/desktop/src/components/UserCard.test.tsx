@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@solidjs/testing-library";
+import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import type { ChatMessage } from "../stores/chatStore";
 
 const said = (id: string, text: string) =>
@@ -24,6 +24,16 @@ vi.mock("../stores/userInfoStore", async (importOriginal) => ({
 }));
 
 const { default: UserCard } = await import("./UserCard");
+const { isUserHighlighted } = await import("../stores/settingsStore");
+
+const viewer = {
+  channel_id: "1",
+  platform_user_id: "42",
+  username: "viewer",
+  display_name: "Viewer",
+  color: null,
+  badges: [],
+};
 
 describe("UserCard", () => {
   afterEach(cleanup);
@@ -47,5 +57,13 @@ describe("UserCard", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]!.classList.contains("user-card__msg--mention")).toBe(true);
     expect(rows[1]!.classList.contains("user-card__msg--mention")).toBe(false);
+  });
+
+  it("toggles highlighting everything they say", async () => {
+    render(() => <UserCard login="me" onClose={() => {}} user={viewer} />);
+    fireEvent.click(screen.getByRole("button", { name: "Highlight" }));
+    await vi.waitFor(() => expect(isUserHighlighted("viewer")).toBe(true));
+    fireEvent.click(screen.getByRole("button", { name: "Stop highlighting" }));
+    await vi.waitFor(() => expect(isUserHighlighted("viewer")).toBe(false));
   });
 });
