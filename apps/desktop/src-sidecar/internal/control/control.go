@@ -73,6 +73,9 @@ type Command struct {
 	// matches it back when the result line arrives.
 	RequestID uint64 `json:"request_id,omitempty"`
 
+	// Enabled is the switch carried by first_messages.
+	Enabled bool `json:"enabled,omitempty"`
+
 	// YouTube fields
 	VideoID    string `json:"video_id,omitempty"`
 	LiveChatID string `json:"live_chat_id,omitempty"`

@@ -39,6 +39,8 @@ use crate::emote_index::EmoteBundle;
 #[cfg(windows)]
 use crate::emote_index::EmoteIndexes;
 #[cfg(windows)]
+use crate::first_messages::FirstMessageSetting;
+#[cfg(windows)]
 use crate::host::{
     build_bootstrap_line, build_token_refresh_line, build_twitch_connect_line,
     build_twitch_disconnect_line, mark_handle_inheritable, parse_batch, parse_sidecar_event,
@@ -370,6 +372,8 @@ async fn run_once<R: Runtime>(
     // explicit kill, and the outer `supervise` loop also clears any
     // lingering handle once the iteration ends.
     sender.publish(child.release());
+    app.state::<FirstMessageSetting>()
+        .sync(|line| sender.write_raw(line));
 
     // The channel task owns every twitch_connect / twitch_disconnect
     // write for this run: it sends the initial connect for whichever
@@ -909,25 +913,32 @@ fn handle_sidecar_stdout<R: Runtime>(
                 tracing::warn!(error = %e, "failed to emit chat_banned");
             }
         },
+        |first| {
+            if let Err(e) = app.emit("first_message", &first) {
+                tracing::warn!(error = %e, "failed to emit first_message");
+            }
+        },
     )
 }
 
 /// Pure scan-and-dispatch core of [`handle_sidecar_stdout`]. Splits the
 /// batch on newlines, parses each non-empty piece via
 /// [`parse_sidecar_event`], returns `true` if any line was a heartbeat,
-/// and invokes `on_bundle`/`on_send_result`/`on_banned` for the
+/// and invokes `on_bundle`/`on_send_result`/`on_banned`/`on_first` for the
 /// corresponding variants. Factored out so it can be unit-tested without a Tauri
 /// runtime (the AppHandle-dependent work happens inside the closures).
-fn scan_sidecar_stdout<F, G, H>(
+fn scan_sidecar_stdout<F, G, H, I>(
     bytes: &[u8],
     mut on_bundle: F,
     mut on_send_result: G,
     mut on_banned: H,
+    mut on_first: I,
 ) -> bool
 where
     F: FnMut(Box<crate::emote_index::EmoteBundle>),
     G: FnMut(crate::host::SendChatResult),
     H: FnMut(crate::host::ChatBanned),
+    I: FnMut(crate::host::FirstMessage),
 {
     let mut saw_heartbeat = false;
     for line in bytes.split(|b| *b == b'\n') {
@@ -940,6 +951,7 @@ where
             SidecarEvent::SendChatResult(r) => on_send_result(r),
             SidecarEvent::ModActionResult(r) => on_send_result(r),
             SidecarEvent::ChatBanned(b) => on_banned(b),
+            SidecarEvent::FirstMessage(f) => on_first(f),
             SidecarEvent::Other(t) => {
                 tracing::debug!(msg_type = %t, "unhandled sidecar control message");
             }
@@ -1449,13 +1461,15 @@ mod tests {
             b"",
             |_| panic!("no bundle"),
             |_| panic!("no result"),
-            |_| panic!("no ban")
+            |_| panic!("no ban"),
+            |_| panic!("no first")
         ));
         assert!(!scan_sidecar_stdout(
             b"\n\n\n",
             |_| panic!("no bundle"),
             |_| panic!("no result"),
-            |_| panic!("no ban")
+            |_| panic!("no ban"),
+            |_| panic!("no first")
         ));
     }
 
@@ -1466,7 +1480,8 @@ mod tests {
             line,
             |_| panic!("no bundle"),
             |_| panic!("no result"),
-            |_| panic!("no ban")
+            |_| panic!("no ban"),
+            |_| panic!("no first")
         ));
     }
 
@@ -1482,7 +1497,8 @@ mod tests {
             &batch,
             |_| panic!("no bundle"),
             |_| panic!("no result"),
-            |_| panic!("no ban")
+            |_| panic!("no ban"),
+            |_| panic!("no first")
         ));
     }
 
@@ -1495,7 +1511,8 @@ mod tests {
             &batch,
             |_| panic!("no bundle"),
             |_| panic!("no result"),
-            |_| panic!("no ban")
+            |_| panic!("no ban"),
+            |_| panic!("no first")
         ));
     }
 
@@ -1515,6 +1532,7 @@ mod tests {
             },
             |_| panic!("no result"),
             |_| panic!("no ban"),
+            |_| panic!("no first"),
         );
 
         assert!(saw_heartbeat);
@@ -1531,7 +1549,8 @@ mod tests {
             &batch,
             |_| panic!("no bundle"),
             |_| panic!("no result"),
-            |_| panic!("no ban")
+            |_| panic!("no ban"),
+            |_| panic!("no first")
         ));
     }
 
@@ -1544,6 +1563,7 @@ mod tests {
             |_| panic!("no bundle"),
             |r| got = Some(r),
             |_| panic!("no ban"),
+            |_| panic!("no first"),
         );
         assert!(!saw_heartbeat);
         let r = got.expect("result dispatched");
@@ -1561,8 +1581,25 @@ mod tests {
             |_| panic!("no bundle"),
             |_| panic!("no result"),
             |b| got = Some(b),
+            |_| panic!("no first"),
         );
         assert_eq!(got.expect("ban dispatched").broadcaster_id, "9");
+    }
+
+    #[test]
+    fn scan_sidecar_stdout_dispatches_first_message() {
+        let line = br#"{"type":"first_message","payload":{"channel_id":"9","message_id":"m1"}}"#;
+        let mut got = None;
+        scan_sidecar_stdout(
+            line,
+            |_| panic!("no bundle"),
+            |_| panic!("no result"),
+            |_| panic!("no ban"),
+            |f| got = Some(f),
+        );
+        let f = got.expect("first message dispatched");
+        assert_eq!(f.channel_id, "9");
+        assert_eq!(f.message_id, "m1");
     }
 
     // -- run_event_loop tests --------------------------------------------
@@ -1723,7 +1760,7 @@ mod tests {
             |bytes| {
                 stdout_calls.set(stdout_calls.get() + 1);
                 // Forward to the pure scanner so heartbeat detection is real.
-                scan_sidecar_stdout(bytes, |_| {}, |_| {}, |_| {})
+                scan_sidecar_stdout(bytes, |_| {}, |_| {}, |_| {}, |_| {})
             },
             || kill_calls.set(kill_calls.get() + 1),
             || {},

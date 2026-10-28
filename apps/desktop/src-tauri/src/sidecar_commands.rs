@@ -227,6 +227,12 @@ impl SidecarCommandSender {
             None => false,
         }
     }
+
+    /// No sidecar runs on non-Windows builds, so nothing is ever written.
+    #[cfg(not(windows))]
+    pub fn write_raw(&self, _line: &[u8]) -> bool {
+        false
+    }
 }
 
 /// Frontend-facing error for `twitch_send_message` and any future

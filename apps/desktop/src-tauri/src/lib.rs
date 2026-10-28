@@ -1,6 +1,7 @@
 pub mod backlog;
 pub mod browser_follow;
 pub mod chat_history;
+mod first_messages;
 mod host;
 pub mod logging;
 mod message;
@@ -100,6 +101,7 @@ pub fn run() {
             browser_follow::set_browser_follow,
             backlog::set_chat_backlog,
             tray::set_close_to_tray,
+            first_messages::set_first_messages,
             twitch_channel::twitch_get_channel,
             twitch_channel::twitch_search_channels,
             twitch_channel::twitch_get_stream_info,
@@ -249,6 +251,7 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
         });
     app.manage(history.clone());
     app.manage(backlog::BacklogSetting::default());
+    app.manage(first_messages::FirstMessageSetting::default());
 
     let follow = browser_follow::BrowserFollow::default();
     app.manage(follow.clone());

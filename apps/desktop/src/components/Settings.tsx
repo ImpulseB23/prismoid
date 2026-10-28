@@ -588,6 +588,27 @@ const Settings: Component<SettingsProps> = (props) => {
               }
             />
           </label>
+          <label class="settings__row settings__row--toggle">
+            <div class="settings__text">
+              <span class="settings__name">Highlight first-time chatters</span>
+              <span class="settings__hint">
+                Mark someone's first message in a channel. Uses a separate
+                read-only connection to Twitch chat
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              class="switch"
+              checked={settings().highlightFirstMessages}
+              onChange={(e) =>
+                run(
+                  updateSettings({
+                    highlightFirstMessages: e.currentTarget.checked,
+                  }),
+                )
+              }
+            />
+          </label>
 
           <div class="dialog__label">Window</div>
           <label class="settings__row settings__row--toggle">

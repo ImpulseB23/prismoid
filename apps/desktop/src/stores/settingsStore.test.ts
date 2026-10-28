@@ -28,14 +28,17 @@ function appliers(): SettingsAppliers & {
   tops: boolean[];
   zooms: number[];
   themes: Theme[];
+  firsts: boolean[];
 } {
   const tops: boolean[] = [];
   const zooms: number[] = [];
   const themes: Theme[] = [];
+  const firsts: boolean[] = [];
   return {
     tops,
     zooms,
     themes,
+    firsts,
     alwaysOnTop: async (v) => {
       tops.push(v);
     },
@@ -45,6 +48,9 @@ function appliers(): SettingsAppliers & {
     followBrowser: async () => {},
     chatBacklog: async () => {},
     closeToTray: async () => {},
+    highlightFirstMessages: async (v) => {
+      firsts.push(v);
+    },
     theme: async (v) => {
       themes.push(v);
     },
@@ -77,6 +83,7 @@ describe("settingsStore", () => {
       followBrowser: false,
       chatBacklog: true,
       closeToTray: false,
+      highlightFirstMessages: true,
       tourDone: false,
       mentionAlerts: true,
       theme: "dark",
@@ -129,6 +136,7 @@ describe("settingsStore", () => {
         followBrowser: async () => {},
         chatBacklog: async () => {},
         closeToTray: async () => {},
+        highlightFirstMessages: async () => {},
         theme: async () => {},
       },
       memStorage(),
@@ -170,6 +178,7 @@ describe("settingsStore", () => {
       followBrowser: false,
       chatBacklog: true,
       closeToTray: false,
+      highlightFirstMessages: true,
       tourDone: false,
       mentionAlerts: false,
       theme: "dark",
@@ -249,6 +258,30 @@ describe("settingsStore", () => {
     await system.update({ theme: "midnight" });
     expect(c.themes).toEqual(["midnight"]);
     expect(vi.isMockFunction(b.zoom)).toBe(false);
+  });
+
+  it("tells the host when first-time chatter highlights change", async () => {
+    const a = appliers();
+    const on = createSettingsStore(a, memStorage());
+    await on.apply();
+    expect(a.firsts).toEqual([]);
+    await on.update({ highlightFirstMessages: false });
+    await on.update({ highlightFirstMessages: false });
+    await on.update({ highlightFirstMessages: true });
+    expect(a.firsts).toEqual([false, true]);
+
+    const b = appliers();
+    const off = createSettingsStore(
+      b,
+      memStorage({
+        "prismoid.settings": JSON.stringify({
+          highlightFirstMessages: false,
+        }),
+      }),
+    );
+    expect(off.settings().highlightFirstMessages).toBe(false);
+    await off.apply();
+    expect(b.firsts).toEqual([false]);
   });
 });
 

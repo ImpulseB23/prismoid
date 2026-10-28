@@ -66,7 +66,7 @@ func (r *Reader) Run(ctx context.Context) error {
 }
 
 func (r *Reader) session(ctx context.Context) error {
-	conn, err := r.dial(ctx)
+	conn, err := dialIRC(ctx, r.Addr, r.Dial)
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}
@@ -106,13 +106,12 @@ func (r *Reader) session(ctx context.Context) error {
 	}
 }
 
-func (r *Reader) dial(ctx context.Context) (net.Conn, error) {
-	addr := r.Addr
+func dialIRC(ctx context.Context, addr string, dial func(ctx context.Context, addr string) (net.Conn, error)) (net.Conn, error) {
 	if addr == "" {
 		addr = defaultIRCAddr
 	}
-	if r.Dial != nil {
-		return r.Dial(ctx, addr)
+	if dial != nil {
+		return dial(ctx, addr)
 	}
 	return (&tls.Dialer{}).DialContext(ctx, "tcp", addr)
 }

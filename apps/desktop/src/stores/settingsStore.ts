@@ -42,6 +42,8 @@ export interface Settings {
   chatBacklog: boolean;
   /** Closing the window leaves Prismoid running in the tray. */
   closeToTray: boolean;
+  /** Mark a chatter's first message in a channel. */
+  highlightFirstMessages: boolean;
   /** The welcome tour has been finished or skipped. */
   tourDone: boolean;
   /** Chime and flash the taskbar when mentioned in the background. */
@@ -80,6 +82,7 @@ export const DEFAULT_SETTINGS: Settings = {
   followBrowser: false,
   chatBacklog: true,
   closeToTray: false,
+  highlightFirstMessages: true,
   tourDone: false,
   mentionAlerts: true,
   theme: "dark",
@@ -96,6 +99,7 @@ export interface SettingsAppliers {
   followBrowser: (value: boolean) => Promise<void>;
   chatBacklog: (value: boolean) => Promise<void>;
   closeToTray: (value: boolean) => Promise<void>;
+  highlightFirstMessages: (value: boolean) => Promise<void>;
   theme: (value: Theme) => Promise<void>;
 }
 
@@ -118,6 +122,7 @@ const defaultAppliers: SettingsAppliers = {
   followBrowser: (v) => invoke("set_browser_follow", { enabled: v }),
   chatBacklog: (v) => invoke("set_chat_backlog", { enabled: v }),
   closeToTray: (v) => invoke("set_close_to_tray", { enabled: v }),
+  highlightFirstMessages: (v) => invoke("set_first_messages", { enabled: v }),
   // "system" hands the title bar back to Windows; midnight shares dark chrome.
   theme: (v) =>
     getCurrentWindow().setTheme(
@@ -151,6 +156,9 @@ export function createSettingsStore(
     if (next.closeToTray !== current.closeToTray) {
       await appliers.closeToTray(next.closeToTray);
     }
+    if (next.highlightFirstMessages !== current.highlightFirstMessages) {
+      await appliers.highlightFirstMessages(next.highlightFirstMessages);
+    }
     if (next.theme !== current.theme) {
       await appliers.theme(next.theme);
     }
@@ -177,6 +185,7 @@ export function createSettingsStore(
     if (s.followBrowser) await appliers.followBrowser(true);
     if (!s.chatBacklog) await appliers.chatBacklog(false);
     if (s.closeToTray) await appliers.closeToTray(true);
+    if (!s.highlightFirstMessages) await appliers.highlightFirstMessages(false);
     if (s.theme !== "system") await appliers.theme(s.theme);
   }
 
@@ -249,6 +258,10 @@ function readSettings(storage: StorageLike | null): Settings {
         typeof p.closeToTray === "boolean"
           ? p.closeToTray
           : DEFAULT_SETTINGS.closeToTray,
+      highlightFirstMessages:
+        typeof p.highlightFirstMessages === "boolean"
+          ? p.highlightFirstMessages
+          : DEFAULT_SETTINGS.highlightFirstMessages,
       tourDone:
         typeof p.tourDone === "boolean"
           ? p.tourDone
