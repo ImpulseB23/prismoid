@@ -272,6 +272,7 @@ const MessageInput: Component<Props> = (props) => {
         user_login: reply.user_login,
         user_name: reply.user_name,
         body: reply.body,
+        thread_id: "",
       };
     }
     insertPending(optimistic);

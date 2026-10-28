@@ -23,6 +23,10 @@ pub struct ReplyParent {
     pub user_login: String,
     pub user_name: String,
     pub body: String,
+    /// The message that started the thread. Empty when the platform did not
+    /// say, in which case the parent itself is the best guess.
+    #[serde(default)]
+    pub thread_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -218,6 +222,8 @@ struct TwitchReply {
     parent_user_name: String,
     #[serde(default, deserialize_with = "null_default")]
     parent_message_body: String,
+    #[serde(default, deserialize_with = "null_default")]
+    thread_message_id: String,
 }
 
 /// A Twitch system notice rendered inline with chat: subs, resubs, gifts,
@@ -647,6 +653,7 @@ fn chat_message(
             user_login: r.parent_user_login,
             user_name: r.parent_user_name,
             body: r.parent_message_body,
+            thread_id: r.thread_message_id,
         }),
         notice: None,
         emote_spans: Vec::new(),
@@ -1065,7 +1072,8 @@ mod tests {
                     "parent_user_id": "1",
                     "parent_user_login": "streamer",
                     "parent_user_name": "Streamer",
-                    "parent_message_body": "original take"
+                    "parent_message_body": "original take",
+                    "thread_message_id": "parent-abc"
                 }
             }
         }
@@ -1137,6 +1145,7 @@ mod tests {
                 user_login: "streamer".into(),
                 user_name: "Streamer".into(),
                 body: "original take".into(),
+                thread_id: "parent-abc".into(),
             })
         );
     }

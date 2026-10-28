@@ -1500,10 +1500,17 @@ img {
   display: flex;
   align-items: center;
   gap: 5px;
+  width: 100%;
+  padding: 0;
+  text-align: left;
   color: var(--text-faint);
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
+}
+
+.msg__reply:hover {
+  color: var(--text-muted);
 }
 
 .msg__reply svg {
@@ -2748,4 +2755,11 @@ img {
   color: var(--text-muted);
   font-size: 11px;
   line-height: 18px;
+}
+
+/* Reply threads */
+
+.thread__quoted {
+  color: var(--text-muted);
+  font-style: italic;
 }

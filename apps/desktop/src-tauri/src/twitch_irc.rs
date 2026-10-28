@@ -97,6 +97,10 @@ fn privmsg(line: &IrcLine<'_>, channel_id: String) -> Option<IrcItem> {
                     .tag("reply-parent-msg-body")
                     .unwrap_or_default()
                     .to_owned(),
+                thread_id: line
+                    .tag("reply-thread-parent-msg-id")
+                    .unwrap_or_default()
+                    .to_owned(),
             }),
             notice: None,
             emote_spans: Vec::new(),
@@ -355,7 +359,7 @@ mod tests {
 
     #[test]
     fn deleted_action_and_reply_tags_are_honoured() {
-        let line = "@id=m1;rm-deleted=1;room-id=1;tmi-sent-ts=5;user-id=7;reply-parent-msg-id=p1;reply-parent-user-login=bob;reply-parent-display-name=Bob;reply-parent-msg-body=hi\\sthere\\:;color=;display-name= :alice!alice@alice.tmi.twitch.tv PRIVMSG #c :\u{1}ACTION waves\u{1}";
+        let line = "@id=m1;rm-deleted=1;room-id=1;tmi-sent-ts=5;user-id=7;reply-parent-msg-id=p1;reply-parent-user-login=bob;reply-parent-display-name=Bob;reply-parent-msg-body=hi\\sthere\\:;reply-thread-parent-msg-id=root1;color=;display-name= :alice!alice@alice.tmi.twitch.tv PRIVMSG #c :\u{1}ACTION waves\u{1}";
         let (m, deleted) = message(line, None);
         assert!(deleted);
         assert_eq!(m.message_text, "waves");
@@ -366,6 +370,7 @@ mod tests {
         assert_eq!(parent.user_login, "bob");
         assert_eq!(parent.user_name, "Bob");
         assert_eq!(parent.body, "hi there;");
+        assert_eq!(parent.thread_id, "root1");
     }
 
     #[test]
