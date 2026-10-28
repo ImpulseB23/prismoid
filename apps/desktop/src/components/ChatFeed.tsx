@@ -81,6 +81,7 @@ import {
   applyPollUpdate,
   applyPredictionUpdate,
 } from "../stores/streamManagerStore";
+import { applyAdBreak } from "../stores/adStore";
 import { MODE_ACTIONS, loadChatSettings } from "../stores/chatSettingsStore";
 import { modActionMessage, publicModerationMessage } from "../lib/modActions";
 import {
@@ -580,6 +581,10 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
         }
         if (e.kind === "prediction_update") {
           applyPredictionUpdate(e);
+          continue;
+        }
+        if (e.kind === "ad_break") {
+          applyAdBreak(e);
           continue;
         }
         if (id !== undefined && e.channel_id !== id) continue;

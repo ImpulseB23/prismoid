@@ -87,6 +87,29 @@ describe("formatChannelError", () => {
     ).toMatch(/language/);
   });
 
+  it("explains the ad errors", () => {
+    expect(
+      formatChannelError({ kind: "no_snoozes_left", message: "" }),
+    ).toMatch(/no snoozes/i);
+    expect(
+      formatChannelError({ kind: "no_ad_to_snooze", message: "" }),
+    ).toMatch(/no ad to snooze/i);
+    expect(
+      formatChannelError({
+        kind: "commercial_cooldown",
+        message: "",
+        retry_at: Date.now() + 150_000,
+      }),
+    ).toContain("in 3 min");
+    expect(
+      formatChannelError({
+        kind: "commercial_cooldown",
+        message: "",
+        retry_at: null,
+      }),
+    ).toMatch(/try again later/i);
+  });
+
   it("falls back to Error messages and strings", () => {
     expect(formatChannelError(new Error("boom"))).toBe("boom");
     expect(formatChannelError("raw")).toBe("raw");

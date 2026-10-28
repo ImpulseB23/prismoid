@@ -187,7 +187,7 @@ pub enum ChannelError {
         message: String,
     },
     /// A value outside what Twitch accepts: a chat setting, a stream
-    /// title, a poll or a prediction.
+    /// title, a poll, a prediction or a commercial length.
     InvalidSetting {
         message: String,
     },
@@ -226,6 +226,21 @@ pub enum ChannelError {
     LanguageNotSupported {
         language: String,
         channel: Box<ChannelInfo>,
+    },
+    /// Snooze Next Ad answered 429: every snooze is used up.
+    NoSnoozesLeft {
+        message: String,
+    },
+    /// Snooze Next Ad answered 400: the channel is offline or has no ad
+    /// scheduled.
+    NoAdToSnooze {
+        message: String,
+    },
+    /// Start Commercial answered 429: the last ad is too recent.
+    /// `retry_at` (Unix ms) is when the next one is allowed, if known.
+    CommercialCooldown {
+        message: String,
+        retry_at: Option<i64>,
     },
 }
 

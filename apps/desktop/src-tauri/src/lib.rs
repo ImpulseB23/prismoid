@@ -16,6 +16,7 @@ mod sidecar_job;
 mod sidecar_supervisor;
 mod stream_manager_window;
 mod tray;
+pub mod twitch_ads;
 pub mod twitch_auth;
 pub mod twitch_channel;
 pub mod twitch_channel_info;
@@ -158,6 +159,9 @@ pub fn run() {
             twitch_quick_actions::twitch_get_pinned_message,
             twitch_quick_actions::twitch_pin_message,
             twitch_quick_actions::twitch_unpin_message,
+            twitch_ads::twitch_get_ad_schedule,
+            twitch_ads::twitch_snooze_next_ad,
+            twitch_ads::twitch_start_commercial,
         ])
         .setup(setup)
         .run(tauri::generate_context!())

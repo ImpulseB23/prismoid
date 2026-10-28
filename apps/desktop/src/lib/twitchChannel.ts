@@ -26,7 +26,11 @@ export type ChannelError =
   | { kind: "labels_not_allowed"; message: string }
   | { kind: "branded_content_cooldown"; message: string }
   /** The rest of the update applied; `channel` is the result. */
-  | { kind: "language_not_supported"; language: string; channel: ChannelInfo };
+  | { kind: "language_not_supported"; language: string; channel: ChannelInfo }
+  | { kind: "no_snoozes_left"; message: string }
+  | { kind: "no_ad_to_snooze"; message: string }
+  /** retry_at: Unix ms when the next commercial may run, if known. */
+  | { kind: "commercial_cooldown"; message: string; retry_at: number | null };
 
 /** Opens a channel as a tab and shows it. */
 export function joinChannel(login: string): Promise<Channel> {
@@ -96,6 +100,16 @@ export function formatChannelError(e: unknown): string {
       return "Branded content was switched too often. Wait a bit and try again.";
     case "language_not_supported":
       return "Twitch does not support that stream language. Everything else was saved; pick another language or Other.";
+    case "no_snoozes_left":
+      return "No snoozes left. Twitch gives you another one later.";
+    case "no_ad_to_snooze":
+      return "There is no ad to snooze. Snoozing needs a live stream with an ad coming up.";
+    case "commercial_cooldown": {
+      if (e.retry_at === null)
+        return "Twitch needs 8 minutes between ads. Try again later.";
+      const mins = Math.max(1, Math.ceil((e.retry_at - Date.now()) / 60_000));
+      return `Twitch needs 8 minutes between ads. Try again in ${mins} min.`;
+    }
   }
 }
 

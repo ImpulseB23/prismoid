@@ -37,6 +37,7 @@ import {
 } from "./stores/channelStore";
 import { clearHeldMessages } from "./stores/automodStore";
 import { clearStreamManager } from "./stores/streamManagerStore";
+import { clearAds } from "./stores/adStore";
 import { clearMessages } from "./stores/chatStore";
 import {
   isMentionFor,
@@ -121,6 +122,7 @@ const App: Component = () => {
     resetMentions();
     clearHeldMessages();
     clearStreamManager();
+    clearAds();
     setAuthStatus({ state: "logged_out" });
   };
 

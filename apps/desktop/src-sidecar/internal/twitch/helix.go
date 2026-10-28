@@ -297,14 +297,15 @@ func SubscribeAutoMod(ctx context.Context, client *HelixClient, sessionID, broad
 }
 
 // broadcasterFeeds are the EventSub types Twitch only grants a broadcaster
-// for their own channel, one group per scope: channel:manage:polls, then
-// channel:manage:predictions.
+// for their own channel, one group per scope: channel:manage:polls,
+// channel:manage:predictions, then channel:read:ads.
 var broadcasterFeeds = [][]string{
 	{"channel.poll.begin", "channel.poll.progress", "channel.poll.end"},
 	{"channel.prediction.begin", "channel.prediction.progress", "channel.prediction.lock", "channel.prediction.end"},
+	{"channel.ad_break.begin"},
 }
 
-// SubscribeBroadcasterFeeds creates the poll and prediction v1
+// SubscribeBroadcasterFeeds creates the poll, prediction and ad break v1
 // subscriptions for the user's own channel. A group stops at its first
 // refusal, since that means the grant lacks its scope, while the other
 // group carries on. Types in `have` are skipped; the ids made come back by
