@@ -43,15 +43,24 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS messages_by_time ON messages (channel_id, effective_ts, arrival_seq);
 CREATE INDEX IF NOT EXISTS messages_by_user ON messages (channel_id, user_id);
 CREATE INDEX IF NOT EXISTS messages_by_author ON messages (user_id, effective_ts);
+-- Messages Twitch flagged as a chatter's first in the channel. Kept apart
+-- from `messages` so a flag can land before or after its message.
+CREATE TABLE IF NOT EXISTS first_messages (
+    channel_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    PRIMARY KEY (channel_id, message_id)
+) WITHOUT ROWID;
 ";
 
 /// A stored message as the feed receives it: the wire shape plus whether a
-/// moderator removed it after it was shown.
+/// moderator removed it after it was shown and whether it was the chatter's
+/// first message in the channel.
 #[derive(Debug, Clone, Serialize)]
 pub struct StoredMessage {
     #[serde(flatten)]
     pub message: UnifiedMessage,
     pub deleted: bool,
+    pub first_message: bool,
 }
 
 type Reply = oneshot::Sender<Vec<StoredMessage>>;
@@ -65,6 +74,10 @@ enum Op {
         reply: Reply,
     },
     ImportBegin(String),
+    MarkFirst {
+        channel_id: String,
+        message_id: String,
+    },
     Import {
         channel_id: String,
         rows: Vec<StoredMessage>,
@@ -126,6 +139,15 @@ impl History {
     /// pick up a deletion.
     pub fn import(&self, channel_id: String, rows: Vec<StoredMessage>) {
         self.send(Op::Import { channel_id, rows });
+    }
+
+    /// Remembers that Twitch flagged a message as its chatter's first in the
+    /// channel, so the mark survives reloads and restarts.
+    pub fn mark_first(&self, channel_id: String, message_id: String) {
+        self.send(Op::MarkFirst {
+            channel_id,
+            message_id,
+        });
     }
 
     /// The newest `limit` rows of a channel, oldest first.
@@ -256,6 +278,16 @@ impl Store {
                 }
                 Ok(())
             }
+            Op::MarkFirst {
+                channel_id,
+                message_id,
+            } => self
+                .conn
+                .execute(
+                    "INSERT OR IGNORE INTO first_messages (channel_id, message_id) VALUES (?1, ?2)",
+                    params![channel_id, message_id],
+                )
+                .map(|_| ()),
             Op::ImportBegin(channel_id) => {
                 *self.importing.entry(channel_id).or_insert(0) += 1;
                 Ok(())
@@ -310,6 +342,9 @@ impl Store {
                  ON CONFLICT (channel_id, message_id) \
                  DO UPDATE SET deleted = max(deleted, excluded.deleted)",
             )?;
+            let mut first = tx.prepare_cached(
+                "INSERT OR IGNORE INTO first_messages (channel_id, message_id) VALUES (?1, ?2)",
+            )?;
             for row in rows {
                 let m = &row.message;
                 let body = serde_json::to_string(m)
@@ -325,6 +360,9 @@ impl Store {
                     row.deleted,
                     body
                 ])?;
+                if row.first_message {
+                    first.execute(params![m.channel_id, m.id])?;
+                }
             }
         }
         tx.commit()
@@ -406,19 +444,30 @@ impl Store {
 
     fn load(&self, channel_id: &str, limit: u32) -> rusqlite::Result<Vec<StoredMessage>> {
         let mut stmt = self.conn.prepare_cached(
-            "SELECT body, deleted FROM messages WHERE channel_id = ?1 \
-             ORDER BY effective_ts DESC, arrival_seq DESC LIMIT ?2",
+            "SELECT m.body, m.deleted, f.message_id IS NOT NULL FROM messages m \
+             LEFT JOIN first_messages f \
+             ON f.channel_id = m.channel_id AND f.message_id = m.message_id \
+             WHERE m.channel_id = ?1 \
+             ORDER BY m.effective_ts DESC, m.arrival_seq DESC LIMIT ?2",
         )?;
         let rows = stmt.query_map(params![channel_id, limit], |r| {
-            Ok((r.get::<_, String>(0)?, r.get::<_, bool>(1)?))
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, bool>(1)?,
+                r.get::<_, bool>(2)?,
+            ))
         })?;
         let mut out = Vec::new();
         for row in rows {
-            let (body, deleted) = row?;
+            let (body, deleted, first_message) = row?;
             // A row written by an older build with a different message
             // shape is skipped rather than failing the whole load.
             match serde_json::from_str(&body) {
-                Ok(message) => out.push(StoredMessage { message, deleted }),
+                Ok(message) => out.push(StoredMessage {
+                    message,
+                    deleted,
+                    first_message,
+                }),
                 Err(e) => tracing::warn!(error = %e, "skipping unreadable history row"),
             }
         }
@@ -466,6 +515,13 @@ impl Store {
         self.conn.execute(
             "DELETE FROM messages WHERE effective_ts < ?1",
             params![now_ms - keep_ms],
+        )?;
+        // Flags whose message is gone, from rows pruned in earlier runs.
+        self.conn.execute(
+            "DELETE FROM first_messages WHERE NOT EXISTS (\
+             SELECT 1 FROM messages m WHERE m.channel_id = first_messages.channel_id \
+             AND m.message_id = first_messages.message_id)",
+            [],
         )?;
         Ok(())
     }
@@ -613,6 +669,7 @@ mod tests {
             rows: vec![StoredMessage {
                 message: msg("old", "c", "u", 1, 0),
                 deleted: false,
+                first_message: false,
             }],
         });
         assert_eq!(ids(&rx.try_recv().unwrap()), ["old", "live"]);
@@ -652,10 +709,12 @@ mod tests {
             StoredMessage {
                 message: dup,
                 deleted: true,
+                first_message: false,
             },
             StoredMessage {
                 message: msg("z", "c", "u", 0, 0),
                 deleted: false,
+                first_message: false,
             },
         ])
         .unwrap();
@@ -663,6 +722,56 @@ mod tests {
         assert_eq!(ids(&rows), ["z", "a", "b"]);
         assert!(rows[1].deleted);
         assert_eq!(rows[1].message.message_text, "hello a");
+    }
+
+    #[test]
+    fn first_flags_survive_a_reload() {
+        let mut s = store();
+        // The flag can land before the message row is written.
+        s.handle(Op::MarkFirst {
+            channel_id: "c".into(),
+            message_id: "a".into(),
+        });
+        s.store(&[msg("a", "c", "u", 1, 0), msg("b", "c", "u", 2, 1)])
+            .unwrap();
+        s.import(&[StoredMessage {
+            message: msg("z", "c", "v", 0, 0),
+            deleted: false,
+            first_message: true,
+        }])
+        .unwrap();
+        let flags: Vec<_> = s
+            .load("c", 10)
+            .unwrap()
+            .iter()
+            .map(|r| (r.message.id.clone(), r.first_message))
+            .collect();
+        assert_eq!(
+            flags,
+            [
+                ("z".to_string(), true),
+                ("a".to_string(), true),
+                ("b".to_string(), false)
+            ]
+        );
+    }
+
+    #[test]
+    fn age_prune_drops_flags_of_pruned_rows() {
+        let mut s = store();
+        let now = 1_000_000_000_000;
+        let keep = i64::try_from(KEEP_FOR.as_millis()).unwrap();
+        s.store(&[msg("old", "c", "u", now - keep - 1, 0)]).unwrap();
+        s.handle(Op::MarkFirst {
+            channel_id: "c".into(),
+            message_id: "old".into(),
+        });
+        s.prune_old(now).unwrap();
+        let left: i64 = s
+            .conn
+            .query_row("SELECT COUNT(*) FROM first_messages", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(left, 0);
     }
 
     #[tokio::test]

@@ -158,11 +158,13 @@ pub fn parse_lines(lines: &[String], channel_id: &str) -> Vec<StoredMessage> {
             IrcItem::Message {
                 mut message,
                 deleted,
+                first,
             } => {
                 message.arrival_seq = u64::try_from(i).expect("line index fits in u64");
                 Some(StoredMessage {
                     message: *message,
                     deleted,
+                    first_message: first,
                 })
             }
             IrcItem::Event(_) => None,
@@ -185,13 +187,15 @@ mod tests {
                 "@room-id=1 :tmi.twitch.tv ROOMSTATE #c",
                 "@id=a;rm-deleted=1;tmi-sent-ts=1;user-id=1 :a!a@a.tmi.twitch.tv PRIVMSG #c :one",
                 "@room-id=1;target-user-id=1;tmi-sent-ts=2 :tmi.twitch.tv CLEARCHAT #c :a",
-                "@id=b;tmi-sent-ts=1;user-id=2 :b!b@b.tmi.twitch.tv PRIVMSG #c :two",
+                "@first-msg=1;id=b;tmi-sent-ts=1;user-id=2 :b!b@b.tmi.twitch.tv PRIVMSG #c :two",
             ]),
             "1",
         );
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].message.id, "a");
         assert!(rows[0].deleted);
+        assert!(!rows[0].first_message);
+        assert!(rows[1].first_message);
         assert_eq!(rows[0].message.arrival_seq, 1);
         assert_eq!(rows[0].message.channel_id, "1");
         assert_eq!(rows[1].message.id, "b");

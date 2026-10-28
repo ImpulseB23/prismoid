@@ -103,6 +103,8 @@ export interface ChatMessage {
   status?: "pending" | "failed";
   /** Removed by a moderator after it was shown. Kept in place, rendered dimmed. */
   deleted?: boolean;
+  /** Twitch flagged it as the chatter's first in the channel; set on rows loaded from history. */
+  first_message?: boolean;
   /**
    * Client-generated id used to correlate an optimistic message with
    * its later platform echo. Only set on optimistic inserts.

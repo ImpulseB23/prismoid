@@ -342,7 +342,10 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       if (!msg) continue;
       // The first-message mark can land after the row was measured; the
       // chip takes width, so the row is prepared again.
-      const first = markFirsts && !msg.notice && isFirstMessage(msg.id);
+      const first =
+        markFirsts &&
+        !msg.notice &&
+        (msg.first_message === true || isFirstMessage(msg.id));
       let entry = entryCache.get(mono);
       if (
         entry === undefined ||
