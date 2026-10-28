@@ -196,6 +196,25 @@ describe("settingsStore", () => {
     expect(garbage.settings()).toEqual(DEFAULT_SETTINGS);
   });
 
+  it("applies close to tray at boot and on change", async () => {
+    const trays: boolean[] = [];
+    const a = {
+      ...appliers(),
+      closeToTray: async (v: boolean) => void trays.push(v),
+    };
+    const store = createSettingsStore(
+      a,
+      memStorage({
+        "prismoid.settings": JSON.stringify({ closeToTray: true }),
+      }),
+    );
+    await store.apply();
+    expect(trays).toEqual([true]);
+    await store.update({ closeToTray: false });
+    expect(trays).toEqual([true, false]);
+    expect(store.settings().closeToTray).toBe(false);
+  });
+
   it("apply restores window state and pins the title bar theme", async () => {
     const a = appliers();
     const store = createSettingsStore(
