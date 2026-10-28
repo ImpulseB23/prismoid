@@ -1,7 +1,7 @@
 import { describe as suite, expect, it, vi } from "vitest";
-import { describe, forwardConsole, openLogDir } from "./log";
+import { describe, forwardConsole, getSupportBundle, openLogDir } from "./log";
 
-const invoke = vi.fn<(cmd: string) => Promise<void>>(async () => {});
+const invoke = vi.fn<(cmd: string) => Promise<unknown>>(async () => {});
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (cmd: string) => invoke(cmd),
 }));
@@ -71,4 +71,10 @@ suite("forwardConsole", () => {
 it("opens the log folder through the host", async () => {
   await openLogDir();
   expect(invoke).toHaveBeenCalledWith("open_log_dir");
+});
+
+it("returns the support bundle from the host", async () => {
+  invoke.mockResolvedValueOnce("Prismoid 0.6.0\n");
+  await expect(getSupportBundle()).resolves.toBe("Prismoid 0.6.0\n");
+  expect(invoke).toHaveBeenLastCalledWith("support_bundle");
 });
