@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS messages (
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS messages_by_time ON messages (channel_id, effective_ts, arrival_seq);
 CREATE INDEX IF NOT EXISTS messages_by_user ON messages (channel_id, user_id);
+CREATE INDEX IF NOT EXISTS messages_by_author ON messages (user_id, effective_ts);
 ";
 
 /// A stored message as the feed receives it: the wire shape plus whether a
@@ -66,6 +67,11 @@ enum Op {
     Import {
         channel_id: String,
         rows: Vec<StoredMessage>,
+    },
+    SentCounts {
+        user_id: String,
+        since_ms: i64,
+        reply: oneshot::Sender<HashMap<String, u32>>,
     },
 }
 
@@ -129,6 +135,26 @@ impl History {
             .is_err()
         {
             return Vec::new();
+        }
+        rx.await.unwrap_or_default()
+    }
+
+    /// Messages `user_id` wrote per channel since `since_ms`, for ranking
+    /// the channels they chat in.
+    pub async fn sent_counts(&self, user_id: String, since_ms: i64) -> HashMap<String, u32> {
+        let Some(tx) = &self.tx else {
+            return HashMap::new();
+        };
+        let (reply, rx) = oneshot::channel();
+        if tx
+            .send(Op::SentCounts {
+                user_id,
+                since_ms,
+                reply,
+            })
+            .is_err()
+        {
+            return HashMap::new();
         }
         rx.await.unwrap_or_default()
     }
@@ -217,6 +243,18 @@ impl Store {
                     }
                 }
                 result
+            }
+            Op::SentCounts {
+                user_id,
+                since_ms,
+                reply,
+            } => {
+                let counts = self.sent_counts(&user_id, since_ms).unwrap_or_else(|e| {
+                    tracing::error!(error = %e, "chat history count failed");
+                    HashMap::new()
+                });
+                let _ = reply.send(counts);
+                Ok(())
             }
         };
         if let Err(e) = result {
@@ -356,6 +394,20 @@ impl Store {
         }
         out.reverse();
         Ok(out)
+    }
+
+    /// One range seek on `messages_by_author`. The table is WITHOUT ROWID,
+    /// so that index carries the primary key and `channel_id` comes from it
+    /// without touching the table; only the author's own rows are grouped.
+    fn sent_counts(&self, user_id: &str, since_ms: i64) -> rusqlite::Result<HashMap<String, u32>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT channel_id, COUNT(*) FROM messages \
+             WHERE user_id = ?1 AND effective_ts >= ?2 GROUP BY channel_id",
+        )?;
+        let rows = stmt.query_map(params![user_id, since_ms], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, u32>(1)?))
+        })?;
+        rows.collect()
     }
 
     /// Drops every row of `channel_id` except the newest `keep`.
@@ -581,6 +633,58 @@ mod tests {
         assert_eq!(ids(&rows), ["z", "a", "b"]);
         assert!(rows[1].deleted);
         assert_eq!(rows[1].message.message_text, "hello a");
+    }
+
+    #[test]
+    fn sent_counts_tallies_the_author_per_channel_since_the_cutoff() {
+        let mut s = store();
+        s.store(&[
+            msg("a", "c1", "me", 10, 0),
+            msg("b", "c1", "me", 20, 1),
+            msg("c", "c1", "them", 20, 2),
+            msg("d", "c2", "me", 30, 3),
+            msg("old", "c3", "me", 5, 4),
+        ])
+        .unwrap();
+        let (reply, mut rx) = oneshot::channel();
+        s.handle(Op::SentCounts {
+            user_id: "me".into(),
+            since_ms: 10,
+            reply,
+        });
+        let counts = rx.try_recv().unwrap();
+        assert_eq!(counts.len(), 2);
+        assert_eq!(counts["c1"], 2);
+        assert_eq!(counts["c2"], 1);
+    }
+
+    #[test]
+    fn sent_counts_seeks_the_author_index() {
+        let s = store();
+        let plan: Vec<String> = s
+            .conn
+            .prepare(
+                "EXPLAIN QUERY PLAN SELECT channel_id, COUNT(*) FROM messages \
+                 WHERE user_id = ?1 AND effective_ts >= ?2 GROUP BY channel_id",
+            )
+            .unwrap()
+            .query_map(params!["me", 0], |r| r.get::<_, String>(3))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert!(
+            plan.iter()
+                .any(|d| d.contains("COVERING INDEX messages_by_author")),
+            "{plan:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn sent_counts_without_a_store_is_empty() {
+        assert!(History::default()
+            .sent_counts("me".into(), 0)
+            .await
+            .is_empty());
     }
 
     #[test]

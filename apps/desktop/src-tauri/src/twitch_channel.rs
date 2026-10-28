@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 use tokio::sync::watch;
 
+use crate::chat_history::History;
 use crate::twitch_auth::{AuthError, AuthState, TWITCH_CLIENT_ID};
 
 pub const HELIX_BASE: &str = "https://api.twitch.tv/helix";
@@ -452,6 +453,109 @@ pub async fn followed_ids(
         }
     };
     cache.store(ids)
+}
+
+/// A followed channel that is live now, for the picker's empty state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FollowedLive {
+    pub id: String,
+    pub login: String,
+    pub display_name: String,
+    pub game_name: String,
+    pub viewer_count: u64,
+}
+
+#[derive(Deserialize)]
+struct FollowedStreamsResponse {
+    data: Vec<HelixFollowedStream>,
+    #[serde(default)]
+    pagination: Pagination,
+}
+
+#[derive(Deserialize)]
+struct HelixFollowedStream {
+    user_id: String,
+    user_login: String,
+    user_name: String,
+    #[serde(default)]
+    game_name: String,
+    #[serde(default)]
+    viewer_count: u64,
+}
+
+/// How far back the user's own messages count towards ranking.
+const CHAT_RANK_WINDOW: Duration = Duration::from_secs(14 * 24 * 60 * 60);
+
+/// Helix `GET /streams/followed`, every page. Viewers shift while paging,
+/// so a stream can show up on two pages; the first copy wins.
+pub async fn fetch_followed_live(
+    http: &reqwest::Client,
+    helix_base: &str,
+    access_token: &str,
+    user_id: &str,
+) -> Result<Vec<FollowedLive>, ChannelError> {
+    let url = format!("{helix_base}/streams/followed");
+    let mut out = Vec::new();
+    let mut seen = HashSet::new();
+    let mut cursor: Option<String> = None;
+    for _ in 0..FOLLOWED_PAGES {
+        let mut query = vec![("user_id", user_id), ("first", "100")];
+        if let Some(c) = cursor.as_deref() {
+            query.push(("after", c));
+        }
+        let page: FollowedStreamsResponse =
+            helix_get(http, url.clone(), &query, access_token).await?;
+        for s in page.data {
+            if seen.insert(s.user_id.clone()) {
+                out.push(FollowedLive {
+                    id: s.user_id,
+                    login: s.user_login,
+                    display_name: s.user_name,
+                    game_name: s.game_name,
+                    viewer_count: s.viewer_count,
+                });
+            }
+        }
+        match page.pagination.cursor {
+            Some(next) if !next.is_empty() => cursor = Some(next),
+            _ => break,
+        }
+    }
+    Ok(out)
+}
+
+/// Channels the user chats in most come first, then the rest by viewers.
+fn rank_followed_live(
+    mut live: Vec<FollowedLive>,
+    sent: &HashMap<String, u32>,
+) -> Vec<FollowedLive> {
+    let count = |c: &FollowedLive| sent.get(&c.id).copied().unwrap_or(0);
+    live.sort_by(|a, b| {
+        count(b)
+            .cmp(&count(a))
+            .then(b.viewer_count.cmp(&a.viewer_count))
+    });
+    live
+}
+
+#[tauri::command]
+pub async fn twitch_followed_live(
+    auth: State<'_, AuthState>,
+    channels: State<'_, ChannelState>,
+    history: State<'_, History>,
+) -> Result<Vec<FollowedLive>, ChannelError> {
+    let tokens = auth.manager.load_or_refresh().await?;
+    let window_ms = i64::try_from(CHAT_RANK_WINDOW.as_millis()).expect("window fits in i64 ms");
+    let since_ms = chrono::Utc::now().timestamp_millis() - window_ms;
+    let live = fetch_followed_live(
+        auth.manager.http_client(),
+        &channels.helix_base,
+        &tokens.access_token,
+        &tokens.user_id,
+    );
+    let sent = history.sent_counts(tokens.user_id.clone(), since_ms);
+    let (live, sent) = tokio::join!(live, sent);
+    Ok(rank_followed_live(live?, &sent))
 }
 
 #[derive(Deserialize)]
@@ -1288,6 +1392,95 @@ mod tests {
             .await
             .is_empty());
         assert_eq!(scope.calls(), 1);
+    }
+
+    #[tokio::test]
+    async fn followed_live_pages_and_drops_repeats() {
+        let server = MockServer::start_async().await;
+        let first = server.mock(|when, then| {
+            when.method(GET)
+                .path("/streams/followed")
+                .query_param("user_id", "12345")
+                .query_param("first", "100")
+                .query_param_missing("after")
+                .header("Client-Id", TWITCH_CLIENT_ID)
+                .header("Authorization", "Bearer tok");
+            then.status(200).json_body(serde_json::json!({
+                "data": [
+                    {"id": "s1", "user_id": "1", "user_login": "a", "user_name": "A", "game_id": "9", "game_name": "R6", "type": "live", "title": "hi", "viewer_count": 900, "started_at": "2026-10-28T10:00:00Z", "language": "en", "thumbnail_url": "", "tag_ids": [], "tags": [], "is_mature": false},
+                    {"id": "s2", "user_id": "2", "user_login": "b", "user_name": "B", "game_name": "Chess", "title": "", "viewer_count": 500}
+                ],
+                "pagination": {"cursor": "c2"}
+            }));
+        });
+        let second = server.mock(|when, then| {
+            when.method(GET)
+                .path("/streams/followed")
+                .query_param("after", "c2");
+            then.status(200).json_body(serde_json::json!({
+                "data": [
+                    {"id": "s2", "user_id": "2", "user_login": "b", "user_name": "B", "game_name": "Chess", "title": "", "viewer_count": 480},
+                    {"id": "s3", "user_id": "3", "user_login": "c", "user_name": "C", "game_name": "", "title": "", "viewer_count": 10}
+                ],
+                "pagination": {}
+            }));
+        });
+        let got = fetch_followed_live(&reqwest::Client::new(), &server.base_url(), "tok", "12345")
+            .await
+            .unwrap();
+        assert_eq!(first.calls(), 1);
+        assert_eq!(second.calls(), 1);
+        let ids: Vec<&str> = got.iter().map(|c| c.id.as_str()).collect();
+        assert_eq!(ids, vec!["1", "2", "3"]);
+        assert_eq!(
+            got[0],
+            FollowedLive {
+                id: "1".into(),
+                login: "a".into(),
+                display_name: "A".into(),
+                game_name: "R6".into(),
+                viewer_count: 900,
+            }
+        );
+        assert_eq!(got[1].viewer_count, 500);
+    }
+
+    #[tokio::test]
+    async fn followed_live_surfaces_missing_scope() {
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.method(GET).path("/streams/followed");
+            then.status(401).body("Missing scope: user:read:follows");
+        });
+        let err = fetch_followed_live(&reqwest::Client::new(), &server.base_url(), "tok", "1")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ChannelError::Helix { status: 401, .. }));
+    }
+
+    #[test]
+    fn rank_followed_live_puts_chatted_channels_first_then_viewers() {
+        let live = |id: &str, viewers: u64| FollowedLive {
+            id: id.into(),
+            login: id.into(),
+            display_name: id.into(),
+            game_name: String::new(),
+            viewer_count: viewers,
+        };
+        let sent: HashMap<String, u32> = [("quiet".to_string(), 3), ("home".to_string(), 40)]
+            .into_iter()
+            .collect();
+        let ranked = rank_followed_live(
+            vec![
+                live("big", 50_000),
+                live("quiet", 20),
+                live("mid", 800),
+                live("home", 150),
+            ],
+            &sent,
+        );
+        let ids: Vec<&str> = ranked.iter().map(|c| c.id.as_str()).collect();
+        assert_eq!(ids, vec!["home", "quiet", "big", "mid"]);
     }
 
     #[tokio::test]

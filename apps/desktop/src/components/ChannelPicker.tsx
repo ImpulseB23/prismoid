@@ -1,8 +1,9 @@
-// Command-palette style channel switcher. Recents match instantly; after a
-// short pause the query also goes to Helix search so any channel on Twitch
-// shows up with its live state. Enter on free text still resolves an exact
-// login, which covers channels Helix search leaves out (no stream in six
-// months).
+// Command-palette style channel switcher. With nothing typed it lists the
+// followed channels that are live, then recents. Recents match instantly;
+// after a short pause the query also goes to Helix search so any channel on
+// Twitch shows up with its live state. Enter on free text still resolves an
+// exact login, which covers channels Helix search leaves out (no stream in
+// six months).
 
 import {
   Component,
@@ -16,17 +17,25 @@ import {
 } from "solid-js";
 import {
   formatChannelError,
+  getFollowedLive,
   normalizeLogin,
   searchChannels,
   type ChannelSearchResult,
+  type FollowedLive,
 } from "../lib/twitchChannel";
 import { formatViewers } from "../lib/streamInfo";
+import { missingScopes } from "../stores/authStore";
 import {
   forgetRecentChannel,
   recentChannels,
   selectChannel,
   type RecentChannel,
 } from "../stores/channelStore";
+import {
+  ensureUserInfo,
+  userInfo,
+  userInfoRevision,
+} from "../stores/userInfoStore";
 
 export interface ChannelPickerProps {
   open: boolean;
@@ -35,7 +44,10 @@ export interface ChannelPickerProps {
 
 const SEARCH_DEBOUNCE_MS = 200;
 
+type LiveState = "idle" | "loading" | "ready" | "needs_scope" | "failed";
+
 type Row =
+  | { kind: "live"; channel: FollowedLive }
   | { kind: "recent"; channel: RecentChannel }
   | { kind: "search"; channel: ChannelSearchResult };
 
@@ -46,13 +58,24 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
   const [error, setError] = createSignal<string | null>(null);
   const [results, setResults] = createSignal<ChannelSearchResult[]>([]);
   const [searching, setSearching] = createSignal(false);
+  const [live, setLive] = createSignal<FollowedLive[]>([]);
+  const [liveState, setLiveState] = createSignal<LiveState>("idle");
   let inputRef: HTMLInputElement | undefined;
   let searchSeq = 0;
+  let liveSeq = 0;
+
+  const typed = () => query().trim().length > 0;
+  const showLive = () =>
+    !typed() && (liveState() === "ready" || liveState() === "needs_scope");
+  const liveRows = createMemo(() => (typed() ? [] : live()));
 
   const recents = createMemo(() => {
     const q = query().trim().toLowerCase().replace(/^@/, "");
     const all = recentChannels();
-    if (!q) return all;
+    if (!q) {
+      const shown = new Set(liveRows().map((c) => c.login));
+      return all.filter((r) => !shown.has(r.login));
+    }
     return all.filter(
       (r) => r.login.includes(q) || r.display_name.toLowerCase().includes(q),
     );
@@ -61,12 +84,48 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
   const rows = createMemo<Row[]>(() => {
     const seen = new Set(recents().map((r) => r.login));
     return [
+      ...liveRows().map((channel): Row => ({ kind: "live", channel })),
       ...recents().map((channel): Row => ({ kind: "recent", channel })),
       ...results()
         .filter((c) => !seen.has(c.login))
         .map((channel): Row => ({ kind: "search", channel })),
     ];
   });
+
+  // Fetched on every open since live state goes stale quickly. A grant
+  // without the follows scope gets a reconnect hint instead of a call
+  // that would fail.
+  createEffect(
+    on(
+      () => props.open,
+      (open) => {
+        const seq = ++liveSeq;
+        setLive([]);
+        if (!open) {
+          setLiveState("idle");
+          return;
+        }
+        if (missingScopes().includes("user:read:follows")) {
+          setLiveState("needs_scope");
+          return;
+        }
+        setLiveState("loading");
+        getFollowedLive().then(
+          (found) => {
+            if (seq !== liveSeq) return;
+            ensureUserInfo(found.map((c) => c.id));
+            setLive(found);
+            setLiveState("ready");
+          },
+          (e: unknown) => {
+            if (seq !== liveSeq) return;
+            setLiveState("failed");
+            console.error("followed live", e);
+          },
+        );
+      },
+    ),
+  );
 
   // Debounced Helix search. A sequence number drops responses that come
   // back after the query moved on.
@@ -154,6 +213,12 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
 
   const subline = (row: Row): string => {
     if (row.kind === "recent") return row.channel.login;
+    if (row.kind === "live") {
+      const c = row.channel;
+      return [`${formatViewers(c.viewer_count)} watching`, c.game_name]
+        .filter(Boolean)
+        .join(" · ");
+    }
     const c = row.channel;
     const parts = [
       c.followers !== null ? `${formatViewers(c.followers)} followers` : "",
@@ -165,22 +230,31 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
     return parts.length > 0 ? parts.join(" · ") : c.login;
   };
 
-  const item = (row: Row, index: number) => {
+  const avatar = (row: Row): string => {
+    if (row.kind !== "live") return row.channel.profile_image_url;
+    userInfoRevision();
+    return userInfo(row.channel.id)?.profile_image_url ?? "";
+  };
+
+  // The index is an accessor because recents render before the live list
+  // lands and then shift down by its length.
+  const item = (row: Row, index: () => number) => {
     const c = row.channel;
-    const live = row.kind === "search" && row.channel.is_live;
+    const isLive =
+      row.kind === "live" || (row.kind === "search" && row.channel.is_live);
     return (
       <div
         class="picker__item"
         role="option"
-        aria-selected={highlight() === index}
-        onMouseEnter={() => setHighlight(index)}
+        aria-selected={highlight() === index()}
+        onMouseEnter={() => setHighlight(index())}
         onClick={() => void submit(c.login)}
       >
         <Show
-          when={c.profile_image_url}
+          when={avatar(row)}
           fallback={<span class="picker__item-avatar" />}
         >
-          <img class="picker__item-avatar" src={c.profile_image_url} alt="" />
+          {(src) => <img class="picker__item-avatar" src={src()} alt="" />}
         </Show>
         <span class="picker__item-text">
           <span class="picker__item-name">
@@ -188,7 +262,7 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
             <Show when={row.kind === "search" && row.channel.followed}>
               <span class="picker__followed">following</span>
             </Show>
-            <Show when={live}>
+            <Show when={isLive}>
               <span class="picker__live">live</span>
             </Show>
           </span>
@@ -280,28 +354,50 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
           </div>
 
           <div class="picker__section">
-            <Show
-              when={rows().length > 0}
-              fallback={
-                <div class="picker__empty">
-                  {query().trim()
-                    ? searching()
-                      ? "Searching Twitch"
-                      : `Press Enter to open ${query().trim()}`
-                    : "Channels you open will show up here."}
-                </div>
-              }
-            >
-              <Show when={recents().length > 0}>
-                <div class="picker__label">Recent</div>
-                <For each={recents()}>{(_, i) => item(rows()[i()]!, i())}</For>
-              </Show>
-              <Show when={rows().length > recents().length}>
-                <div class="picker__label">Twitch</div>
-                <For each={rows().slice(recents().length)}>
-                  {(row, i) => item(row, i() + recents().length)}
+            <Show when={showLive()}>
+              <div class="picker__label">Live now</div>
+              <Show
+                when={liveRows().length > 0}
+                fallback={
+                  <div class="picker__empty">
+                    {liveState() === "needs_scope"
+                      ? "Reconnect Twitch in Settings to see who you follow that's live."
+                      : "Nobody you follow is live right now."}
+                  </div>
+                }
+              >
+                <For each={liveRows()}>
+                  {(channel, i) => item({ kind: "live", channel }, i)}
                 </For>
               </Show>
+            </Show>
+            <Show when={rows().length === 0 && !showLive()}>
+              <div class="picker__empty">
+                {typed()
+                  ? searching()
+                    ? "Searching Twitch"
+                    : `Press Enter to open ${query().trim()}`
+                  : "Channels you open will show up here."}
+              </div>
+            </Show>
+            <Show when={recents().length > 0}>
+              <div class="picker__label">Recent</div>
+              <For each={recents()}>
+                {(channel, i) =>
+                  item(
+                    { kind: "recent", channel },
+                    () => i() + liveRows().length,
+                  )
+                }
+              </For>
+            </Show>
+            <Show when={rows().length > liveRows().length + recents().length}>
+              <div class="picker__label">Twitch</div>
+              <For each={rows().slice(liveRows().length + recents().length)}>
+                {(row, i) =>
+                  item(row, () => i() + liveRows().length + recents().length)
+                }
+              </For>
             </Show>
           </div>
 
