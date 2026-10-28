@@ -609,6 +609,23 @@ const Settings: Component<SettingsProps> = (props) => {
               }
             />
           </label>
+          <label class="settings__row settings__row--toggle">
+            <div class="settings__text">
+              <span class="settings__name">Show 7TV name paints</span>
+              <span class="settings__hint">
+                Fill names with the gradient or image a chatter picked on 7TV.
+                Connects to 7TV while on
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              class="switch"
+              checked={settings().showPaints}
+              onChange={(e) =>
+                run(updateSettings({ showPaints: e.currentTarget.checked }))
+              }
+            />
+          </label>
 
           <div class="dialog__label">Window</div>
           <label class="settings__row settings__row--toggle">

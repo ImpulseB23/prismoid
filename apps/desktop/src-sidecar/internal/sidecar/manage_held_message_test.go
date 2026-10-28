@@ -41,7 +41,7 @@ func TestDispatchCommand_RoutesManageHeldMessage(t *testing.T) {
 	defer func() { twitchHelixBase = prev }()
 	notify, msgTypes, payloads := captureNotify()
 
-	DispatchCommand(context.Background(), heldMessageCmd("ALLOW", 11), map[string]context.CancelFunc{}, idleSession(t), idleFirsts(), make(chan []byte, 1), notify, zerolog.Nop())
+	DispatchCommand(context.Background(), heldMessageCmd("ALLOW", 11), map[string]context.CancelFunc{}, idleSession(t), idleFirsts(), idleCosmetics(t), make(chan []byte, 1), notify, zerolog.Nop())
 
 	if len(*msgTypes) != 1 || (*msgTypes)[0] != "mod_action_result" {
 		t.Fatalf("expected mod_action_result, got %#v", *msgTypes)

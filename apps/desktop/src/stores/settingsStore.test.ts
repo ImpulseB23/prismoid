@@ -29,16 +29,19 @@ function appliers(): SettingsAppliers & {
   zooms: number[];
   themes: Theme[];
   firsts: boolean[];
+  paints: boolean[];
 } {
   const tops: boolean[] = [];
   const zooms: number[] = [];
   const themes: Theme[] = [];
   const firsts: boolean[] = [];
+  const paints: boolean[] = [];
   return {
     tops,
     zooms,
     themes,
     firsts,
+    paints,
     alwaysOnTop: async (v) => {
       tops.push(v);
     },
@@ -50,6 +53,9 @@ function appliers(): SettingsAppliers & {
     closeToTray: async () => {},
     highlightFirstMessages: async (v) => {
       firsts.push(v);
+    },
+    showPaints: async (v) => {
+      paints.push(v);
     },
     theme: async (v) => {
       themes.push(v);
@@ -77,6 +83,7 @@ describe("settingsStore", () => {
       highlightUsers: [],
       highlightBadges: [],
       highlightPhrases: [],
+      showPaints: true,
       flagNewAccounts: true,
       showModActions: true,
       timeoutPresets: [60, 600, 3600, 86_400],
@@ -137,6 +144,7 @@ describe("settingsStore", () => {
         chatBacklog: async () => {},
         closeToTray: async () => {},
         highlightFirstMessages: async () => {},
+        showPaints: async () => {},
         theme: async () => {},
       },
       memStorage(),
@@ -159,6 +167,7 @@ describe("settingsStore", () => {
           highlightBadges: ["vip", "owner"],
           mentionAlerts: false,
           theme: "neon",
+          showPaints: false,
         }),
       }),
     );
@@ -172,6 +181,7 @@ describe("settingsStore", () => {
       highlightUsers: ["Friend"],
       highlightBadges: ["vip"],
       highlightPhrases: [],
+      showPaints: false,
       flagNewAccounts: true,
       showModActions: true,
       timeoutPresets: [60, 600, 3600, 86_400],
@@ -282,6 +292,27 @@ describe("settingsStore", () => {
     expect(off.settings().highlightFirstMessages).toBe(false);
     await off.apply();
     expect(b.firsts).toEqual([false]);
+  });
+
+  it("tells the host when 7tv paints change", async () => {
+    const a = appliers();
+    const on = createSettingsStore(a, memStorage());
+    await on.apply();
+    expect(a.paints).toEqual([]);
+    await on.update({ showPaints: false });
+    await on.update({ showPaints: false });
+    await on.update({ showPaints: true });
+    expect(a.paints).toEqual([false, true]);
+
+    const b = appliers();
+    const off = createSettingsStore(
+      b,
+      memStorage({
+        "prismoid.settings": JSON.stringify({ showPaints: false }),
+      }),
+    );
+    await off.apply();
+    expect(b.paints).toEqual([false]);
   });
 });
 

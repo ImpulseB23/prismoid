@@ -45,6 +45,37 @@ func (c *SevenTVClient) FetchChannel(ctx context.Context, twitchUserID string) (
 	}, nil
 }
 
+// FetchUserID returns the 7TV account id linked to a Twitch user, or
+// [ErrNotFound] when they have none.
+func (c *SevenTVClient) FetchUserID(ctx context.Context, twitchUserID string) (string, error) {
+	var conn struct {
+		User struct {
+			ID string `json:"id"`
+		} `json:"user"`
+	}
+	if err := getJSON(ctx, c.client(), c.base()+"/users/twitch/"+twitchUserID, &conn); err != nil {
+		return "", err
+	}
+	if conn.User.ID == "" {
+		return "", ErrNotFound
+	}
+	return conn.User.ID, nil
+}
+
+// SendSelfPresence marks a 7TV user as present in a Twitch channel for one
+// EventAPI session. Being passive, the user's cosmetics come back on that
+// socket only and are not published to the rest of the channel. It is the
+// call the 7TV extension makes on channel join (src/worker/worker.http.ts).
+func (c *SevenTVClient) SendSelfPresence(ctx context.Context, sevenTVUserID, channelID, sessionID string) error {
+	body := map[string]any{
+		"kind":       1,
+		"passive":    true,
+		"session_id": sessionID,
+		"data":       map[string]string{"platform": "TWITCH", "id": channelID},
+	}
+	return postJSON(ctx, c.client(), c.base()+"/users/"+sevenTVUserID+"/presences", body)
+}
+
 func (c *SevenTVClient) base() string {
 	if c.BaseURL != "" {
 		return c.BaseURL

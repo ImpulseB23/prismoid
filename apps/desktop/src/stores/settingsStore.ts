@@ -30,6 +30,8 @@ export interface Settings {
   highlightBadges: HighlightBadge[];
   /** Extra words or phrases that highlight a message like a mention. */
   highlightPhrases: string[];
+  /** Fill usernames with the 7TV paint the chatter picked. */
+  showPaints: boolean;
   /** Mark messages from accounts created in the last week. */
   flagNewAccounts: boolean;
   /** Show moderator actions (timeouts, bans, mode changes) as rows in chat. */
@@ -76,6 +78,7 @@ export const DEFAULT_SETTINGS: Settings = {
   highlightUsers: [],
   highlightBadges: [],
   highlightPhrases: [],
+  showPaints: true,
   flagNewAccounts: true,
   showModActions: true,
   timeoutPresets: [60, 600, 3600, 86_400],
@@ -100,6 +103,7 @@ export interface SettingsAppliers {
   chatBacklog: (value: boolean) => Promise<void>;
   closeToTray: (value: boolean) => Promise<void>;
   highlightFirstMessages: (value: boolean) => Promise<void>;
+  showPaints: (value: boolean) => Promise<void>;
   theme: (value: Theme) => Promise<void>;
 }
 
@@ -123,6 +127,7 @@ const defaultAppliers: SettingsAppliers = {
   chatBacklog: (v) => invoke("set_chat_backlog", { enabled: v }),
   closeToTray: (v) => invoke("set_close_to_tray", { enabled: v }),
   highlightFirstMessages: (v) => invoke("set_first_messages", { enabled: v }),
+  showPaints: (v) => invoke("set_seventv_paints", { enabled: v }),
   // "system" hands the title bar back to Windows; midnight shares dark chrome.
   theme: (v) =>
     getCurrentWindow().setTheme(
@@ -159,6 +164,9 @@ export function createSettingsStore(
     if (next.highlightFirstMessages !== current.highlightFirstMessages) {
       await appliers.highlightFirstMessages(next.highlightFirstMessages);
     }
+    if (next.showPaints !== current.showPaints) {
+      await appliers.showPaints(next.showPaints);
+    }
     if (next.theme !== current.theme) {
       await appliers.theme(next.theme);
     }
@@ -186,6 +194,7 @@ export function createSettingsStore(
     if (!s.chatBacklog) await appliers.chatBacklog(false);
     if (s.closeToTray) await appliers.closeToTray(true);
     if (!s.highlightFirstMessages) await appliers.highlightFirstMessages(false);
+    if (!s.showPaints) await appliers.showPaints(false);
     if (s.theme !== "system") await appliers.theme(s.theme);
   }
 
@@ -237,6 +246,10 @@ function readSettings(storage: StorageLike | null): Settings {
           HIGHLIGHT_BADGES.includes(b as HighlightBadge),
       ),
       highlightPhrases: stringList(p.highlightPhrases),
+      showPaints:
+        typeof p.showPaints === "boolean"
+          ? p.showPaints
+          : DEFAULT_SETTINGS.showPaints,
       flagNewAccounts:
         typeof p.flagNewAccounts === "boolean"
           ? p.flagNewAccounts

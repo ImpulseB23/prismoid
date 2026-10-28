@@ -53,6 +53,8 @@ use crate::message::{assign_arrival_seqs, ChatEvent, UnifiedMessage};
 #[cfg(windows)]
 use crate::ringbuf::{RawHandle, RingBufReader, WaitOutcome, DEFAULT_CAPACITY};
 #[cfg(windows)]
+use crate::seventv_paints::{PaintEvent, PaintSetting, PaintState};
+#[cfg(windows)]
 use crate::sidecar_commands::SidecarCommandSender;
 #[cfg(windows)]
 use crate::sidecar_job::SidecarJob;
@@ -382,6 +384,8 @@ async fn run_once<R: Runtime>(
     // lingering handle once the iteration ends.
     sender.publish(child.release());
     app.state::<FirstMessageSetting>()
+        .sync(|line| sender.write_raw(line));
+    app.state::<PaintSetting>()
         .sync(|line| sender.write_raw(line));
 
     // The channel task owns every twitch_connect / twitch_disconnect
@@ -962,27 +966,56 @@ fn handle_sidecar_stdout<R: Runtime>(
                 tracing::warn!(error = %e, "failed to emit first_message");
             }
         },
+        |event| apply_paint_event(event, app),
     )
+}
+
+/// Records a 7TV paint or entitlement and tells the webview what changed:
+/// `seventv_paint` for a new or edited paint, `seventv_paint_users` for
+/// users whose paint changed.
+#[cfg(windows)]
+fn apply_paint_event<R: Runtime>(event: PaintEvent, app: &AppHandle<R>) {
+    let state = app.state::<PaintState>();
+    match event {
+        PaintEvent::Paint(paint) => {
+            if state.add_paint(&paint) {
+                if let Err(e) = app.emit("seventv_paint", paint.as_ref()) {
+                    tracing::warn!(error = %e, "failed to emit seventv_paint");
+                }
+            }
+        }
+        PaintEvent::Entitlement(entitlement) => {
+            let changed = state.apply(entitlement);
+            if !changed.is_empty() {
+                if let Err(e) = app.emit("seventv_paint_users", &changed) {
+                    tracing::warn!(error = %e, "failed to emit seventv_paint_users");
+                }
+            }
+        }
+    }
 }
 
 /// Pure scan-and-dispatch core of [`handle_sidecar_stdout`]. Splits the
 /// batch on newlines, parses each non-empty piece via
 /// [`parse_sidecar_event`], returns `true` if any line was a heartbeat,
-/// and invokes `on_bundle`/`on_send_result`/`on_banned`/`on_first` for the
-/// corresponding variants. Factored out so it can be unit-tested without a Tauri
-/// runtime (the AppHandle-dependent work happens inside the closures).
-fn scan_sidecar_stdout<F, G, H, I>(
+/// and invokes `on_bundle`/`on_send_result`/`on_banned`/`on_first`/`on_paint`
+/// for the corresponding variants. Factored out so it can be unit-tested
+/// without a Tauri runtime (the AppHandle-dependent work happens inside the
+/// closures).
+fn scan_sidecar_stdout<F, G, H, I, P>(
     bytes: &[u8],
     mut on_bundle: F,
     mut on_send_result: G,
     mut on_banned: H,
     mut on_first: I,
+    mut on_paint: P,
 ) -> bool
 where
     F: FnMut(Box<crate::emote_index::EmoteBundle>),
     G: FnMut(crate::host::SendChatResult),
     H: FnMut(crate::host::ChatBanned),
     I: FnMut(crate::host::FirstMessage),
+    P: FnMut(crate::seventv_paints::PaintEvent),
 {
     let mut saw_heartbeat = false;
     for line in bytes.split(|b| *b == b'\n') {
@@ -996,6 +1029,7 @@ where
             SidecarEvent::ModActionResult(r) => on_send_result(r),
             SidecarEvent::ChatBanned(b) => on_banned(b),
             SidecarEvent::FirstMessage(f) => on_first(f),
+            SidecarEvent::SevenTvPaint(p) => on_paint(p),
             SidecarEvent::Other(t) => {
                 tracing::debug!(msg_type = %t, "unhandled sidecar control message");
             }
@@ -1506,14 +1540,16 @@ mod tests {
             |_| panic!("no bundle"),
             |_| panic!("no result"),
             |_| panic!("no ban"),
-            |_| panic!("no first")
+            |_| panic!("no first"),
+            |_| panic!("no paint")
         ));
         assert!(!scan_sidecar_stdout(
             b"\n\n\n",
             |_| panic!("no bundle"),
             |_| panic!("no result"),
             |_| panic!("no ban"),
-            |_| panic!("no first")
+            |_| panic!("no first"),
+            |_| panic!("no paint")
         ));
     }
 
@@ -1525,7 +1561,8 @@ mod tests {
             |_| panic!("no bundle"),
             |_| panic!("no result"),
             |_| panic!("no ban"),
-            |_| panic!("no first")
+            |_| panic!("no first"),
+            |_| panic!("no paint")
         ));
     }
 
@@ -1542,7 +1579,8 @@ mod tests {
             |_| panic!("no bundle"),
             |_| panic!("no result"),
             |_| panic!("no ban"),
-            |_| panic!("no first")
+            |_| panic!("no first"),
+            |_| panic!("no paint")
         ));
     }
 
@@ -1556,7 +1594,8 @@ mod tests {
             |_| panic!("no bundle"),
             |_| panic!("no result"),
             |_| panic!("no ban"),
-            |_| panic!("no first")
+            |_| panic!("no first"),
+            |_| panic!("no paint")
         ));
     }
 
@@ -1577,6 +1616,7 @@ mod tests {
             |_| panic!("no result"),
             |_| panic!("no ban"),
             |_| panic!("no first"),
+            |_| panic!("no paint"),
         );
 
         assert!(saw_heartbeat);
@@ -1594,7 +1634,8 @@ mod tests {
             |_| panic!("no bundle"),
             |_| panic!("no result"),
             |_| panic!("no ban"),
-            |_| panic!("no first")
+            |_| panic!("no first"),
+            |_| panic!("no paint")
         ));
     }
 
@@ -1608,6 +1649,7 @@ mod tests {
             |r| got = Some(r),
             |_| panic!("no ban"),
             |_| panic!("no first"),
+            |_| panic!("no paint"),
         );
         assert!(!saw_heartbeat);
         let r = got.expect("result dispatched");
@@ -1626,6 +1668,7 @@ mod tests {
             |_| panic!("no result"),
             |b| got = Some(b),
             |_| panic!("no first"),
+            |_| panic!("no paint"),
         );
         assert_eq!(got.expect("ban dispatched").broadcaster_id, "9");
     }
@@ -1640,10 +1683,33 @@ mod tests {
             |_| panic!("no result"),
             |_| panic!("no ban"),
             |f| got = Some(f),
+            |_| panic!("no paint"),
         );
         let f = got.expect("first message dispatched");
         assert_eq!(f.channel_id, "9");
         assert_eq!(f.message_id, "m1");
+    }
+
+    #[test]
+    fn scan_sidecar_stdout_dispatches_seventv_paints() {
+        let batch = br#"{"type":"seventv_entitlement","payload":{"action":"delete","user_id":"1","seventv_id":"s","paint_id":"p"}}
+{"type":"seventv_paint","payload":{"id":"p","function":"URL","image_url":"https://cdn.7tv.app/paint/p/layer/l/1x.webp"}}"#;
+        let mut got = Vec::new();
+        scan_sidecar_stdout(
+            batch,
+            |_| panic!("no bundle"),
+            |_| panic!("no result"),
+            |_| panic!("no ban"),
+            |_| panic!("no first"),
+            |p| got.push(p),
+        );
+        assert!(matches!(
+            got.as_slice(),
+            [
+                crate::seventv_paints::PaintEvent::Entitlement(_),
+                crate::seventv_paints::PaintEvent::Paint(_)
+            ]
+        ));
     }
 
     // -- run_event_loop tests --------------------------------------------
@@ -1804,7 +1870,7 @@ mod tests {
             |bytes| {
                 stdout_calls.set(stdout_calls.get() + 1);
                 // Forward to the pure scanner so heartbeat detection is real.
-                scan_sidecar_stdout(bytes, |_| {}, |_| {}, |_| {}, |_| {})
+                scan_sidecar_stdout(bytes, |_| {}, |_| {}, |_| {}, |_| {}, |_| {})
             },
             || kill_calls.set(kill_calls.get() + 1),
             || {},
