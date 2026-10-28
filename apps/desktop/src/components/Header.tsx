@@ -34,14 +34,14 @@ import {
   setSettingsOpen,
   type SettingsSection,
 } from "../stores/settingsPanelStore";
-import { pickerOpen, setPickerOpen } from "../stores/pickerStore";
+import { closePicker, openPicker, pickerOpen } from "../stores/pickerStore";
 import { searchOpen, setSearchOpen } from "../stores/searchStore";
 import {
   mentionsOpen,
   setMentionsOpen,
   unreadMentions,
 } from "../stores/mentionsStore";
-import { cardOrigin, cardUser } from "../stores/userCardStore";
+import { cardLoading, cardOrigin, cardUser } from "../stores/userCardStore";
 import { tourStep } from "../stores/tourStore";
 import {
   chromeShown,
@@ -190,7 +190,7 @@ const Header: Component<HeaderProps> = (props) => {
         case "f":
         case "F":
           e.preventDefault();
-          setPickerOpen(false);
+          closePicker();
           setSettingsOpen(false);
           setSearchOpen(true);
           break;
@@ -198,11 +198,11 @@ const Header: Component<HeaderProps> = (props) => {
         case "K":
           e.preventDefault();
           setSettingsOpen(false);
-          setPickerOpen(true);
+          openPicker();
           break;
         case ",":
           e.preventDefault();
-          setPickerOpen(false);
+          closePicker();
           setSettingsOpen((o) => !o);
           break;
         case "=":
@@ -245,6 +245,7 @@ const Header: Component<HeaderProps> = (props) => {
       settingsOpen() ||
         searchOpen() ||
         mentionsOpen() ||
+        cardLoading() === "self" ||
         (cardUser() !== null && cardOrigin() === "self"),
     ),
   );
@@ -330,7 +331,7 @@ const Header: Component<HeaderProps> = (props) => {
               ],
               380,
             );
-            setPickerOpen(false);
+            closePicker();
             setSettingsOpen(false);
             setSearchOpen(true);
           }}
@@ -496,7 +497,7 @@ const Header: Component<HeaderProps> = (props) => {
           onPointerEnter={peekChrome}
         />
       </Show>
-      <ChannelPicker open={pickerOpen()} onClose={() => setPickerOpen(false)} />
+      <ChannelPicker open={pickerOpen()} onClose={closePicker} />
       <ChatSearch open={searchOpen()} onClose={() => setSearchOpen(false)} />
       <Mentions />
       <Settings

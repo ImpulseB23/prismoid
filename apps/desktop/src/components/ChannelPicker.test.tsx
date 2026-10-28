@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   followedLive: vi.fn<() => Promise<FollowedLive[]>>(),
   search: vi.fn<(q: string) => Promise<ChannelSearchResult[]>>(),
   select: vi.fn<(login: string) => Promise<void>>(),
-  ensure: vi.fn<(ids: string[]) => void>(),
+  load: vi.fn<(ids: string[]) => Promise<void>>(),
   missing: [] as string[],
   recents: [] as RecentChannel[],
   profiles: new Map<string, UserInfo>(),
@@ -39,11 +39,28 @@ vi.mock("../stores/channelStore", async (importOriginal) => ({
 }));
 vi.mock("../stores/userInfoStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../stores/userInfoStore")>()),
-  ensureUserInfo: mocks.ensure,
+  loadUserInfo: mocks.load,
   userInfo: (id: string) => mocks.profiles.get(id),
 }));
+vi.mock("../lib/preload", () => ({ preloadImages: () => Promise.resolve() }));
 
-const { default: ChannelPicker } = await import("./ChannelPicker");
+// The picker store keeps the live list between opens, so every test gets
+// fresh copies of it and the component.
+async function setup(onClose: () => void = () => {}) {
+  vi.resetModules();
+  const store = await import("../stores/pickerStore");
+  const { default: ChannelPicker } = await import("./ChannelPicker");
+  render(() => (
+    <ChannelPicker
+      open={store.pickerOpen()}
+      onClose={() => {
+        store.closePicker();
+        onClose();
+      }}
+    />
+  ));
+  return store;
+}
 
 const live = (id: string, viewers: number, game = ""): FollowedLive => ({
   id,
@@ -71,7 +88,7 @@ describe("ChannelPicker", () => {
     mocks.followedLive.mockReset();
     mocks.search.mockReset();
     mocks.select.mockReset().mockResolvedValue();
-    mocks.ensure.mockReset();
+    mocks.load.mockReset().mockResolvedValue();
     mocks.missing = [];
     mocks.recents = [];
     mocks.profiles.clear();
@@ -92,10 +109,10 @@ describe("ChannelPicker", () => {
       description: "",
       created_at: "",
     });
-    render(() => <ChannelPicker open onClose={() => {}} />);
+    (await setup()).openPicker();
     await screen.findByText("BIG");
     expect(options()).toEqual(["HOME", "BIG", "OLD"]);
-    expect(mocks.ensure).toHaveBeenCalledWith(["home", "big"]);
+    expect(mocks.load).toHaveBeenCalledWith(["home", "big"]);
     const [home, big] = screen.getAllByRole("option");
     expect(home!.textContent).toContain("150 watching · Chess");
     expect(home!.querySelector(".palette__live")).not.toBeNull();
@@ -105,15 +122,19 @@ describe("ChannelPicker", () => {
     expect(big!.querySelector("img")).toBeNull();
   });
 
-  it("keeps arrow keys in step after the live list lands", async () => {
+  it("opens only once the live list has loaded", async () => {
     let resolve!: (v: FollowedLive[]) => void;
     mocks.followedLive.mockReturnValue(new Promise((r) => (resolve = r)));
     mocks.recents = [recent("old")];
     const onClose = vi.fn();
-    render(() => <ChannelPicker open onClose={onClose} />);
-    expect(options()).toEqual(["OLD"]);
+    const store = await setup(onClose);
+    store.openPicker();
+    expect(store.pickerLoading()).toBe(true);
+    expect(screen.queryByRole("dialog")).toBeNull();
     resolve([live("a", 10)]);
     await screen.findByText("A");
+    expect(store.pickerLoading()).toBe(false);
+    expect(options()).toEqual(["A", "OLD"]);
     const input = screen.getByRole("textbox");
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "ArrowDown" });
@@ -129,7 +150,7 @@ describe("ChannelPicker", () => {
   it("opens a live channel on click", async () => {
     mocks.followedLive.mockResolvedValue([live("a", 10)]);
     const onClose = vi.fn();
-    render(() => <ChannelPicker open onClose={onClose} />);
+    (await setup(onClose)).openPicker();
     fireEvent.click(await screen.findByText("A"));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(mocks.select).toHaveBeenCalledWith("a");
@@ -137,28 +158,28 @@ describe("ChannelPicker", () => {
 
   it("says so when nobody followed is live", async () => {
     mocks.followedLive.mockResolvedValue([]);
-    render(() => <ChannelPicker open onClose={() => {}} />);
+    (await setup()).openPicker();
     await screen.findByText("Nobody you follow is live right now.");
     expect(screen.queryByText("Channels you open will show up here.")).toBe(
       null,
     );
   });
 
-  it("asks for a reconnect without the follows scope", () => {
+  it("asks for a reconnect without the follows scope", async () => {
     mocks.missing = ["user:read:follows"];
-    render(() => <ChannelPicker open onClose={() => {}} />);
-    screen.getByText(
+    (await setup()).openPicker();
+    await screen.findByText(
       "Reconnect Twitch in Settings to see who you follow that's live.",
     );
     expect(mocks.followedLive).not.toHaveBeenCalled();
   });
 
-  it("drops the section when the lookup fails", async () => {
+  it("still opens, without the section, when the lookup fails", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     mocks.followedLive.mockRejectedValue({ kind: "http", message: "down" });
-    render(() => <ChannelPicker open onClose={() => {}} />);
-    await waitFor(() => expect(error).toHaveBeenCalled());
-    screen.getByText("Channels you open will show up here.");
+    (await setup()).openPicker();
+    await screen.findByText("Channels you open will show up here.");
+    expect(error).toHaveBeenCalled();
     expect(screen.queryByText("Live now")).toBeNull();
     error.mockRestore();
   });
@@ -179,7 +200,7 @@ describe("ChannelPicker", () => {
         followed: false,
       },
     ]);
-    render(() => <ChannelPicker open onClose={() => {}} />);
+    (await setup()).openPicker();
     await screen.findByText("A");
     fireEvent.input(screen.getByRole("textbox"), {
       target: { value: "fou" },
@@ -188,5 +209,16 @@ describe("ChannelPicker", () => {
     await screen.findByText("FOUND");
     expect(options()).toEqual(["FOUND"]);
     expect(mocks.search).toHaveBeenCalledWith("fou");
+  });
+
+  it("reuses a fresh list on a quick reopen", async () => {
+    mocks.followedLive.mockResolvedValue([live("a", 10)]);
+    const store = await setup();
+    store.openPicker();
+    await screen.findByText("A");
+    store.closePicker();
+    store.openPicker();
+    await screen.findByText("A");
+    expect(mocks.followedLive).toHaveBeenCalledTimes(1);
   });
 });

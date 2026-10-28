@@ -19,7 +19,7 @@ import {
   focusChannel,
   unreadCount,
 } from "../stores/channelStore";
-import { setPickerOpen } from "../stores/pickerStore";
+import { openPicker, pickerLoading, prefetchLive } from "../stores/pickerStore";
 
 const report = (what: string) => (err: unknown) => console.error(what, err);
 
@@ -172,16 +172,23 @@ const ChannelTabs: Component = () => {
         data-tour="add-channel"
         title="Open a channel (Ctrl+K)"
         aria-label="Open a channel"
-        onClick={() => setPickerOpen(true)}
+        aria-busy={pickerLoading()}
+        onPointerEnter={() => void prefetchLive()}
+        onClick={openPicker}
       >
-        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-          <path
-            d="M6 1.5v9M1.5 6h9"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round"
-          />
-        </svg>
+        <Show
+          when={!pickerLoading()}
+          fallback={<span class="palette__spinner" aria-hidden="true" />}
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+            <path
+              d="M6 1.5v9M1.5 6h9"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            />
+          </svg>
+        </Show>
       </button>
     </div>
   );

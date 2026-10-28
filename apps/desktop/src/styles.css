@@ -1665,6 +1665,22 @@ option::checkmark {
   cursor: pointer;
 }
 
+/* A thin ring spins around the avatar while your card loads. */
+.avatar--loading {
+  cursor: progress;
+}
+
+.avatar--loading::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: var(--select);
+  animation: spin 0.8s linear infinite;
+  pointer-events: none;
+}
+
 .avatar__img,
 .avatar__initial {
   display: block;
@@ -2238,6 +2254,13 @@ option::checkmark {
   text-underline-offset: 2px;
 }
 
+/* The clicked name pulses while its card loads; a spinner beside it would
+   change the measured row width. */
+.msg__user--loading {
+  cursor: progress;
+  animation: name-pulse 0.9s ease-in-out infinite;
+}
+
 @keyframes name-pulse {
   50% {
     opacity: 0.4;
@@ -2673,7 +2696,7 @@ option::checkmark {
 
 /* Emote inspect */
 
-/* The clicked emote pulses while its card loads. */
+/* The clicked emote pulses while its card loads, like a clicked name. */
 .msg__emote--loading {
   cursor: progress;
   animation: name-pulse 0.9s ease-in-out infinite;
