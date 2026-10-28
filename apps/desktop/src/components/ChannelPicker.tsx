@@ -1,5 +1,6 @@
-// Command-palette style channel switcher. With nothing typed it lists the
-// followed channels that are live, then recents. Recents match instantly;
+// Command-palette style channel switcher. With nothing typed it lists
+// recents, then the followed channels that are live, the ones also in
+// recents first. Recents match instantly;
 // after a short pause the query also goes to Helix search so any channel on
 // Twitch shows up with its live state. Enter on free text still resolves an
 // exact login, which covers channels Helix search leaves out (no stream in
@@ -57,25 +58,28 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
   const typed = () => query().trim().length > 0;
   const showLive = () =>
     !typed() && (liveState() === "ready" || liveState() === "needs_scope");
-  const liveRows = createMemo(() => (typed() ? [] : followedLive()));
-
   const recents = createMemo(() => {
     const q = query().trim().toLowerCase().replace(/^@/, "");
     const all = recentChannels();
-    if (!q) {
-      const shown = new Set(liveRows().map((c) => c.login));
-      return all.filter((r) => !shown.has(r.login));
-    }
+    if (!q) return all;
     return all.filter(
       (r) => r.login.includes(q) || r.display_name.toLowerCase().includes(q),
     );
   });
 
+  const liveRows = createMemo(() => {
+    if (typed()) return [];
+    const rank = new Map(recentChannels().map((r, i) => [r.login, i]));
+    const at = (c: FollowedLive) => rank.get(c.login) ?? rank.size;
+    // Stable, so channels outside recents keep the host's order.
+    return [...followedLive()].sort((a, b) => at(a) - at(b));
+  });
+
   const rows = createMemo<Row[]>(() => {
     const seen = new Set(recents().map((r) => r.login));
     return [
-      ...liveRows().map((channel): Row => ({ kind: "live", channel })),
       ...recents().map((channel): Row => ({ kind: "recent", channel })),
+      ...liveRows().map((channel): Row => ({ kind: "live", channel })),
       ...results()
         .filter((c) => !seen.has(c.login))
         .map((channel): Row => ({ kind: "search", channel })),
@@ -131,7 +135,7 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
     setBusy(true);
     setError(null);
     try {
-      await selectChannel(login);
+      await selectChannel(login, { remember: true });
       props.onClose();
     } catch (e) {
       setError(formatChannelError(e));
@@ -309,6 +313,12 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
           </div>
 
           <div class="palette__section">
+            <Show when={recents().length > 0}>
+              <div class="palette__label">Recent</div>
+              <For each={recents()}>
+                {(channel, i) => item({ kind: "recent", channel }, i)}
+              </For>
+            </Show>
             <Show when={showLive()}>
               <div class="palette__label">Live now</div>
               <Show
@@ -322,7 +332,12 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
                 }
               >
                 <For each={liveRows()}>
-                  {(channel, i) => item({ kind: "live", channel }, i)}
+                  {(channel, i) =>
+                    item(
+                      { kind: "live", channel },
+                      () => i() + recents().length,
+                    )
+                  }
                 </For>
               </Show>
             </Show>
@@ -334,17 +349,6 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
                     : `Press Enter to open ${query().trim()}`
                   : "Channels you open will show up here."}
               </div>
-            </Show>
-            <Show when={recents().length > 0}>
-              <div class="palette__label">Recent</div>
-              <For each={recents()}>
-                {(channel, i) =>
-                  item(
-                    { kind: "recent", channel },
-                    () => i() + liveRows().length,
-                  )
-                }
-              </For>
             </Show>
             <Show when={rows().length > liveRows().length + recents().length}>
               <div class="palette__label">Twitch</div>
