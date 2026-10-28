@@ -66,6 +66,14 @@ pub struct EmoteMeta {
     pub zero_width: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<EmoteOwner>,
+    /// Unix milliseconds the emote was added to the channel's set. 7TV
+    /// channel sets only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub added_at: Option<i64>,
+    /// 7TV user id of whoever added the emote to the channel's set. Names
+    /// come from the `seventv_users` command when the UI needs one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub added_by_id: Option<Box<str>>,
 }
 
 /// Who uploaded an emote. Mirrors `sidecar/internal/emotes.EmoteOwner`;
@@ -432,6 +440,8 @@ mod tests {
             animated: false,
             zero_width: false,
             owner: None,
+            added_at: None,
+            added_by_id: None,
         }
     }
 
@@ -643,6 +653,30 @@ mod tests {
 
         let none = serde_json::to_value(meta("Kappa", Provider::Twitch)).unwrap();
         assert!(none.get("owner").is_none());
+    }
+
+    #[test]
+    fn meta_added_round_trips() {
+        let raw = r#"{
+            "id": "60a",
+            "code": "zyzzBass",
+            "provider": "7tv",
+            "url_1x": "https://cdn.7tv.app/emote/60a/1x.webp",
+            "added_at": 1622025395000,
+            "added_by_id": "01FE9DRF000009TR6M9N941CYW"
+        }"#;
+        let got: EmoteMeta = serde_json::from_str(raw).unwrap();
+        assert_eq!(got.added_at, Some(1_622_025_395_000));
+        assert_eq!(
+            got.added_by_id.as_deref(),
+            Some("01FE9DRF000009TR6M9N941CYW")
+        );
+        let out = serde_json::to_value(&got).unwrap();
+        assert_eq!(out["added_at"], 1_622_025_395_000_i64);
+        assert_eq!(out["added_by_id"], "01FE9DRF000009TR6M9N941CYW");
+
+        let none = serde_json::to_value(meta("Kappa", Provider::Twitch)).unwrap();
+        assert!(none.get("added_at").is_none() && none.get("added_by_id").is_none());
     }
 
     #[test]

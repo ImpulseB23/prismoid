@@ -1018,6 +1018,8 @@ mod tests {
             animated: false,
             zero_width: false,
             owner: None,
+            added_at: None,
+            added_by_id: None,
         }));
 
         let mut batch = Vec::new();
@@ -1065,6 +1067,8 @@ mod tests {
             animated: false,
             zero_width: false,
             owner: None,
+            added_at: None,
+            added_by_id: None,
         }));
 
         let mut batch = Vec::new();
