@@ -112,6 +112,12 @@ type sevenTVEmoteData struct {
 	Animated bool        `json:"animated"`
 	Flags    int         `json:"flags"`
 	Host     sevenTVHost `json:"host"`
+	// Owner is missing on a few live emotes.
+	Owner *struct {
+		ID          string `json:"id"`
+		Username    string `json:"username"`
+		DisplayName string `json:"display_name"`
+	} `json:"owner"`
 }
 
 type sevenTVHost struct {
@@ -137,7 +143,7 @@ func (s sevenTVEmoteSet) toEmotes() []Emote {
 		if u1 == "" {
 			continue
 		}
-		out = append(out, Emote{
+		em := Emote{
 			ID:        e.ID,
 			Code:      e.Name,
 			Provider:  Provider7TV,
@@ -148,7 +154,11 @@ func (s sevenTVEmoteSet) toEmotes() []Emote {
 			Height:    h,
 			Animated:  e.Data.Animated,
 			ZeroWidth: e.Data.Flags&sevenTVFlagZeroWidth != 0,
-		})
+		}
+		if o := e.Data.Owner; o != nil {
+			em.Owner = newEmoteOwner(o.ID, o.Username, o.DisplayName)
+		}
+		out = append(out, em)
 	}
 	return out
 }

@@ -68,6 +68,13 @@ type bttvEmote struct {
 	Animated  bool   `json:"animated"`
 	Width     int    `json:"width"`
 	Height    int    `json:"height"`
+	// User is only set on shared emotes. Global and channel uploads carry
+	// just a `userId` with no name, so they get no owner.
+	User *struct {
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		DisplayName string `json:"displayName"`
+	} `json:"user"`
 }
 
 type bttvChannelResponse struct {
@@ -89,7 +96,7 @@ func bttvToEmotes(in []bttvEmote) []Emote {
 		// trust the explicit flag when present but infer from ext as a
 		// fallback for older cached payloads that omit `animated`.
 		animated := e.Animated || ext == "gif"
-		out = append(out, Emote{
+		em := Emote{
 			ID:       e.ID,
 			Code:     e.Code,
 			Provider: ProviderBTTV,
@@ -99,7 +106,11 @@ func bttvToEmotes(in []bttvEmote) []Emote {
 			Width:    e.Width,
 			Height:   e.Height,
 			Animated: animated,
-		})
+		}
+		if u := e.User; u != nil {
+			em.Owner = newEmoteOwner(u.ID, u.Name, u.DisplayName)
+		}
+		out = append(out, em)
 	}
 	return out
 }

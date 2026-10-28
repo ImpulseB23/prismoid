@@ -14,7 +14,7 @@ func TestBTTV_FetchGlobal(t *testing.T) {
 			t.Fatalf("path: %s", r.URL.Path)
 		}
 		_, _ = w.Write([]byte(`[
-			{"id":"abc","code":"PogU","imageType":"gif","animated":true,"width":28,"height":28},
+			{"id":"abc","code":"PogU","imageType":"gif","animated":true,"width":28,"height":28,"userId":"5561169bd6b9d206222a8c19"},
 			{"id":"def","code":"monkaS","imageType":"png","animated":false,"width":32,"height":32},
 			{"id":"","code":"skipMe"}
 		]`))
@@ -30,7 +30,7 @@ func TestBTTV_FetchGlobal(t *testing.T) {
 		t.Fatalf("emotes = %d, want 2", len(set.Emotes))
 	}
 	pog := set.Emotes[0]
-	if pog.Code != "PogU" || !pog.Animated {
+	if pog.Code != "PogU" || !pog.Animated || pog.Owner != nil {
 		t.Errorf("pog: %+v", pog)
 	}
 	if pog.URL1x != "https://cdn.betterttv.net/emote/abc/1x.gif" {
@@ -47,8 +47,12 @@ func TestBTTV_FetchChannel_MergesSharedAndChannel(t *testing.T) {
 			t.Fatalf("path: %s", r.URL.Path)
 		}
 		_, _ = w.Write([]byte(`{
-			"channelEmotes":[{"id":"c1","code":"C1","imageType":"png"}],
-			"sharedEmotes":[{"id":"s1","code":"S1","imageType":"png"},{"id":"s2","code":"S2","imageType":"png"}]
+			"id":"555943515393e61c772ee968",
+			"channelEmotes":[{"id":"c1","code":"C1","imageType":"png","userId":"555943515393e61c772ee968"}],
+			"sharedEmotes":[
+				{"id":"s1","code":"S1","imageType":"png","user":{"id":"5561169bd6b9d206222a8c19","name":"nightdev","displayName":"NightDev","providerId":"29045896"}},
+				{"id":"s2","code":"S2","imageType":"png","user":{"id":"u2","name":"lowercase","displayName":"","providerId":"1"}}
+			]
 		}`))
 	}))
 	defer srv.Close()
@@ -63,6 +67,16 @@ func TestBTTV_FetchChannel_MergesSharedAndChannel(t *testing.T) {
 	}
 	if len(set.Emotes) != 3 {
 		t.Fatalf("emotes = %d, want 3", len(set.Emotes))
+	}
+	if set.Emotes[0].Owner != nil {
+		t.Errorf("channel upload owner = %+v, want nil", set.Emotes[0].Owner)
+	}
+	want := EmoteOwner{ID: "5561169bd6b9d206222a8c19", Login: "nightdev", DisplayName: "NightDev"}
+	if o := set.Emotes[1].Owner; o == nil || *o != want {
+		t.Errorf("shared owner = %+v", o)
+	}
+	if o := set.Emotes[2].Owner; o == nil || o.DisplayName != "lowercase" {
+		t.Errorf("display name fallback = %+v", o)
 	}
 }
 

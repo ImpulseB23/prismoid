@@ -102,6 +102,11 @@ type ffzEmote struct {
 	Height   int               `json:"height"`
 	URLs     map[string]string `json:"urls"`
 	Animated map[string]string `json:"animated"`
+	Owner    *struct {
+		ID          int    `json:"_id"`
+		Name        string `json:"name"`
+		DisplayName string `json:"display_name"`
+	} `json:"owner"`
 }
 
 func ffzConvertSet(s ffzSet) []Emote {
@@ -117,7 +122,7 @@ func ffzConvertSet(s ffzSet) []Emote {
 		if u1 == "" {
 			continue
 		}
-		out = append(out, Emote{
+		em := Emote{
 			ID:       strconv.Itoa(e.ID),
 			Code:     e.Name,
 			Provider: ProviderFFZ,
@@ -127,7 +132,15 @@ func ffzConvertSet(s ffzSet) []Emote {
 			Width:    e.Width,
 			Height:   e.Height,
 			Animated: animated,
-		})
+		}
+		if o := e.Owner; o != nil {
+			id := ""
+			if o.ID != 0 {
+				id = strconv.Itoa(o.ID)
+			}
+			em.Owner = newEmoteOwner(id, o.Name, o.DisplayName)
+		}
+		out = append(out, em)
 	}
 	return out
 }

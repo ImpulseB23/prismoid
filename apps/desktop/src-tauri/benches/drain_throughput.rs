@@ -190,6 +190,7 @@ fn populated_index() -> EmoteIndexes {
             height: 28,
             animated: false,
             zero_width: false,
+            owner: None,
         }
     }
 

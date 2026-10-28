@@ -18,10 +18,11 @@ func TestFFZ_FetchGlobal(t *testing.T) {
 			"sets":{
 				"3":{"emoticons":[
 					{"id":28138,"name":"LilZ","width":22,"height":30,
+					 "owner":{"_id":2,"name":"dansalvato","display_name":"DanSalvato"},"artist":null,
 					 "urls":{"1":"//cdn.frankerfacez.com/emote/28138/1","2":"//cdn.frankerfacez.com/emote/28138/2","4":"//cdn.frankerfacez.com/emote/28138/4"}}
 				]},
 				"4330":{"emoticons":[
-					{"id":9,"name":"ZrehplaR","width":16,"height":16,
+					{"id":9,"name":"ZrehplaR","width":16,"height":16,"owner":null,
 					 "urls":{"1":"//cdn.frankerfacez.com/emote/9/1"},
 					 "animated":{"1":"//cdn.frankerfacez.com/emote/9/animated/1"}}
 				]},
@@ -57,6 +58,13 @@ func TestFFZ_FetchGlobal(t *testing.T) {
 	}
 	if lilz.Animated {
 		t.Error("lilz should not be animated")
+	}
+	want := EmoteOwner{ID: "2", Login: "dansalvato", DisplayName: "DanSalvato"}
+	if lilz.Owner == nil || *lilz.Owner != want {
+		t.Errorf("lilz owner = %+v", lilz.Owner)
+	}
+	if zreh.Owner != nil {
+		t.Errorf("zreh owner = %+v, want nil", zreh.Owner)
 	}
 	if !zreh.Animated || zreh.URL1x != "https://cdn.frankerfacez.com/emote/9/animated/1" {
 		t.Errorf("zreh: %+v", zreh)

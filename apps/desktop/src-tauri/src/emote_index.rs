@@ -64,6 +64,19 @@ pub struct EmoteMeta {
     pub animated: bool,
     #[serde(default)]
     pub zero_width: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<EmoteOwner>,
+}
+
+/// Who uploaded an emote. Mirrors `sidecar/internal/emotes.EmoteOwner`;
+/// `id` is the account id on the emote's own provider, not a Twitch id.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EmoteOwner {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<Box<str>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub login: Option<Box<str>>,
+    pub display_name: Box<str>,
 }
 
 /// One provider+scope slice of an [`EmoteBundle`]. Mirrors the
@@ -418,6 +431,7 @@ mod tests {
             height: 28,
             animated: false,
             zero_width: false,
+            owner: None,
         }
     }
 
@@ -593,6 +607,42 @@ mod tests {
         assert_eq!(got.provider, Provider::SevenTv);
         assert!(got.animated && got.zero_width);
         assert_eq!(got.width, 32);
+        assert_eq!(got.owner, None);
+    }
+
+    #[test]
+    fn meta_owner_round_trips() {
+        let raw = r#"{
+            "id": "60a",
+            "code": "PepegaAim",
+            "provider": "7tv",
+            "url_1x": "https://cdn.7tv.app/emote/60a/1x.webp",
+            "owner": {"id": "01F6", "login": "forsen", "display_name": "Forsen"}
+        }"#;
+        let got: EmoteMeta = serde_json::from_str(raw).unwrap();
+        assert_eq!(
+            got.owner,
+            Some(EmoteOwner {
+                id: Some("01F6".into()),
+                login: Some("forsen".into()),
+                display_name: "Forsen".into(),
+            })
+        );
+        let out = serde_json::to_value(&got).unwrap();
+        assert_eq!(
+            out["owner"],
+            serde_json::json!({"id": "01F6", "login": "forsen", "display_name": "Forsen"})
+        );
+
+        let bare: EmoteMeta = serde_json::from_str(
+            r#"{"id":"1","code":"A","provider":"ffz","url_1x":"u","owner":{"display_name":"Teyn"}}"#,
+        )
+        .unwrap();
+        let out = serde_json::to_value(&bare).unwrap();
+        assert_eq!(out["owner"], serde_json::json!({"display_name": "Teyn"}));
+
+        let none = serde_json::to_value(meta("Kappa", Provider::Twitch)).unwrap();
+        assert!(none.get("owner").is_none());
     }
 
     #[test]

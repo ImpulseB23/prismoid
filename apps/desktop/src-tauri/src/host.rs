@@ -1017,6 +1017,7 @@ mod tests {
             height: 28,
             animated: false,
             zero_width: false,
+            owner: None,
         }));
 
         let mut batch = Vec::new();
@@ -1063,6 +1064,7 @@ mod tests {
             height: 28,
             animated: false,
             zero_width: false,
+            owner: None,
         }));
 
         let mut batch = Vec::new();
