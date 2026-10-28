@@ -488,6 +488,21 @@ describe("chatStore optimistic send", () => {
     expect(store.getMessage(1)?.id).toBe("from-platform");
   });
 
+  it("search returns confirmed matches newest first, capped", () => {
+    const store = createChatStore(10);
+    store.addMessages([makeMsg("1"), makeMsg("2"), makeMsg("3"), makeMsg("4")]);
+    const pending = buildOptimisticMessage({
+      platform: "Twitch",
+      login: "alice",
+      text: "hi",
+      channelId: "chan",
+    });
+    store.insertPending(pending);
+    const odd = (m: { id: string }) => Number(m.id) % 2 === 1;
+    expect(store.search(odd, 10).map((m) => m.id)).toEqual(["3", "1"]);
+    expect(store.search(() => true, 2).map((m) => m.id)).toEqual(["4", "3"]);
+  });
+
   it("recentByUser returns that author's confirmed messages oldest first", () => {
     const store = createChatStore(10);
     const mine = (id: string) => ({ ...makeMsg(id), platform_user_id: "me" });
