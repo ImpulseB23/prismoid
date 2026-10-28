@@ -149,6 +149,22 @@ export function searchChannels(query: string): Promise<ChannelSearchResult[]> {
   return invoke("twitch_search_channels", { query });
 }
 
+export interface FollowedLive {
+  id: string;
+  login: string;
+  display_name: string;
+  game_name: string;
+  viewer_count: number;
+}
+
+/**
+ * Followed channels live now, the ones the user chats in most first and
+ * the rest by viewers.
+ */
+export function getFollowedLive(): Promise<FollowedLive[]> {
+  return invoke("twitch_followed_live");
+}
+
 export interface StreamInfo {
   is_live: boolean;
   title: string;

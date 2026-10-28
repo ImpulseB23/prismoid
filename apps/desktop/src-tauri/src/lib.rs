@@ -106,6 +106,7 @@ pub fn run() {
             first_messages::set_first_messages,
             twitch_channel::twitch_get_channel,
             twitch_channel::twitch_search_channels,
+            twitch_channel::twitch_followed_live,
             twitch_channel::twitch_get_stream_info,
             twitch_channel::twitch_lookup_user,
             twitch_channel::twitch_moderated_channels,
