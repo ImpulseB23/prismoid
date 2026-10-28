@@ -37,7 +37,7 @@ import {
 } from "../stores/settingsStore";
 import { DEFAULT_TEXT_SIZE } from "../lib/messageLayout";
 import { formatSeconds } from "../lib/slashCommands";
-import { openLogDir } from "../lib/log";
+import SupportRows from "./SupportRows";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getVersion } from "@tauri-apps/api/app";
 import {
@@ -945,22 +945,7 @@ const Settings: Component<SettingsProps> = (props) => {
                 Read policy
               </button>
             </div>
-            <div class="settings__row">
-              <div class="settings__text">
-                <span class="settings__name">Log file</span>
-                <span class="settings__hint">
-                  Connection and error details. Attach the newest file to a bug
-                  report.
-                </span>
-              </div>
-              <button
-                type="button"
-                class="btn btn--outline"
-                onClick={() => run(openLogDir())}
-              >
-                Open folder
-              </button>
-            </div>
+            <SupportRows />
           </Show>
 
           <Show when={error()}>

@@ -33,10 +33,6 @@ export function describe(value: unknown): string {
   }
 }
 
-export function openLogDir(): Promise<void> {
-  return invoke("open_log_dir");
-}
-
 /** App version, platform and the newest log lines with secrets redacted. */
 export function getSupportBundle(): Promise<string> {
   return invoke("support_bundle");

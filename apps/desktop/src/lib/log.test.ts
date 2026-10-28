@@ -1,5 +1,5 @@
 import { describe as suite, expect, it, vi } from "vitest";
-import { describe, forwardConsole, getSupportBundle, openLogDir } from "./log";
+import { describe, forwardConsole, getSupportBundle } from "./log";
 
 const invoke = vi.fn<(cmd: string) => Promise<unknown>>(async () => {});
 vi.mock("@tauri-apps/api/core", () => ({
@@ -66,11 +66,6 @@ suite("forwardConsole", () => {
     expect(() => target.error("x")).not.toThrow();
     await Promise.resolve();
   });
-});
-
-it("opens the log folder through the host", async () => {
-  await openLogDir();
-  expect(invoke).toHaveBeenCalledWith("open_log_dir");
 });
 
 it("returns the support bundle from the host", async () => {

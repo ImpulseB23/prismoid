@@ -83,7 +83,6 @@ pub fn run() {
         .on_window_event(tray::on_window_event)
         .invoke_handler(tauri::generate_handler![
             get_platform,
-            logging::open_log_dir,
             logging::support_bundle,
             reset::reset_settings,
             reset::reset_all_data,
