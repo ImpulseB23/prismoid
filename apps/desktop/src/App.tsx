@@ -1,6 +1,7 @@
 import {
   Component,
   Match,
+  Show,
   Switch,
   createEffect,
   createRenderEffect,
@@ -21,7 +22,7 @@ import { offerTour } from "./stores/tourStore";
 import { logo, palette } from "./stores/themeStore";
 import SignIn from "./components/SignIn";
 import UpdateNotice from "./components/UpdateNotice";
-import UpdateScreen from "./components/UpdateScreen";
+import UpdateScreen, { screenFor } from "./components/UpdateScreen";
 import { getAuthStatus, logout } from "./lib/twitchAuth";
 import {
   authStatus,
@@ -39,6 +40,8 @@ import { clearMentions } from "./stores/mentionsStore";
 import { clearRoles, loadModeratedChannels } from "./stores/roleStore";
 import { trackActiveStream } from "./stores/streamStore";
 import { initWhatsNew } from "./stores/whatsNewStore";
+import { trackWindowChrome } from "./stores/windowStore";
+import TitleBar from "./components/TitleBar";
 import {
   dismissUpdate,
   installUpdate,
@@ -72,6 +75,15 @@ const App: Component = () => {
   onMount(() => onCleanup(scheduleUpdateChecks()));
   onMount(() => {
     initWhatsNew().catch((err: unknown) => console.error("whats new", err));
+  });
+  // The listener resolves after an await, outside the owner, so the stop
+  // function is kept and released from a cleanup registered up front.
+  let stopChrome: (() => void) | undefined;
+  onCleanup(() => stopChrome?.());
+  onMount(() => {
+    trackWindowChrome()
+      .then((stop) => (stopChrome = stop))
+      .catch((err: unknown) => console.error("window chrome", err));
   });
 
   // The moderated-channel list needs its own scope, so it is fetched once
@@ -131,6 +143,14 @@ const App: Component = () => {
         onRetry={() => void installUpdate()}
         onDismiss={dismissUpdate}
       />
+      {/* The chat header carries the window buttons; every other screen gets the bare bar. */}
+      <Show
+        when={
+          auth()?.state !== "logged_in" || screenFor(updateState()) !== null
+        }
+      >
+        <TitleBar />
+      </Show>
     </div>
   );
 };

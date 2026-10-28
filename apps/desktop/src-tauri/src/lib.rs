@@ -153,6 +153,13 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
         Some(vec![tray::MINIMIZED_ARG]),
     ))?;
     tray::install(app.handle())?;
+    // Windows gets the in-app title bar (the frontend draws the buttons when
+    // it sees an undecorated window); other platforms keep native chrome.
+    // Done before the first show so the native frame never flashes.
+    #[cfg(windows)]
+    if let Some(window) = app.get_webview_window("main") {
+        window.set_decorations(false)?;
+    }
     if !tray::launched_minimized(std::env::args()) {
         tray::show_main(app.handle());
     }

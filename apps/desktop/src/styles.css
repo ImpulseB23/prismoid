@@ -294,8 +294,6 @@ option::checkmark {
   color: var(--select-text);
 }
 
-/* Header */
-
 .header {
   display: flex;
   align-items: center;
@@ -305,6 +303,10 @@ option::checkmark {
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   user-select: none;
+}
+
+.header--chrome {
+  padding-right: 0;
 }
 
 .header__logo {
@@ -3018,6 +3020,46 @@ option::checkmark {
 .thread__quoted {
   color: var(--text-muted);
   font-style: italic;
+}
+
+/* In-app title bar (Windows, where the native frame is off) */
+
+.window-controls {
+  display: flex;
+  align-self: stretch;
+  margin-left: 4px;
+}
+
+.window-controls__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  color: var(--text-muted);
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+
+.window-controls__btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.window-controls__btn--close:hover {
+  background: #e81123;
+  color: #ffffff;
+}
+
+.titlebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: flex-end;
+  height: 32px;
 }
 
 /* Prismoid theme: dark with the logo's prism worked through the whole
