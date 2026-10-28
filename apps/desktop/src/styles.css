@@ -331,6 +331,7 @@ option::checkmark {
 }
 
 .tabs__strip {
+  position: relative;
   display: flex;
   align-items: stretch;
   gap: 2px;
@@ -350,7 +351,7 @@ option::checkmark {
   align-items: center;
   gap: 6px;
   max-width: 180px;
-  padding: 0 6px 0 8px;
+  padding: 0 5px 0 8px;
   border-bottom: 2px solid transparent;
   color: var(--text-muted);
   font-family: var(--font-mono);
@@ -372,7 +373,7 @@ option::checkmark {
 }
 
 /* Sits in the tab's transparent bottom border, so it is always the tab's
-   exact width. */
+   exact width. ChannelTabs slides it over on a switch. */
 .tab--active::after {
   content: "";
   position: absolute;
@@ -412,15 +413,19 @@ option::checkmark {
   text-align: center;
 }
 
+/* Always takes its room so hovering never shifts the tabs; faint until the
+   tab is hovered. */
 .tab__close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   width: 16px;
   height: 16px;
+  padding: 0;
   border-radius: 4px;
   color: var(--text-faint);
-  opacity: 0;
+  opacity: 0.45;
   transition:
     opacity 0.15s,
     background 0.15s,
@@ -514,14 +519,16 @@ option::checkmark {
   animation: card-in 0.15s ease;
 }
 
+/* Shared entrance for menus, cards, dialogs and the Settings page: a short
+   scale up from 98% with a fade, so things arrive rather than appear. */
 @keyframes card-in {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: scale(1);
   }
 }
 
@@ -788,6 +795,10 @@ option::checkmark {
   border-left: 2px solid transparent;
   white-space: normal;
   overflow-wrap: break-word;
+  /* A sent message settles from faded to solid once Twitch confirms it. */
+  transition:
+    opacity 0.25s ease,
+    background-color 0.12s;
 }
 
 .msg--alt {
@@ -1342,6 +1353,7 @@ option::checkmark {
 /* Dialogs (settings, user card) share the picker's card recipe */
 
 .dialog-backdrop {
+  animation: fade-in 0.15s ease;
   position: fixed;
   inset: 0;
   background: var(--overlay);
@@ -1512,7 +1524,7 @@ option::checkmark {
   background: var(--text-muted);
   transform: translate(0, -50%);
   transition:
-    transform 0.15s,
+    transform 0.26s cubic-bezier(0.34, 1.56, 0.64, 1),
     background 0.15s;
 }
 
@@ -3691,5 +3703,38 @@ option::checkmark {
   .skeleton,
   .stream-bar--in {
     animation: none;
+  }
+}
+
+/* Counters arrive with a small pop so a new count catches the eye once. */
+@keyframes count-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.tab__unread,
+.icon-btn__badge,
+.cc-handle__count,
+.modbar__count {
+  animation: count-pop 0.28s ease-out;
+}
+
+/* People who ask Windows for less motion get none of the above. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

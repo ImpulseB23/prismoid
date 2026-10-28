@@ -3,7 +3,15 @@
 // picker. Ctrl+Tab cycles, Ctrl+1..9 jump, Ctrl+W closes, middle click
 // closes.
 
-import { Component, For, Show, onCleanup, onMount } from "solid-js";
+import {
+  Component,
+  For,
+  Show,
+  createEffect,
+  on,
+  onCleanup,
+  onMount,
+} from "solid-js";
 import {
   activeChannel,
   channelTabs,
@@ -17,6 +25,36 @@ const report = (what: string) => (err: unknown) => console.error(what, err);
 
 const ChannelTabs: Component = () => {
   let strip: HTMLDivElement | undefined;
+  const tabEls = new Map<string, HTMLElement>();
+
+  // The active tab draws its own underline, so it always matches the tab's
+  // width. On a switch it slides over from the old tab (FLIP): it starts
+  // where the old underline was and eases into place.
+  createEffect(
+    on(
+      () => activeChannel()?.id,
+      (id, prev) => {
+        if (id === undefined || prev === undefined || id === prev) return;
+        const from = tabEls.get(prev);
+        const to = tabEls.get(id);
+        if (!from || !to || to.offsetWidth === 0) return;
+        if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+        to.animate?.(
+          [
+            {
+              transform: `translateX(${from.offsetLeft - to.offsetLeft}px) scaleX(${from.offsetWidth / to.offsetWidth})`,
+            },
+            { transform: "none" },
+          ],
+          {
+            duration: 240,
+            easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
+            pseudoElement: "::after",
+          },
+        );
+      },
+    ),
+  );
 
   const show = (id: string) =>
     void focusChannel(id).catch(report("focus channel"));
@@ -73,6 +111,10 @@ const ChannelTabs: Component = () => {
             const unread = () => unreadCount(channel.id);
             return (
               <div
+                ref={(el) => {
+                  tabEls.set(channel.id, el);
+                  onCleanup(() => tabEls.delete(channel.id));
+                }}
                 class="tab"
                 classList={{ "tab--active": active() }}
                 role="tab"
