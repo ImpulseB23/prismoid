@@ -16,7 +16,12 @@ export type ChannelError =
   | { kind: "auth"; message: string }
   | { kind: "http"; message: string }
   | { kind: "helix"; status: number; message: string }
-  | { kind: "invalid_setting"; message: string };
+  | { kind: "invalid_setting"; message: string }
+  | { kind: "not_live"; message: string }
+  | { kind: "marker_unavailable"; message: string }
+  | { kind: "shoutout_cooldown"; message: string }
+  | { kind: "shoutout_needs_viewers"; message: string }
+  | { kind: "already_pinned"; message: string };
 
 /** Opens a channel as a tab and shows it. */
 export function joinChannel(login: string): Promise<Channel> {
@@ -70,6 +75,16 @@ export function formatChannelError(e: unknown): string {
     case "auth":
     case "invalid_setting":
       return e.message;
+    case "not_live":
+      return "You need to be live for that.";
+    case "marker_unavailable":
+      return "Markers need a live stream with VODs on, and not a rerun.";
+    case "shoutout_cooldown":
+      return "Shoutouts are on cooldown: one every 2 minutes, and the same channel once an hour.";
+    case "shoutout_needs_viewers":
+      return "Shoutouts need you live with at least one viewer.";
+    case "already_pinned":
+      return "That message is already pinned.";
   }
 }
 

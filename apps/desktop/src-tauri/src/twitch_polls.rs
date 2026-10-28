@@ -148,7 +148,7 @@ pub fn validate_prediction(p: &NewPrediction) -> Result<(), ChannelError> {
     )
 }
 
-fn optional_ts(value: Option<String>) -> Result<Option<i64>, ParseError> {
+pub(crate) fn optional_ts(value: Option<String>) -> Result<Option<i64>, ParseError> {
     value
         .filter(|s| !s.is_empty())
         .map(|s| parse_platform_ts(&s))

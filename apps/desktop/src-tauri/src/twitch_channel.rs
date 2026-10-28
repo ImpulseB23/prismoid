@@ -191,6 +191,26 @@ pub enum ChannelError {
     InvalidSetting {
         message: String,
     },
+    /// Clips need the channel to be live.
+    NotLive {
+        message: String,
+    },
+    /// Markers need a live stream with VODs on that is not a rerun.
+    MarkerUnavailable {
+        message: String,
+    },
+    /// Shoutouts are limited to one every 2 minutes and one per target
+    /// every 60 minutes.
+    ShoutoutCooldown {
+        message: String,
+    },
+    /// Shoutouts need the channel to be live with at least one viewer.
+    ShoutoutNeedsViewers {
+        message: String,
+    },
+    AlreadyPinned {
+        message: String,
+    },
 }
 
 impl From<AuthError> for ChannelError {
@@ -843,14 +863,35 @@ pub(crate) async fn helix_write<B: Serialize + ?Sized>(
     access_token: &str,
     body: &B,
 ) -> Result<reqwest::Response, ChannelError> {
-    let resp = http
-        .request(method, url)
+    helix_checked(helix_request(http, method, url, query, access_token).json(body)).await
+}
+
+/// [`helix_write`] for endpoints that take only query parameters.
+pub(crate) async fn helix_send(
+    http: &reqwest::Client,
+    method: reqwest::Method,
+    url: String,
+    query: &[(&str, &str)],
+    access_token: &str,
+) -> Result<reqwest::Response, ChannelError> {
+    helix_checked(helix_request(http, method, url, query, access_token)).await
+}
+
+fn helix_request(
+    http: &reqwest::Client,
+    method: reqwest::Method,
+    url: String,
+    query: &[(&str, &str)],
+    access_token: &str,
+) -> reqwest::RequestBuilder {
+    http.request(method, url)
         .query(query)
         .header("Client-Id", TWITCH_CLIENT_ID)
         .bearer_auth(access_token)
-        .json(body)
-        .send()
-        .await?;
+}
+
+async fn helix_checked(req: reqwest::RequestBuilder) -> Result<reqwest::Response, ChannelError> {
+    let resp = req.send().await?;
     let status = resp.status();
     if !status.is_success() {
         let message = resp.text().await.unwrap_or_default();

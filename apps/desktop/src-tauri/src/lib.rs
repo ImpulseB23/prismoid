@@ -22,6 +22,7 @@ pub mod twitch_channel_info;
 pub mod twitch_chat_settings;
 pub mod twitch_irc;
 pub mod twitch_polls;
+pub mod twitch_quick_actions;
 mod uninstall;
 pub mod youtube_auth;
 
@@ -144,6 +145,16 @@ pub fn run() {
             twitch_polls::twitch_lock_prediction,
             twitch_polls::twitch_resolve_prediction,
             twitch_polls::twitch_cancel_prediction,
+            twitch_quick_actions::twitch_create_marker,
+            twitch_quick_actions::twitch_create_clip,
+            twitch_quick_actions::twitch_get_clip,
+            twitch_quick_actions::twitch_send_shoutout,
+            twitch_quick_actions::twitch_send_announcement,
+            twitch_quick_actions::twitch_get_shield_mode,
+            twitch_quick_actions::twitch_set_shield_mode,
+            twitch_quick_actions::twitch_get_pinned_message,
+            twitch_quick_actions::twitch_pin_message,
+            twitch_quick_actions::twitch_unpin_message,
         ])
         .setup(setup)
         .run(tauri::generate_context!())
