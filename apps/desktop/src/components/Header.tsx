@@ -65,6 +65,7 @@ import {
   whatsNewUnseen,
 } from "../stores/whatsNewStore";
 import Settings from "./Settings";
+import { displayVersion } from "../lib/version";
 import { logo } from "../stores/themeStore";
 
 export interface HeaderProps {
@@ -268,7 +269,7 @@ const Header: Component<HeaderProps> = (props) => {
     const u = updateState();
     if (u.kind === "available")
       return {
-        text: `Update to ${u.version} is ready`,
+        text: `Update to ${displayVersion(u.version)} is ready`,
         section: "updates",
       };
     const s = state();
@@ -279,7 +280,7 @@ const Header: Component<HeaderProps> = (props) => {
     const updated = updatedTo();
     if (whatsNewUnseen() && updated)
       return {
-        text: `Updated to ${updated}`,
+        text: `Updated to ${displayVersion(updated)}`,
         section: "updates",
       };
     if (!settings().setupDone && tourStep() === null)

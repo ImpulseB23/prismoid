@@ -4,6 +4,7 @@
 
 import { Component, Show } from "solid-js";
 import type { UpdateState } from "../stores/updateStore";
+import { displayVersion } from "../lib/version";
 
 export interface Notice {
   text: string;
@@ -15,7 +16,7 @@ export function noticeFor(state: UpdateState): Notice | null {
   switch (state.kind) {
     case "available":
       return {
-        text: `Version ${state.version} is ready.`,
+        text: `Version ${displayVersion(state.version)} is ready.`,
         action: "Install and restart",
         error: false,
       };
