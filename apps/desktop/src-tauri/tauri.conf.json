@@ -26,10 +26,10 @@
     "windows": [
       {
         "title": "Prismoid",
-        "width": 400,
-        "height": 700,
-        "minWidth": 320,
-        "minHeight": 400,
+        "width": 560,
+        "height": 900,
+        "minWidth": 480,
+        "minHeight": 600,
         "resizable": true,
         "center": true,
         "visible": false

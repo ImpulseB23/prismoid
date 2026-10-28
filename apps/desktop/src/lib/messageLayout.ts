@@ -25,8 +25,8 @@ export const MESSAGE_FONT_FAMILY =
 export const TIMESTAMP_FONT_FAMILY = '"JetBrains Mono", Consolas, monospace';
 
 /** Chat text sizes in px, stepped through with Ctrl +/- and Ctrl+scroll. */
-export const TEXT_SIZES = [11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 28, 32];
-export const DEFAULT_TEXT_SIZE = 15;
+export const TEXT_SIZES = [14, 15, 16, 18, 20, 22, 24, 27, 30, 34, 40];
+export const DEFAULT_TEXT_SIZE = 20;
 
 /** Everything in a chat row that scales with the text size. */
 export interface TextMetrics {
