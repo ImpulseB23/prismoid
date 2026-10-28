@@ -333,6 +333,17 @@ mod tests {
     }
 
     #[test]
+    fn tail_skips_a_file_rotated_away_mid_read() {
+        let dir = tempfile::tempdir().unwrap();
+        write(dir.path(), "Prismoid.log", "new 1\n");
+        let files = [
+            dir.path().join("Prismoid_2026-10-27_08-00-00.log"),
+            dir.path().join("Prismoid.log"),
+        ];
+        assert_eq!(read_tail(&files, 1024), "--- Prismoid.log ---\nnew 1\n");
+    }
+
+    #[test]
     fn missing_log_dir_gives_no_files() {
         let dir = tempfile::tempdir().unwrap();
         assert!(log_files(&dir.path().join("logs"), "Prismoid").is_empty());

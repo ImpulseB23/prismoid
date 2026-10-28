@@ -672,12 +672,14 @@ mod tests {
         let other = history.clone();
         history.store(&[msg("a", "c", "u", 1, 0)]);
         assert_eq!(ids(&history.load("c".into(), 10).await), ["a"]);
+        assert_eq!(history.sent_counts("u".into(), 0).await["c"], 1);
 
         history.close().await.unwrap();
         std::fs::remove_dir_all(dir.path()).unwrap();
 
         other.store(&[msg("b", "c", "u", 2, 1)]);
         assert!(other.load("c".into(), 10).await.is_empty());
+        assert!(other.sent_counts("u".into(), 0).await.is_empty());
         other.close().await.unwrap();
         assert!(!dir.path().exists());
     }
