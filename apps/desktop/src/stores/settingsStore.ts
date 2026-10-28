@@ -53,7 +53,9 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 /** Same ladder browsers use between 75% and 200%. */
-export const ZOOM_LEVELS = [0.75, 0.875, 1, 1.125, 1.25, 1.5, 1.75, 2];
+export const ZOOM_LEVELS = [
+  0.5, 0.625, 0.75, 0.875, 1, 1.125, 1.25, 1.5, 1.75, 2, 2.5, 3,
+];
 
 export interface SettingsAppliers {
   alwaysOnTop: (value: boolean) => Promise<void>;
