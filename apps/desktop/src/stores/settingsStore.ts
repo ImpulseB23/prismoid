@@ -32,6 +32,8 @@ export interface Settings {
   chatBacklog: boolean;
   /** The welcome tour has been finished or skipped. */
   tourDone: boolean;
+  /** Chime and flash the taskbar when mentioned in the background. */
+  mentionAlerts: boolean;
 }
 
 /** Twitch caps timeouts at two weeks. */
@@ -50,6 +52,7 @@ export const DEFAULT_SETTINGS: Settings = {
   followBrowser: false,
   chatBacklog: true,
   tourDone: false,
+  mentionAlerts: true,
 };
 
 /** Same ladder browsers use between 75% and 200%. */
@@ -177,6 +180,10 @@ function readSettings(storage: StorageLike | null): Settings {
         typeof p.tourDone === "boolean"
           ? p.tourDone
           : DEFAULT_SETTINGS.tourDone,
+      mentionAlerts:
+        typeof p.mentionAlerts === "boolean"
+          ? p.mentionAlerts
+          : DEFAULT_SETTINGS.mentionAlerts,
     };
   } catch {
     return DEFAULT_SETTINGS;

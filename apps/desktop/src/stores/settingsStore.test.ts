@@ -64,6 +64,7 @@ describe("settingsStore", () => {
       followBrowser: false,
       chatBacklog: true,
       tourDone: false,
+      mentionAlerts: true,
     });
   });
 
@@ -106,6 +107,7 @@ describe("settingsStore", () => {
           alwaysOnTop: true,
           zoom: 1.5,
           showTimestamps: "yes",
+          mentionAlerts: false,
         }),
       }),
     );
@@ -121,6 +123,7 @@ describe("settingsStore", () => {
       followBrowser: false,
       chatBacklog: true,
       tourDone: false,
+      mentionAlerts: false,
     });
 
     const badZoom = createSettingsStore(

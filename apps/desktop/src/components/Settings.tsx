@@ -371,6 +371,23 @@ const Settings: Component<SettingsProps> = (props) => {
           </label>
           <label class="settings__row settings__row--toggle">
             <div class="settings__text">
+              <span class="settings__name">Ping when mentioned</span>
+              <span class="settings__hint">
+                A short chime and a flashing taskbar button when someone
+                mentions you while prismoid is in the background
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              class="switch"
+              checked={settings().mentionAlerts}
+              onChange={(e) =>
+                run(updateSettings({ mentionAlerts: e.currentTarget.checked }))
+              }
+            />
+          </label>
+          <label class="settings__row settings__row--toggle">
+            <div class="settings__text">
               <span class="settings__name">Flag new accounts</span>
               <span class="settings__hint">
                 Mark messages from accounts created in the last week

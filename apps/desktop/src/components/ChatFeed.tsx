@@ -42,6 +42,8 @@ import {
 } from "../stores/channelStore";
 import { isIgnored, setIgnored, settings } from "../stores/settingsStore";
 import { isHighlighted } from "../lib/highlight";
+import { createMentionAlert, playChime } from "../lib/mentionAlert";
+import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import {
   banUser,
   deleteMessage,
@@ -164,6 +166,12 @@ export interface ChatFeedProps {
 }
 
 const ChatFeed: Component<ChatFeedProps> = (props) => {
+  const mentionAlert = createMentionAlert({
+    focused: () => document.hasFocus(),
+    chime: playChime,
+    flash: () =>
+      getCurrentWindow().requestUserAttention(UserAttentionType.Informational),
+  });
   let containerRef: HTMLDivElement | undefined;
   const entryCache = new Map<number, CachedEntry>();
   let lastBadgeRev = 0;
@@ -453,6 +461,19 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       for (const m of event.payload) {
         if (m.platform === "Twitch" && !isForChannel(m, id) && !m.notice) {
           noteUnread(m.channel_id);
+        }
+        if (
+          settings().mentionAlerts &&
+          !m.notice &&
+          m.username !== props.login &&
+          !ignored.includes(m.username) &&
+          isHighlighted(
+            m.message_text,
+            props.login,
+            settings().highlightPhrases,
+          )
+        ) {
+          mentionAlert.notify();
         }
       }
       for (const m of accepted) {
