@@ -104,7 +104,7 @@ import {
   type PreparedMessage,
 } from "../lib/messageLayout";
 import { normalizeUserColor } from "../lib/messageStyle";
-import logo from "../assets/logo.svg";
+import { isLight, logo } from "../stores/themeStore";
 import MessagePieces from "./MessagePieces";
 import UserCard, { type CardUser } from "./UserCard";
 import EmoteCard from "./EmoteCard";
@@ -1037,7 +1037,12 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                               ? "Account created in the last week"
                               : undefined
                           }
-                          style={{ color: normalizeUserColor(row().msg.color) }}
+                          style={{
+                            color: normalizeUserColor(
+                              row().msg.color,
+                              isLight(),
+                            ),
+                          }}
                           onClick={(e) => {
                             e.stopPropagation();
                             openCard(row().msg);
@@ -1133,7 +1138,7 @@ const EmptyState: Component<{ loading: boolean }> = (props) => {
     <div class="feed__empty" aria-live="polite">
       <Show
         when={channel()?.profile_image_url}
-        fallback={<img class="feed__empty-logo" src={logo} alt="" />}
+        fallback={<img class="feed__empty-logo" src={logo()} alt="" />}
       >
         {(url) => <img src={url()} alt="" />}
       </Show>

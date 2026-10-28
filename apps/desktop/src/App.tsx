@@ -3,6 +3,7 @@ import {
   Match,
   Switch,
   createEffect,
+  createRenderEffect,
   on,
   onCleanup,
   onMount,
@@ -16,7 +17,7 @@ import ModBar from "./components/ModBar";
 import StreamBar from "./components/StreamBar";
 import Tour from "./components/Tour";
 import { offerTour } from "./stores/tourStore";
-import logo from "./assets/logo.svg";
+import { logo, palette } from "./stores/themeStore";
 import SignIn from "./components/SignIn";
 import UpdateNotice from "./components/UpdateNotice";
 import UpdateScreen from "./components/UpdateScreen";
@@ -46,6 +47,11 @@ const App: Component = () => {
   // `null` = still loading initial status; the splash avoids a flash of
   // the SignIn overlay before the keychain check returns.
   const auth = authStatus;
+
+  // Render effect so the palette is on <html> before the first paint.
+  createRenderEffect(() => {
+    document.documentElement.dataset.theme = palette();
+  });
 
   onMount(async () => {
     try {
@@ -94,7 +100,7 @@ const App: Component = () => {
       <Switch>
         <Match when={auth() === null}>
           <div class="splash">
-            <img src={logo} alt="" />
+            <img src={logo()} alt="" />
           </div>
         </Match>
         <Match when={auth()?.state === "logged_out"}>

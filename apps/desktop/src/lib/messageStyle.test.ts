@@ -31,6 +31,13 @@ describe("normalizeUserColor", () => {
     expect(out).toMatch(/^#[0-9a-f]{6}$/);
     expect(out).not.toBe("#0000ff");
   });
+
+  it("darkens pale colors on the light palette", () => {
+    const out = normalizeUserColor("#ffff00", true);
+    expect(out).not.toBe("#ffff00");
+    expect(normalizeUserColor("#0000ff", true)).toBe("#0000ff");
+    expect(normalizeUserColor("#000000", true)).toBe("#000000");
+  });
 });
 
 describe("formatTimestamp", () => {
