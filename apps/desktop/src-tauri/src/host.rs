@@ -201,6 +201,22 @@ pub fn build_twitch_connect_line(creds: &TwitchCreds) -> serde_json::Result<Vec<
     Ok(bytes)
 }
 
+/// Serializes a `first_messages` control command line, which starts or
+/// stops the sidecar's first-time chatter watcher.
+pub fn build_first_messages_line(enabled: bool) -> serde_json::Result<Vec<u8>> {
+    #[derive(Serialize)]
+    struct FirstMessagesCmd {
+        cmd: &'static str,
+        enabled: bool,
+    }
+    let mut bytes = serde_json::to_vec(&FirstMessagesCmd {
+        cmd: "first_messages",
+        enabled,
+    })?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
 /// YouTube credentials sourced from environment variables for Phase 0 dev.
 #[derive(Debug, Clone)]
 pub struct YouTubeCreds {
@@ -572,6 +588,9 @@ pub enum SidecarEvent {
     /// deliver the channel's chat to the signed-in user (banned or timed
     /// out there) and the sidecar has stopped that channel's client.
     ChatBanned(ChatBanned),
+    /// `{"type":"first_message","payload":FirstMessage}`. Twitch IRC
+    /// tagged the message as its chatter's first in the channel.
+    FirstMessage(FirstMessage),
     /// A well-formed `{type, payload}` message the host does not yet
     /// recognize. The inner string is the type tag.
     Other(String),
@@ -587,6 +606,15 @@ pub struct ChatBanned {
     pub broadcaster_id: String,
     #[serde(default)]
     pub detail: String,
+}
+
+/// Payload of a `first_message` notification, forwarded to the webview as
+/// the `first_message` event. `message_id` is the IRC `id` tag, which is
+/// the same id EventSub gives the message.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct FirstMessage {
+    pub channel_id: String,
+    pub message_id: String,
 }
 
 /// Parsed payload of a `send_chat_result` notification. Mirrors the
@@ -679,6 +707,16 @@ pub fn parse_sidecar_event(bytes: &[u8]) -> SidecarEvent {
                 Ok(b) => SidecarEvent::ChatBanned(b),
                 Err(e) => {
                     tracing::warn!(error = %e, "chat_banned payload decode failed");
+                    SidecarEvent::Invalid
+                }
+            }
+        }
+        "first_message" => {
+            let payload = env.payload.unwrap_or(serde_json::Value::Null);
+            match serde_json::from_value::<FirstMessage>(payload) {
+                Ok(f) => SidecarEvent::FirstMessage(f),
+                Err(e) => {
+                    tracing::warn!(error = %e, "first_message payload decode failed");
                     SidecarEvent::Invalid
                 }
             }
@@ -1104,6 +1142,34 @@ mod tests {
             parse_sidecar_event(br#"{"type":"chat_banned","payload":{}}"#),
             SidecarEvent::Invalid
         ));
+    }
+
+    #[test]
+    fn parse_sidecar_event_decodes_first_message() {
+        let line = br#"{"type":"first_message","payload":{"channel_id":"42","message_id":"abc"}}"#;
+        match parse_sidecar_event(line) {
+            SidecarEvent::FirstMessage(f) => {
+                assert_eq!(f.channel_id, "42");
+                assert_eq!(f.message_id, "abc");
+            }
+            _ => panic!("expected FirstMessage variant"),
+        }
+        assert!(matches!(
+            parse_sidecar_event(br#"{"type":"first_message","payload":{"channel_id":"42"}}"#),
+            SidecarEvent::Invalid
+        ));
+    }
+
+    #[test]
+    fn first_messages_line_carries_the_switch() {
+        for enabled in [true, false] {
+            let line = build_first_messages_line(enabled).unwrap();
+            assert_eq!(line.last(), Some(&b'\n'));
+            let parsed: serde_json::Value =
+                serde_json::from_slice(&line[..line.len() - 1]).unwrap();
+            assert_eq!(parsed["cmd"], "first_messages");
+            assert_eq!(parsed["enabled"], enabled);
+        }
     }
 
     #[test]

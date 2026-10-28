@@ -218,7 +218,7 @@ func TestHandleTwitchConnect_JoinsSession(t *testing.T) {
 		ClientID:      "cid",
 	}
 
-	HandleTwitchConnect(context.Background(), cmd, clients, session, out, func(string, any) {}, zerolog.Nop())
+	HandleTwitchConnect(context.Background(), cmd, clients, session, idleFirsts(), out, func(string, any) {}, zerolog.Nop())
 
 	if _, ok := clients["broadcaster-1"]; !ok {
 		t.Fatal("expected channel to be registered")
@@ -244,7 +244,7 @@ func TestHandleTwitchConnect_RejectsDuplicate(t *testing.T) {
 	clients["broadcaster-1"] = func() { cancelled.Store(true) }
 
 	cmd := control.Command{Cmd: "twitch_connect", BroadcasterID: "broadcaster-1"}
-	HandleTwitchConnect(context.Background(), cmd, clients, session, out, func(string, any) {}, zerolog.Nop())
+	HandleTwitchConnect(context.Background(), cmd, clients, session, idleFirsts(), out, func(string, any) {}, zerolog.Nop())
 
 	if cancelled.Load() {
 		t.Fatal("existing client cancel was overwritten")
@@ -265,7 +265,7 @@ func TestHandleTwitchDisconnect_CancelsAndLeaves(t *testing.T) {
 	clients["broadcaster-1"] = func() { cancelled.Store(true) }
 
 	cmd := control.Command{Cmd: "twitch_disconnect", BroadcasterID: "broadcaster-1"}
-	HandleTwitchDisconnect(cmd, clients, session, zerolog.Nop())
+	HandleTwitchDisconnect(cmd, clients, session, idleFirsts(), zerolog.Nop())
 
 	if !cancelled.Load() {
 		t.Fatal("expected client to be cancelled")
@@ -283,7 +283,7 @@ func TestHandleTwitchDisconnect_NoOpForUnknown(t *testing.T) {
 	cmd := control.Command{Cmd: "twitch_disconnect", BroadcasterID: "broadcaster-unknown"}
 
 	// should not panic
-	HandleTwitchDisconnect(cmd, clients, idleSession(t), zerolog.Nop())
+	HandleTwitchDisconnect(cmd, clients, idleSession(t), idleFirsts(), zerolog.Nop())
 }
 
 func TestHandleTokenRefresh_UpdatesSession(t *testing.T) {
@@ -315,7 +315,7 @@ func TestDispatchCommand_RoutesTokenRefresh(t *testing.T) {
 	out := make(chan []byte, 1)
 	cmd := control.Command{Cmd: "token_refresh", Token: "new"}
 
-	DispatchCommand(context.Background(), cmd, clients, session, out, func(string, any) {}, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, clients, session, idleFirsts(), out, func(string, any) {}, zerolog.Nop())
 
 	if got := session.AccessToken(); got != "new" {
 		t.Errorf("dispatch did not route token_refresh: token = %q", got)
@@ -331,7 +331,7 @@ func TestDispatchCommand_RoutesConnect(t *testing.T) {
 	out := make(chan []byte, 1)
 	cmd := control.Command{Cmd: "twitch_connect", BroadcasterID: "b1"}
 
-	DispatchCommand(context.Background(), cmd, clients, session, out, func(string, any) {}, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, clients, session, idleFirsts(), out, func(string, any) {}, zerolog.Nop())
 
 	if _, ok := clients["b1"]; !ok {
 		t.Fatal("expected connect to register client")
@@ -347,7 +347,7 @@ func TestDispatchCommand_RoutesDisconnect(t *testing.T) {
 	out := make(chan []byte, 1)
 	cmd := control.Command{Cmd: "twitch_disconnect", BroadcasterID: "b1"}
 
-	DispatchCommand(context.Background(), cmd, clients, idleSession(t), out, func(string, any) {}, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, clients, idleSession(t), idleFirsts(), out, func(string, any) {}, zerolog.Nop())
 
 	if !cancelled.Load() {
 		t.Fatal("expected disconnect to cancel client")
@@ -360,7 +360,7 @@ func TestDispatchCommand_IgnoresUnknown(t *testing.T) {
 	cmd := control.Command{Cmd: "frobnicate"}
 
 	// should not panic, should not modify clients
-	DispatchCommand(context.Background(), cmd, clients, idleSession(t), out, func(string, any) {}, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, clients, idleSession(t), idleFirsts(), out, func(string, any) {}, zerolog.Nop())
 
 	if len(clients) != 0 {
 		t.Fatalf("expected no clients, got %d", len(clients))
@@ -1110,7 +1110,7 @@ func TestDispatchCommand_RoutesKickConnect(t *testing.T) {
 	out := make(chan []byte, 1)
 	cmd := control.Command{Cmd: "kick_connect", ChatroomID: 777}
 
-	DispatchCommand(context.Background(), cmd, clients, idleSession(t), out, func(string, any) {}, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, clients, idleSession(t), idleFirsts(), out, func(string, any) {}, zerolog.Nop())
 
 	if _, ok := clients["kick:777"]; !ok {
 		t.Fatal("expected kick_connect to register client")
@@ -1126,7 +1126,7 @@ func TestDispatchCommand_RoutesKickDisconnect(t *testing.T) {
 	out := make(chan []byte, 1)
 	cmd := control.Command{Cmd: "kick_disconnect", ChatroomID: 777}
 
-	DispatchCommand(context.Background(), cmd, clients, idleSession(t), out, func(string, any) {}, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, clients, idleSession(t), idleFirsts(), out, func(string, any) {}, zerolog.Nop())
 
 	if !cancelled.Load() {
 		t.Fatal("expected kick_disconnect to cancel client")
@@ -1219,7 +1219,7 @@ func TestDispatchCommand_RoutesYouTubeConnect(t *testing.T) {
 	out := make(chan []byte, 1)
 	cmd := control.Command{Cmd: "youtube_connect", LiveChatID: "xyz", APIKey: "k"}
 
-	DispatchCommand(context.Background(), cmd, clients, idleSession(t), out, func(string, any) {}, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, clients, idleSession(t), idleFirsts(), out, func(string, any) {}, zerolog.Nop())
 
 	if _, ok := clients["yt:xyz"]; !ok {
 		t.Fatal("expected youtube_connect to register client")
@@ -1235,7 +1235,7 @@ func TestDispatchCommand_RoutesYouTubeDisconnect(t *testing.T) {
 	out := make(chan []byte, 1)
 	cmd := control.Command{Cmd: "youtube_disconnect", LiveChatID: "xyz"}
 
-	DispatchCommand(context.Background(), cmd, clients, idleSession(t), out, func(string, any) {}, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, clients, idleSession(t), idleFirsts(), out, func(string, any) {}, zerolog.Nop())
 
 	if !cancelled.Load() {
 		t.Fatal("expected youtube_disconnect to cancel client")
@@ -1296,7 +1296,7 @@ func TestDispatchCommand_RoutesSendChatMessage(t *testing.T) {
 		_ = p
 	}
 	cmd := control.Command{Cmd: "send_chat_message", RequestID: 11}
-	DispatchCommand(context.Background(), cmd, map[string]context.CancelFunc{}, idleSession(t), make(chan []byte, 1), notify, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, map[string]context.CancelFunc{}, idleSession(t), idleFirsts(), make(chan []byte, 1), notify, zerolog.Nop())
 	if typ != "send_chat_result" {
 		t.Fatalf("expected dispatch to invoke HandleSendChatMessage, got notify type %q", typ)
 	}

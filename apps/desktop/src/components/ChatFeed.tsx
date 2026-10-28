@@ -94,7 +94,16 @@ import {
 } from "../stores/userInfoStore";
 import { requestMention, requestReply } from "../stores/composerStore";
 import {
+  isFirstMessage,
+  markFirstMessage,
+  type FirstMessage,
+} from "../stores/firstMessageStore";
+import {
   BADGE_GAP_PX,
+  FIRST_CHIP_FONT,
+  FIRST_CHIP_GAP_PX,
+  FIRST_CHIP_PADDING_X,
+  FIRST_CHIP_TEXT,
   MESSAGE_FONT_FAMILY,
   MEASURED_FONTS,
   MESSAGE_PADDING_X,
@@ -294,6 +303,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     const msgRev = messageRevision();
     const timestamps = settings().showTimestamps;
     const metrics = textMetrics(settings().textSize);
+    const markFirsts = settings().highlightFirstMessages;
     if (!fontsLoaded() || w <= 0 || v.count === 0) {
       return { messages: [], byMono: new Map(), totalHeight: 0 };
     }
@@ -328,12 +338,23 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     for (let mono = liveStart; mono < liveEnd; mono++) {
       const msg = getMessage(mono);
       if (!msg) continue;
+      // The first-message mark can land after the row was measured; the
+      // chip takes width, so the row is prepared again.
+      const first = markFirsts && !msg.notice && isFirstMessage(msg.id);
       let entry = entryCache.get(mono);
-      if (entry === undefined || entry.measuredWidth !== w) {
+      if (
+        entry === undefined ||
+        entry.measuredWidth !== w ||
+        entry.prepared.firstMessage !== first
+      ) {
         const prepared =
-          entry !== undefined
+          entry !== undefined && entry.prepared.firstMessage === first
             ? entry.prepared
-            : prepareMessage(msg, resolveBadge, { timestamps, metrics });
+            : prepareMessage(msg, resolveBadge, {
+                timestamps,
+                metrics,
+                firstMessage: first,
+              });
         const height = measureMessageHeight(prepared, w);
         entry = { prepared, height, measuredWidth: w };
         entryCache.set(mono, entry);
@@ -563,6 +584,14 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       .then(retain)
       .catch((err) => console.error("failed to listen for chat bans:", err));
 
+    listen<FirstMessage>("first_message", (event) => {
+      markFirstMessage(event.payload.message_id);
+    })
+      .then(retain)
+      .catch((err) =>
+        console.error("failed to listen for first messages:", err),
+      );
+
     // The host emits a bundle per channel join; only the tab on screen
     // applies it, the rest are fetched when their tab is shown.
     listen<EmoteBundle & EmoteBundleSets>("emote_bundle", (event) => {
@@ -779,6 +808,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                         settings().highlightUsers,
                         settings().highlightBadges,
                       ),
+                    "msg--first": row().prepared.firstMessage,
                   }}
                   style={{
                     transform: `translateY(${row().top}px)`,
@@ -1039,6 +1069,18 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                     when={row().prepared.notice}
                     fallback={
                       <>
+                        <Show when={row().prepared.firstMessage}>
+                          <span
+                            class="msg__first"
+                            style={{
+                              font: FIRST_CHIP_FONT,
+                              padding: `1px ${FIRST_CHIP_PADDING_X}px`,
+                              "margin-right": `${FIRST_CHIP_GAP_PX}px`,
+                            }}
+                          >
+                            {FIRST_CHIP_TEXT}
+                          </span>
+                        </Show>
                         <For each={row().prepared.badges}>
                           {(b) => (
                             <img

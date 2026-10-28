@@ -216,6 +216,7 @@ func RunCommandLoop(ctx context.Context, scanner *bufio.Scanner, encoder *json.E
 	// One EventSub socket carries every joined Twitch channel; Twitch caps
 	// sockets at three per user, so a socket per channel would cap tabs.
 	session := twitch.NewSession(ctx, out, logger.With().Str("component", "eventsub").Logger(), notify)
+	firsts := newFirstMessages(ctx, notify, logger)
 
 	// Heartbeat counter is scoped to this loop's lifetime. Monotonic gaps let
 	// the host watchdog detect missed ticks even if the underlying clock is
@@ -241,7 +242,7 @@ func RunCommandLoop(ctx context.Context, scanner *bufio.Scanner, encoder *json.E
 				return err
 			}
 		case cmd := <-cmdCh:
-			DispatchCommand(ctx, cmd, clients, session, out, notify, logger)
+			DispatchCommand(ctx, cmd, clients, session, firsts, out, notify, logger)
 		}
 	}
 }
@@ -269,12 +270,14 @@ func makeNotify(encoder *json.Encoder, encoderMu *sync.Mutex, logger zerolog.Log
 }
 
 // DispatchCommand routes a control.Command to its handler.
-func DispatchCommand(ctx context.Context, cmd control.Command, clients map[string]context.CancelFunc, session *twitch.Session, out chan<- []byte, notify twitch.Notify, logger zerolog.Logger) {
+func DispatchCommand(ctx context.Context, cmd control.Command, clients map[string]context.CancelFunc, session *twitch.Session, firsts *firstMessages, out chan<- []byte, notify twitch.Notify, logger zerolog.Logger) {
 	switch cmd.Cmd {
 	case "twitch_connect":
-		HandleTwitchConnect(ctx, cmd, clients, session, out, notify, logger)
+		HandleTwitchConnect(ctx, cmd, clients, session, firsts, out, notify, logger)
 	case "twitch_disconnect":
-		HandleTwitchDisconnect(cmd, clients, session, logger)
+		HandleTwitchDisconnect(cmd, clients, session, firsts, logger)
+	case "first_messages":
+		firsts.setEnabled(cmd.Enabled)
 	case "token_refresh":
 		HandleTokenRefresh(cmd, session, logger)
 	case "youtube_connect":
@@ -657,7 +660,7 @@ func youtubeErrorCode(err error) string {
 // 7TV + BTTV + FFZ) and emits it as a single `emote_bundle` control message.
 // Each channel gets its own cancel context: twitch_disconnect ends an
 // in-flight bundle fetch and the IRC fallback reader, if one is up.
-func HandleTwitchConnect(ctx context.Context, cmd control.Command, clients map[string]context.CancelFunc, session *twitch.Session, out chan<- []byte, notify twitch.Notify, logger zerolog.Logger) {
+func HandleTwitchConnect(ctx context.Context, cmd control.Command, clients map[string]context.CancelFunc, session *twitch.Session, firsts *firstMessages, out chan<- []byte, notify twitch.Notify, logger zerolog.Logger) {
 	if _, exists := clients[cmd.BroadcasterID]; exists {
 		logger.Warn().Str("broadcaster", cmd.BroadcasterID).Msg("already connected, ignoring")
 		return
@@ -666,6 +669,7 @@ func HandleTwitchConnect(ctx context.Context, cmd control.Command, clients map[s
 	clientCtx, clientCancel := context.WithCancel(ctx)
 	clients[cmd.BroadcasterID] = clientCancel
 
+	firsts.join(cmd.BroadcasterID, cmd.ChannelLogin)
 	session.Configure(cmd.UserID, cmd.Token, cmd.ClientID)
 	session.Join(cmd.BroadcasterID, func(string) {
 		// Twitch still delivers the channel over IRC, so reading moves
@@ -763,7 +767,7 @@ func buildFetcher(cmd control.Command) *emotes.Fetcher {
 }
 
 // HandleTwitchDisconnect leaves a joined channel and cancels its work.
-func HandleTwitchDisconnect(cmd control.Command, clients map[string]context.CancelFunc, session *twitch.Session, logger zerolog.Logger) {
+func HandleTwitchDisconnect(cmd control.Command, clients map[string]context.CancelFunc, session *twitch.Session, firsts *firstMessages, logger zerolog.Logger) {
 	cancelFn, exists := clients[cmd.BroadcasterID]
 	if !exists {
 		logger.Warn().Str("broadcaster", cmd.BroadcasterID).Msg("no active connection to disconnect")
@@ -772,6 +776,7 @@ func HandleTwitchDisconnect(cmd control.Command, clients map[string]context.Canc
 	cancelFn()
 	delete(clients, cmd.BroadcasterID)
 	session.Leave(cmd.BroadcasterID)
+	firsts.part(cmd.BroadcasterID)
 	logger.Info().Str("broadcaster", cmd.BroadcasterID).Msg("twitch channel left")
 }
 

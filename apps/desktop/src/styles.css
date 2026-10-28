@@ -1485,7 +1485,24 @@ img {
   vertical-align: 1px;
 }
 
-/* Mentions, replies and links in the feed */
+/* First-time chatters, mentions, replies and links in the feed. A first
+   message sits ahead of mention so a mention's tint wins on the same row. */
+
+.msg--first {
+  background: rgba(58, 183, 191, 0.08);
+  border-left-color: var(--color-teal);
+}
+
+.msg--first:hover {
+  background: rgba(58, 183, 191, 0.15);
+}
+
+.msg__first {
+  border-radius: 999px;
+  background: rgba(58, 183, 191, 0.18);
+  color: var(--color-teal);
+  white-space: nowrap;
+}
 
 .msg--mention {
   background: rgba(111, 56, 201, 0.14);
