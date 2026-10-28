@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatUptime, formatViewers } from "./streamInfo";
+import {
+  formatAdLength,
+  formatClock,
+  formatTime,
+  formatUptime,
+  formatViewers,
+} from "./streamInfo";
 
 describe("formatViewers", () => {
   it("compacts thousands and millions", () => {
@@ -22,5 +28,27 @@ describe("formatUptime", () => {
 
   it("returns empty for an unparsable start", () => {
     expect(formatUptime("nope", 0)).toBe("");
+  });
+});
+
+describe("formatClock", () => {
+  it("shows m:ss under an hour and h:mm:ss above", () => {
+    expect(formatClock(252_000)).toBe("4:12");
+    expect(formatClock(8_048_000)).toBe("2:14:08");
+    expect(formatClock(-5)).toBe("0:00");
+  });
+});
+
+describe("formatAdLength", () => {
+  it("uses minutes only for whole minutes", () => {
+    expect(formatAdLength(30)).toBe("30 sec");
+    expect(formatAdLength(90)).toBe("90 sec");
+    expect(formatAdLength(180)).toBe("3 min");
+  });
+});
+
+describe("formatTime", () => {
+  it("shows hours and minutes", () => {
+    expect(formatTime(Date.UTC(2026, 9, 24, 20, 5))).toMatch(/05/);
   });
 });

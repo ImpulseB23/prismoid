@@ -14,17 +14,11 @@ import {
 import { LIMITS, type Category } from "../../lib/streamManager";
 import { formatChannelError } from "../../lib/twitchChannel";
 import {
-  currentUserId,
-  streamManagerNeedsReconnect,
-} from "../../stores/authStore";
-import {
   categoryResults,
   categorySearchError,
   categorySearching,
   channelInfoError,
   channelInfoPending,
-  clearStreamManager,
-  loadStreamManager,
   searchCategories,
   streamChannelInfo,
   streamManagerLoading,
@@ -35,18 +29,6 @@ const boxArt = (c: Category) =>
   c.box_art_url.replace("{width}", "52").replace("{height}", "72");
 
 const StreamSetup: Component = () => {
-  // Loads for the signed-in account, again after a reconnect adds the
-  // permission, and drops the old account's data on a switch.
-  createEffect(
-    on(
-      () => (streamManagerNeedsReconnect() ? null : currentUserId()),
-      (owner) => {
-        clearStreamManager();
-        if (owner !== null) void loadStreamManager();
-      },
-    ),
-  );
-
   const [title, setTitle] = createSignal("");
   // null means the category is unchanged; an empty id clears it.
   const [category, setCategory] = createSignal<Pick<
@@ -112,129 +94,115 @@ const StreamSetup: Component = () => {
     <section class="sm-card stream-info" aria-label="Stream setup">
       <h3 class="sm-card__title">Stream setup</h3>
       <Show
-        when={!streamManagerNeedsReconnect()}
+        when={streamChannelInfo()}
         fallback={
-          <div class="dialog__error">
-            Editing your stream needs a new Twitch permission. Reconnect Twitch
-            in Prismoid's Settings, under Account.
+          <div class="cc__empty">
+            {streamManagerLoading() || !channelInfoError()
+              ? "Loading"
+              : formatChannelError(channelInfoError())}
           </div>
         }
       >
-        <Show
-          when={streamChannelInfo()}
-          fallback={
-            <div class="cc__empty">
-              {streamManagerLoading() || !channelInfoError()
-                ? "Loading"
-                : formatChannelError(channelInfoError())}
-            </div>
-          }
-        >
-          <label class="stream-info__field">
-            <span class="stream-info__label">
-              Title
-              <span
-                class="stream-info__count"
-                classList={{
-                  "stream-info__count--full":
-                    title().length >= LIMITS.titleChars,
-                }}
-              >
-                {LIMITS.titleChars - title().length}
-              </span>
-            </span>
-            <textarea
-              class="settings__input stream-info__title"
-              rows="2"
-              maxLength={LIMITS.titleChars}
-              value={title()}
-              onInput={(e) => setTitle(e.currentTarget.value)}
-            />
-          </label>
-
-          <div class="stream-info__field">
-            <span class="stream-info__label">Category</span>
-            <div class="stream-info__category">
-              <span classList={{ "stream-info__none": !shownCategory() }}>
-                {shownCategory() || "No category"}
-              </span>
-              <Show when={shownCategory()}>
-                <button
-                  type="button"
-                  class="btn btn--small btn--outline"
-                  onClick={() => pick({ id: "", name: "" })}
-                >
-                  Clear
-                </button>
-              </Show>
-            </div>
-            <input
-              type="text"
-              class="settings__input"
-              placeholder="Search categories"
-              aria-label="Search categories"
-              value={query()}
-              onInput={(e) => onQuery(e.currentTarget.value)}
-            />
-            <Show when={query().trim()}>
-              <Show
-                when={!categorySearchError()}
-                fallback={
-                  <div class="dialog__error">
-                    {formatChannelError(categorySearchError())}
-                  </div>
-                }
-              >
-                <ul
-                  class="stream-info__results"
-                  aria-busy={categorySearching()}
-                >
-                  <For
-                    each={categoryResults()}
-                    fallback={
-                      <li class="cc__empty">
-                        {categorySearching() ? "Searching" : "No matches"}
-                      </li>
-                    }
-                  >
-                    {(c) => (
-                      <li>
-                        <button
-                          type="button"
-                          class="stream-info__result"
-                          onClick={() => pick(c)}
-                        >
-                          <img src={boxArt(c)} alt="" width="26" height="36" />
-                          <span>{c.name}</span>
-                        </button>
-                      </li>
-                    )}
-                  </For>
-                </ul>
-              </Show>
-            </Show>
-          </div>
-
-          <div class="stream-info__actions">
-            <button
-              type="button"
-              class="btn btn--small btn--primary"
-              disabled={!changes() || channelInfoPending()}
-              onClick={() => void save()}
+        <label class="stream-info__field">
+          <span class="stream-info__label">
+            Title
+            <span
+              class="stream-info__count"
+              classList={{
+                "stream-info__count--full": title().length >= LIMITS.titleChars,
+              }}
             >
-              {channelInfoPending() ? "Saving" : "Save"}
-            </button>
-            <Show when={saved()}>
-              <span class="stream-info__saved">Saved</span>
+              {LIMITS.titleChars - title().length}
+            </span>
+          </span>
+          <textarea
+            class="settings__input stream-info__title"
+            rows="2"
+            maxLength={LIMITS.titleChars}
+            value={title()}
+            onInput={(e) => setTitle(e.currentTarget.value)}
+          />
+        </label>
+
+        <div class="stream-info__field">
+          <span class="stream-info__label">Category</span>
+          <div class="stream-info__category">
+            <span classList={{ "stream-info__none": !shownCategory() }}>
+              {shownCategory() || "No category"}
+            </span>
+            <Show when={shownCategory()}>
+              <button
+                type="button"
+                class="btn btn--small btn--outline"
+                onClick={() => pick({ id: "", name: "" })}
+              >
+                Clear
+              </button>
             </Show>
           </div>
-          <Show when={channelInfoError()}>
-            {(err) => (
-              <div class="dialog__error" role="alert">
-                {formatChannelError(err())}
-              </div>
-            )}
+          <input
+            type="text"
+            class="settings__input"
+            placeholder="Search categories"
+            aria-label="Search categories"
+            value={query()}
+            onInput={(e) => onQuery(e.currentTarget.value)}
+          />
+          <Show when={query().trim()}>
+            <Show
+              when={!categorySearchError()}
+              fallback={
+                <div class="dialog__error">
+                  {formatChannelError(categorySearchError())}
+                </div>
+              }
+            >
+              <ul class="stream-info__results" aria-busy={categorySearching()}>
+                <For
+                  each={categoryResults()}
+                  fallback={
+                    <li class="cc__empty">
+                      {categorySearching() ? "Searching" : "No matches"}
+                    </li>
+                  }
+                >
+                  {(c) => (
+                    <li>
+                      <button
+                        type="button"
+                        class="stream-info__result"
+                        onClick={() => pick(c)}
+                      >
+                        <img src={boxArt(c)} alt="" width="26" height="36" />
+                        <span>{c.name}</span>
+                      </button>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
           </Show>
+        </div>
+
+        <div class="stream-info__actions">
+          <button
+            type="button"
+            class="btn btn--small btn--primary"
+            disabled={!changes() || channelInfoPending()}
+            onClick={() => void save()}
+          >
+            {channelInfoPending() ? "Saving" : "Save"}
+          </button>
+          <Show when={saved()}>
+            <span class="stream-info__saved">Saved</span>
+          </Show>
+        </div>
+        <Show when={channelInfoError()}>
+          {(err) => (
+            <div class="dialog__error" role="alert">
+              {formatChannelError(err())}
+            </div>
+          )}
         </Show>
       </Show>
     </section>

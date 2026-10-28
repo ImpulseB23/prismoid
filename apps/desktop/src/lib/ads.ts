@@ -6,6 +6,9 @@ import { invoke } from "@tauri-apps/api/core";
 /** Longest commercial Twitch runs, in seconds. */
 export const COMMERCIAL_MAX_SECS = 180;
 
+/** What "Run ad" asks for until the user picks a length. */
+export const DEFAULT_COMMERCIAL_SECS = 90;
+
 export interface AdSchedule {
   /** Unix ms, like every timestamp here; null when nothing is scheduled or the channel is offline. */
   next_ad_at: number | null;
