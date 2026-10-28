@@ -78,8 +78,9 @@ enum Op {
 
 enum Msg {
     Op(Op),
-    /// Closes the database and ends the thread, then answers.
-    Close(oneshot::Sender<()>),
+    /// Closes the database and ends the thread, then answers with how the
+    /// close went.
+    Close(oneshot::Sender<rusqlite::Result<()>>),
 }
 
 /// Handle to the history thread. Empty when the store could not be opened,
@@ -168,14 +169,13 @@ impl History {
 
     /// Closes the database for good and waits until its files are released,
     /// so they can be deleted. Every handle goes quiet afterwards: writes
-    /// are dropped and loads come back empty.
-    pub async fn close(&self) {
-        let Some(tx) = &self.tx else {
-            return;
-        };
+    /// are dropped and loads come back empty. A store that never opened or
+    /// is already closed has nothing to release.
+    pub async fn close(&self) -> rusqlite::Result<()> {
         let (done, rx) = oneshot::channel();
-        if tx.send(Msg::Close(done)).is_ok() {
-            let _ = rx.await;
+        match &self.tx {
+            Some(tx) if tx.send(Msg::Close(done)).is_ok() => rx.await.unwrap_or(Ok(())),
+            _ => Ok(()),
         }
     }
 
@@ -230,10 +230,7 @@ impl Store {
                     // Closing the last connection checkpoints the WAL and
                     // removes its side files. Parked loads get dropped
                     // replies, which read as empty.
-                    if let Err((_, e)) = self.conn.close() {
-                        tracing::error!(error = %e, "chat history close failed");
-                    }
-                    let _ = done.send(());
+                    let _ = done.send(self.conn.close().map_err(|(_, e)| e));
                     return;
                 }
             }
@@ -676,13 +673,18 @@ mod tests {
         history.store(&[msg("a", "c", "u", 1, 0)]);
         assert_eq!(ids(&history.load("c".into(), 10).await), ["a"]);
 
-        history.close().await;
+        history.close().await.unwrap();
         std::fs::remove_dir_all(dir.path()).unwrap();
 
         other.store(&[msg("b", "c", "u", 2, 1)]);
         assert!(other.load("c".into(), 10).await.is_empty());
-        other.close().await;
+        other.close().await.unwrap();
         assert!(!dir.path().exists());
+    }
+
+    #[tokio::test]
+    async fn closing_a_store_that_never_opened_is_fine() {
+        History::default().close().await.unwrap();
     }
 
     #[test]

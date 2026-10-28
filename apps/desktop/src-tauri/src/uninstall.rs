@@ -30,19 +30,7 @@ impl UninstallError {
 pub fn uninstall_app<R: Runtime>(app: AppHandle<R>) -> Result<(), UninstallError> {
     #[cfg(windows)]
     {
-        let exe =
-            std::env::current_exe().map_err(|e| UninstallError::not_installed(e.to_string()))?;
-        let dir = exe
-            .parent()
-            .ok_or_else(|| UninstallError::not_installed("exe has no parent dir"))?;
-        let uninstaller = uninstaller_in(dir)?;
-        spawn_detached(&uninstaller).map_err(|e| UninstallError {
-            kind: "launch_failed",
-            message: e.to_string(),
-        })?;
-        tracing::info!(path = %uninstaller.display(), "uninstaller started, exiting");
-        app.exit(0);
-        Ok(())
+        uninstall(std::env::current_exe(), spawn_detached, || app.exit(0))
     }
     #[cfg(not(windows))]
     {
@@ -53,17 +41,31 @@ pub fn uninstall_app<R: Runtime>(app: AppHandle<R>) -> Result<(), UninstallError
     }
 }
 
+/// Starts the uninstaller found next to `exe` with `spawn`, then `exit`s.
 #[cfg(any(windows, test))]
-fn uninstaller_in(exe_dir: &Path) -> Result<PathBuf, UninstallError> {
-    let path = exe_dir.join("uninstall.exe");
-    if path.is_file() {
-        Ok(path)
-    } else {
-        Err(UninstallError::not_installed(format!(
+fn uninstall(
+    exe: std::io::Result<PathBuf>,
+    spawn: impl FnOnce(&Path) -> std::io::Result<()>,
+    exit: impl FnOnce(),
+) -> Result<(), UninstallError> {
+    let exe = exe.map_err(|e| UninstallError::not_installed(e.to_string()))?;
+    let dir = exe
+        .parent()
+        .ok_or_else(|| UninstallError::not_installed("exe has no parent dir"))?;
+    let path = dir.join("uninstall.exe");
+    if !path.is_file() {
+        return Err(UninstallError::not_installed(format!(
             "no uninstaller at {}",
             path.display()
-        )))
+        )));
     }
+    spawn(&path).map_err(|e| UninstallError {
+        kind: "launch_failed",
+        message: e.to_string(),
+    })?;
+    tracing::info!(path = %path.display(), "uninstaller started, exiting");
+    exit();
+    Ok(())
 }
 
 /// Runs the uninstaller with its normal UI, outside this process's console
@@ -90,29 +92,88 @@ fn spawn_detached(path: &Path) -> std::io::Result<()> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn finds_the_uninstaller_next_to_the_exe() {
+    use std::cell::{Cell, RefCell};
+    use std::io;
+
+    /// Runs `uninstall` for an exe at `exe`, recording what got spawned and
+    /// whether the app exited.
+    fn run(
+        exe: io::Result<PathBuf>,
+        spawn_result: io::Result<()>,
+    ) -> (Result<(), UninstallError>, Option<PathBuf>, bool) {
+        let spawned = RefCell::new(None);
+        let exited = Cell::new(false);
+        let result = uninstall(
+            exe,
+            |path| {
+                *spawned.borrow_mut() = Some(path.to_owned());
+                spawn_result
+            },
+            || exited.set(true),
+        );
+        (result, spawned.into_inner(), exited.get())
+    }
+
+    fn install_dir() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("prismoid.exe"), b"").unwrap();
         std::fs::write(dir.path().join("uninstall.exe"), b"").unwrap();
-        assert_eq!(
-            uninstaller_in(dir.path()).unwrap(),
-            dir.path().join("uninstall.exe")
-        );
+        dir
+    }
+
+    #[test]
+    fn starts_the_uninstaller_next_to_the_exe_then_exits() {
+        let dir = install_dir();
+        let (result, spawned, exited) = run(Ok(dir.path().join("prismoid.exe")), Ok(()));
+        result.unwrap();
+        assert_eq!(spawned, Some(dir.path().join("uninstall.exe")));
+        assert!(exited);
     }
 
     #[test]
     fn missing_uninstaller_is_not_installed() {
         let dir = tempfile::tempdir().unwrap();
-        let err = uninstaller_in(dir.path()).unwrap_err();
+        let exe = dir.path().join("prismoid.exe");
+        let (result, spawned, exited) = run(Ok(exe.clone()), Ok(()));
+        let err = result.unwrap_err();
         assert_eq!(err.kind, "not_installed");
         assert!(err.message.contains("uninstall.exe"));
+        assert_eq!((spawned, exited), (None, false));
 
         std::fs::create_dir(dir.path().join("uninstall.exe")).unwrap();
+        assert_eq!(run(Ok(exe), Ok(())).0.unwrap_err().kind, "not_installed");
+    }
+
+    #[test]
+    fn unknown_exe_location_is_not_installed() {
+        let (result, spawned, exited) = run(Err(io::Error::other("no exe path")), Ok(()));
         assert_eq!(
-            uninstaller_in(dir.path()).unwrap_err().kind,
-            "not_installed"
+            result.unwrap_err(),
+            UninstallError::not_installed("no exe path")
         );
+        assert_eq!((spawned, exited), (None, false));
+
+        let (result, _, exited) = run(Ok(PathBuf::new()), Ok(()));
+        assert_eq!(result.unwrap_err().kind, "not_installed");
+        assert!(!exited);
+    }
+
+    #[test]
+    fn a_failed_spawn_keeps_the_app_running() {
+        let dir = install_dir();
+        let (result, spawned, exited) = run(
+            Ok(dir.path().join("prismoid.exe")),
+            Err(io::Error::other("access denied")),
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            UninstallError {
+                kind: "launch_failed",
+                message: "access denied".into()
+            }
+        );
+        assert!(spawned.is_some());
+        assert!(!exited);
     }
 
     #[test]

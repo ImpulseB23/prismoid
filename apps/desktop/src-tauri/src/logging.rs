@@ -53,21 +53,29 @@ pub fn open_log_dir<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
 pub async fn support_bundle<R: Runtime>(app: AppHandle<R>) -> Result<String, String> {
     let dir = app.path().app_log_dir().map_err(|e| e.to_string())?;
     let info = app.package_info();
-    let header = format!(
-        "Prismoid {}\nOS: {}\nArch: {}\nWebView2: {}\n",
-        info.version,
-        os_info::get(),
-        std::env::consts::ARCH,
-        tauri::webview_version().unwrap_or_else(|_| "unknown".into()),
+    let header = header(
+        &info.version.to_string(),
+        &os_info::get().to_string(),
+        tauri::webview_version().ok(),
     );
     // The plugin names its file after the product name.
     let stem = info.name.clone();
-    let tail = tauri::async_runtime::spawn_blocking(move || {
-        read_tail(&log_files(&dir, &stem), BUNDLE_LOG_BYTES)
-    })
-    .await
-    .map_err(|e| e.to_string())?;
-    Ok(redact(&format!("{header}\n{tail}")))
+    tauri::async_runtime::spawn_blocking(move || bundle(&header, &dir, &stem))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+fn header(version: &str, os: &str, webview: Option<String>) -> String {
+    format!(
+        "Prismoid {version}\nOS: {os}\nArch: {}\nWebView2: {}\n",
+        std::env::consts::ARCH,
+        webview.as_deref().unwrap_or("unknown"),
+    )
+}
+
+fn bundle(header: &str, dir: &Path, stem: &str) -> String {
+    let tail = read_tail(&log_files(dir, stem), BUNDLE_LOG_BYTES);
+    redact(&format!("{header}\n{tail}"))
 }
 
 /// The plugin's files for `stem`, oldest first: rotated copies named
@@ -292,6 +300,35 @@ mod tests {
                 "Prismoid_2026-10-27_08-00-00.log",
                 "Prismoid.log"
             ]
+        );
+    }
+
+    #[test]
+    fn header_names_version_platform_and_webview() {
+        let arch = std::env::consts::ARCH;
+        assert_eq!(
+            header("0.6.0", "Windows 11", Some("130.0.2849.80".into())),
+            format!("Prismoid 0.6.0\nOS: Windows 11\nArch: {arch}\nWebView2: 130.0.2849.80\n")
+        );
+        assert!(header("0.6.0", "Windows 11", None).ends_with("WebView2: unknown\n"));
+    }
+
+    #[test]
+    fn bundle_is_header_then_redacted_tail() {
+        let dir = tempfile::tempdir().unwrap();
+        write(
+            dir.path(),
+            "Prismoid.log",
+            "[INFO] joined\n[ERROR] webview: open prismoid://auth/twitch#access_token=abc123\n",
+        );
+        assert_eq!(
+            bundle("Prismoid 0.6.0\n", dir.path(), "Prismoid"),
+            "Prismoid 0.6.0\n\n--- Prismoid.log ---\n[INFO] joined\n\
+             [ERROR] webview: open prismoid://auth/twitch#access_token=[redacted]\n"
+        );
+        assert_eq!(
+            bundle("Prismoid 0.6.0\n", &dir.path().join("none"), "Prismoid"),
+            "Prismoid 0.6.0\n\n"
         );
     }
 
