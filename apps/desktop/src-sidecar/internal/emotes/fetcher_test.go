@@ -161,6 +161,20 @@ func TestEmote_OwnerWireShape(t *testing.T) {
 	}
 }
 
+func TestEmote_AddedWireShape(t *testing.T) {
+	raw, err := json.Marshal(Emote{
+		ID: "1", Code: "A", Provider: Provider7TV, URL1x: "u",
+		AddedAt: 1622025395000, AddedByID: "01FE",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"id":"1","code":"A","provider":"7tv","url_1x":"u","added_at":1622025395000,"added_by_id":"01FE"}`
+	if string(raw) != want {
+		t.Errorf("got %s\nwant %s", raw, want)
+	}
+}
+
 func findSubstring(s, sub string) int {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {

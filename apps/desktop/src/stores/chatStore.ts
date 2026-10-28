@@ -20,6 +20,13 @@ export interface EmoteMeta {
    * `id` is the account id on that provider, not a Twitch id.
    */
   owner?: { id?: string; login?: string; display_name: string };
+  /** Unix ms the emote was added to the channel's set. 7TV channel emotes only. */
+  added_at?: number;
+  /**
+   * 7TV user id of whoever added the emote to the channel's set. Resolve the
+   * name with `getSevenTvUsers`.
+   */
+  added_by_id?: string;
 }
 
 /**

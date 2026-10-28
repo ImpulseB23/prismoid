@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,6 +16,8 @@ const sevenTVSampleSet = `{
     {
       "id": "60ae958e229664e8667aea38",
       "name": "PepegaAim",
+      "timestamp": 1653443428000,
+      "actor_id": null,
       "data": {
         "animated": true,
         "flags": 256,
@@ -84,6 +87,9 @@ func TestSevenTV_FetchGlobal(t *testing.T) {
 	if e.Owner == nil || *e.Owner != want {
 		t.Errorf("owner = %+v", e.Owner)
 	}
+	if e.AddedAt != 0 || e.AddedByID != "" {
+		t.Errorf("global emote has added fields: %d %q", e.AddedAt, e.AddedByID)
+	}
 }
 
 func TestSevenTV_OwnerFallbacks(t *testing.T) {
@@ -127,7 +133,47 @@ func TestSevenTV_FetchChannel(t *testing.T) {
 		t.Errorf("wrong scope/channel: %+v", set)
 	}
 	if len(set.Emotes) != 1 {
-		t.Errorf("emotes = %d, want 1", len(set.Emotes))
+		t.Fatalf("emotes = %d, want 1", len(set.Emotes))
+	}
+	if e := set.Emotes[0]; e.AddedAt != 1653443428000 || e.AddedByID != "" {
+		t.Errorf("added = %d %q", e.AddedAt, e.AddedByID)
+	}
+}
+
+func sevenTVSetEntry(id, actor string, ts int64) string {
+	actorJSON := "null"
+	if actor != "" {
+		actorJSON = `"` + actor + `"`
+	}
+	return fmt.Sprintf(`{"id":%q,"name":%q,"timestamp":%d,"actor_id":%s,"data":{"host":{"url":"//cdn.7tv.app/emote/%s","files":[{"name":"1x.webp","format":"WEBP"}]}}}`, id, id, ts, actorJSON, id)
+}
+
+func TestSevenTV_FetchChannelAdded(t *testing.T) {
+	set := `{"emote_set":{"emotes":[` + strings.Join([]string{
+		sevenTVSetEntry("a", "01FE9DRF000009TR6M9N941CYW", 1622025395000),
+		sevenTVSetEntry("b", "", 1653443428000),
+	}, ",") + `]}}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/twitch/71092938" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(set))
+	}))
+	defer srv.Close()
+
+	c := &SevenTVClient{HTTPClient: srv.Client(), BaseURL: srv.URL}
+	got, err := c.FetchChannel(context.Background(), "71092938")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Emotes) != 2 {
+		t.Fatalf("emotes = %d", len(got.Emotes))
+	}
+	if e := got.Emotes[0]; e.AddedAt != 1622025395000 || e.AddedByID != "01FE9DRF000009TR6M9N941CYW" {
+		t.Errorf("a: %d %q", e.AddedAt, e.AddedByID)
+	}
+	if e := got.Emotes[1]; e.AddedAt != 1653443428000 || e.AddedByID != "" {
+		t.Errorf("null actor: %d %q", e.AddedAt, e.AddedByID)
 	}
 }
 

@@ -8,6 +8,7 @@ mod message;
 pub mod oauth_pkce;
 pub mod ringbuf;
 mod seventv_paints;
+mod seventv_users;
 mod sidecar_commands;
 #[cfg(windows)]
 mod sidecar_job;
@@ -115,6 +116,7 @@ pub fn run() {
             sidecar_supervisor::current_sidecar_status,
             seventv_paints::current_seventv_paints,
             seventv_paints::set_seventv_paints,
+            seventv_users::seventv_users,
             chat_history::chat_history,
             twitch_chat_settings::twitch_get_chat_settings,
             twitch_chat_settings::twitch_update_chat_settings,
@@ -163,6 +165,7 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
             return Ok(());
         }
     };
+    app.manage(seventv_users::SevenTvUsers::new(http_client.clone()));
     let auth = Arc::new(
         AuthManager::builder(TWITCH_CLIENT_ID)
             .scope(Scope::UserReadChat)

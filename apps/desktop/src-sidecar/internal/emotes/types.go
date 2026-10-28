@@ -43,6 +43,12 @@ type Emote struct {
 	ZeroWidth bool `json:"zero_width,omitempty"`
 	// Owner is who uploaded the emote, nil when the provider does not say.
 	Owner *EmoteOwner `json:"owner,omitempty"`
+	// AddedAt is when the emote joined the channel's set, in unix
+	// milliseconds. Only 7TV channel sets report it.
+	AddedAt int64 `json:"added_at,omitempty"`
+	// AddedByID is the 7TV user id of whoever added the emote to the
+	// channel's set. The host resolves it to a name on demand.
+	AddedByID string `json:"added_by_id,omitempty"`
 }
 
 // EmoteOwner identifies an emote's uploader. ID is the account id on the

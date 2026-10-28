@@ -41,7 +41,7 @@ func (c *SevenTVClient) FetchChannel(ctx context.Context, twitchUserID string) (
 		Provider:  Provider7TV,
 		Scope:     ScopeChannel,
 		ChannelID: twitchUserID,
-		Emotes:    user.EmoteSet.toEmotes(),
+		Emotes:    user.EmoteSet.toChannelEmotes(),
 	}, nil
 }
 
@@ -101,11 +101,15 @@ type sevenTVUser struct {
 
 // sevenTVEmote is an entry inside an emote set's `emotes` array. The name
 // at this level can override `data.name` (user-customized alias); we prefer
-// the outer name to match what the chat text would contain.
+// the outer name to match what the chat text would contain. Timestamp
+// (unix ms) and ActorID record when and by which 7TV user the emote was
+// added to the set; ActorID is null on some old entries.
 type sevenTVEmote struct {
-	ID   string           `json:"id"`
-	Name string           `json:"name"`
-	Data sevenTVEmoteData `json:"data"`
+	ID        string           `json:"id"`
+	Name      string           `json:"name"`
+	Timestamp int64            `json:"timestamp"`
+	ActorID   string           `json:"actor_id"`
+	Data      sevenTVEmoteData `json:"data"`
 }
 
 type sevenTVEmoteData struct {
@@ -139,28 +143,50 @@ const sevenTVFlagZeroWidth = 1 << 8
 func (s sevenTVEmoteSet) toEmotes() []Emote {
 	out := make([]Emote, 0, len(s.Emotes))
 	for _, e := range s.Emotes {
-		u1, u2, u4, w, h := pickSevenTVFiles(e.Data.Host)
-		if u1 == "" {
+		if em, ok := e.toEmote(); ok {
+			out = append(out, em)
+		}
+	}
+	return out
+}
+
+// toChannelEmotes is toEmotes plus when and by whom each emote was added,
+// which only means something for a channel's own set.
+func (s sevenTVEmoteSet) toChannelEmotes() []Emote {
+	out := make([]Emote, 0, len(s.Emotes))
+	for _, e := range s.Emotes {
+		em, ok := e.toEmote()
+		if !ok {
 			continue
 		}
-		em := Emote{
-			ID:        e.ID,
-			Code:      e.Name,
-			Provider:  Provider7TV,
-			URL1x:     u1,
-			URL2x:     u2,
-			URL4x:     u4,
-			Width:     w,
-			Height:    h,
-			Animated:  e.Data.Animated,
-			ZeroWidth: e.Data.Flags&sevenTVFlagZeroWidth != 0,
-		}
-		if o := e.Data.Owner; o != nil {
-			em.Owner = newEmoteOwner(o.ID, o.Username, o.DisplayName)
-		}
+		em.AddedAt = e.Timestamp
+		em.AddedByID = e.ActorID
 		out = append(out, em)
 	}
 	return out
+}
+
+func (e sevenTVEmote) toEmote() (Emote, bool) {
+	u1, u2, u4, w, h := pickSevenTVFiles(e.Data.Host)
+	if u1 == "" {
+		return Emote{}, false
+	}
+	em := Emote{
+		ID:        e.ID,
+		Code:      e.Name,
+		Provider:  Provider7TV,
+		URL1x:     u1,
+		URL2x:     u2,
+		URL4x:     u4,
+		Width:     w,
+		Height:    h,
+		Animated:  e.Data.Animated,
+		ZeroWidth: e.Data.Flags&sevenTVFlagZeroWidth != 0,
+	}
+	if o := e.Data.Owner; o != nil {
+		em.Owner = newEmoteOwner(o.ID, o.Username, o.DisplayName)
+	}
+	return em, true
 }
 
 // pickSevenTVFiles selects the webp variants for 1x/2x/4x from the provider's
