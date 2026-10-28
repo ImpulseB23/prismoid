@@ -13,6 +13,8 @@ import ChatFeed from "./components/ChatFeed";
 import Header from "./components/Header";
 import MessageInput from "./components/MessageInput";
 import StreamBar from "./components/StreamBar";
+import Tour from "./components/Tour";
+import { offerTour } from "./stores/tourStore";
 import logo from "./assets/logo.svg";
 import SignIn from "./components/SignIn";
 import UpdateNotice from "./components/UpdateNotice";
@@ -131,6 +133,7 @@ const ChatShell: Component<{ login: string; onSignOut: () => void }> = (
     // install. Errors land in the channel store and surface through the
     // picker, so nothing to handle here.
     void restoreChannels(props.login);
+    offerTour();
 
     // The host reports the channel open in the front browser window while
     // "Follow my browser" is on. Registration is async, so a disposal that
@@ -162,6 +165,7 @@ const ChatShell: Component<{ login: string; onSignOut: () => void }> = (
       <StreamBar />
       <ChatFeed login={props.login} />
       <MessageInput login={props.login} />
+      <Tour />
     </>
   );
 };

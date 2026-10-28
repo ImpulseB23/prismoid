@@ -64,6 +64,7 @@ describe("settingsStore", () => {
       timeoutPresets: [60, 600, 3600, 86_400],
       followBrowser: false,
       chatBacklog: true,
+      tourDone: false,
     });
   });
 
@@ -121,6 +122,7 @@ describe("settingsStore", () => {
       timeoutPresets: [60, 600, 3600, 86_400],
       followBrowser: false,
       chatBacklog: true,
+      tourDone: false,
     });
 
     const badZoom = createSettingsStore(

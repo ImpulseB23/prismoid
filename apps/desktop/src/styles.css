@@ -2062,3 +2062,144 @@ img {
   font-family: var(--font-mono);
   font-size: 11px;
 }
+
+/* Welcome tour */
+
+.tour {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.tour__shade {
+  position: absolute;
+  inset: 0;
+  background: rgba(14, 14, 16, 0.7);
+}
+
+/* The ring's own shadow darkens everything around the highlighted control. */
+.tour__ring {
+  position: absolute;
+  border-radius: var(--radius-md);
+  box-shadow:
+    0 0 0 2px var(--color-purple-light),
+    0 0 0 9999px rgba(14, 14, 16, 0.7);
+  transition:
+    top 0.2s ease,
+    left 0.2s ease,
+    width 0.2s ease,
+    height 0.2s ease;
+  pointer-events: none;
+}
+
+.tour__card {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 16px 16px 14px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  animation: card-in 0.15s ease;
+  outline: none;
+}
+
+.tour__card--top {
+  top: 12px;
+  bottom: auto;
+}
+
+.tour__progress {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.tour__progress span {
+  width: 18px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+}
+
+.tour__progress .tour__dot--on {
+  background: var(--color-purple-light);
+}
+
+.tour__card h2 {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+
+.tour__card > p {
+  color: var(--text-muted);
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+.tour__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.tour__toggle span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.tour__toggle strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tour__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+.tour__nav {
+  display: flex;
+  gap: 8px;
+}
+
+.tour__skip {
+  background: none;
+  border: 0;
+  padding: 4px 0;
+  color: var(--text-faint);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.tour__skip:hover {
+  color: var(--text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour__ring,
+  .tour__card {
+    transition: none;
+    animation: none;
+  }
+}
