@@ -64,6 +64,7 @@ import {
   userInfoRevision,
 } from "../stores/userInfoStore";
 import MessageRow from "./MessageRow";
+import { jumpToMessage } from "../stores/jumpStore";
 import PaletteClose from "./PaletteClose";
 
 export interface CardUser {
@@ -599,6 +600,10 @@ const UserCard: Component<UserCardProps> = (props) => {
                         <MessageRow
                           msg={m}
                           hideName
+                          onClick={() => {
+                            close();
+                            jumpToMessage(m.channel_id, m.id);
+                          }}
                           mention={isHighlighted(
                             m.message_text,
                             props.login,

@@ -1,9 +1,10 @@
 // Everything said to you this session in any open channel. Picking one
-// jumps to its channel.
+// jumps to it in its channel.
 
 import { Component, For, Show, createEffect } from "solid-js";
 import { createConfirmTap } from "../lib/confirmTap";
-import { channelTabs, focusChannel } from "../stores/channelStore";
+import { channelTabs } from "../stores/channelStore";
+import { jumpToMessage } from "../stores/jumpStore";
 import {
   clearMentions,
   mentions,
@@ -102,7 +103,7 @@ const Mentions: Component = () => {
                         }
                         onClick={() => {
                           close();
-                          void focusChannel(m.channel_id);
+                          jumpToMessage(m.channel_id, m.id);
                         }}
                       />
                     );
@@ -114,7 +115,7 @@ const Mentions: Component = () => {
 
           <Show when={mentions().length > 0}>
             <div class="palette__footer">
-              <span>Click a mention to open its channel</span>
+              <span>Click a mention to jump to it</span>
             </div>
           </Show>
         </div>

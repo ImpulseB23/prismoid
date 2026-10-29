@@ -26,6 +26,7 @@ import {
   suggest,
 } from "../lib/chatSearch";
 import MessageRow from "./MessageRow";
+import { jumpToMessage } from "../stores/jumpStore";
 
 export const MAX_RESULTS = 200;
 
@@ -220,7 +221,17 @@ const ChatSearch: Component<ChatSearchProps> = (props) => {
                 }
               >
                 <ol class="msg-list">
-                  <For each={results()}>{(m) => <MessageRow msg={m} />}</For>
+                  <For each={results()}>
+                    {(m) => (
+                      <MessageRow
+                        msg={m}
+                        onClick={() => {
+                          props.onClose();
+                          jumpToMessage(m.channel_id, m.id);
+                        }}
+                      />
+                    )}
+                  </For>
                 </ol>
               </Show>
             </Show>
