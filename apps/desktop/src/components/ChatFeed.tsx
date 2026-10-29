@@ -134,6 +134,14 @@ import EmoteTooltip from "./EmoteTooltip";
 const OVERSCAN = 6;
 const STICK_THRESHOLD = 40;
 
+// Moments that bring a crowd in at once get the gold edge.
+const CELEBRATIONS = new Set([
+  "raid",
+  "shared_chat_raid",
+  "community_sub_gift",
+  "shared_chat_community_sub_gift",
+]);
+
 // Moderator action rows are made here, not by the host, so they need their
 // own ordering key. Starting far above any host sequence keeps them at the
 // tail where they arrived, the same trick optimistic sends use.
@@ -876,6 +884,9 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                         settings().highlightPhrases,
                       ),
                     "msg--notice": row().msg.notice !== null,
+                    "msg--celebration": CELEBRATIONS.has(
+                      row().msg.notice?.notice_type ?? "",
+                    ),
                     "msg--deleted": row().msg.deleted === true,
                     "msg--alt":
                       settings().alternateRows && row().monoIndex % 2 === 1,

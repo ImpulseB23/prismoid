@@ -2482,6 +2482,10 @@ option::checkmark {
   background: var(--hover);
 }
 
+.msg--celebration {
+  border-image: var(--action) 1;
+}
+
 .msg__notice {
   font-weight: 500;
   color: var(--text-muted);
