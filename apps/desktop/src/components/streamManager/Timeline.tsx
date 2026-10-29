@@ -1,5 +1,5 @@
 // The stream so far as one rail: elapsed time in the prism gradient, the
-// events this window knows about where they happened, a line for now and
+// events the app knows about where they happened, a line for now and
 // the next ad ahead of it. Positions are percentages of the visible span,
 // which runs from the stream start to a little past now or the next ad.
 

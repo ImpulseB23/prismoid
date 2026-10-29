@@ -1,7 +1,7 @@
-// What happened on the user's stream while the stream manager was open: ad
-// breaks, markers, and polls and predictions once they end. Twitch keeps no
+// What happened on the user's stream since Prismoid opened: ad breaks,
+// markers, and polls and predictions once they end. Twitch keeps no
 // history the app can read for most of these, so the timeline and the
-// recent lists show only what this window saw or loaded itself.
+// recent lists show only what the app saw or loaded itself.
 
 import { createEffect, createSignal } from "solid-js";
 import type { AdBreak } from "../lib/ads";

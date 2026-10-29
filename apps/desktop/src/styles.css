@@ -4119,10 +4119,6 @@ option::checkmark {
   }
 }
 
-.sm-curtain .sm-now {
-  padding: 14px 16px 12px;
-}
-
 .sm-curtain__body {
   flex: 1;
   min-height: 0;
@@ -4197,106 +4193,7 @@ option::checkmark {
   display: inline-flex;
 }
 
-/* Stream manager window: a title bar, the stream right now with its
-   timeline across the full width, sections on the left and the open
-   section on the right. */
-.sm {
-  display: grid;
-  grid-template-rows: 40px auto minmax(0, 1fr);
-  grid-template-columns: 210px minmax(0, 1fr);
-  height: 100vh;
-  background: var(--bg);
-  font-variant-numeric: tabular-nums;
-}
-
-.sm__bar {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-left: 14px;
-  border-bottom: 1px solid var(--border);
-  user-select: none;
-}
-
-.sm__logo {
-  width: 18px;
-  height: 18px;
-}
-
-.sm__name {
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.sm__empty {
-  grid-column: 1 / -1;
-  grid-row: 2 / -1;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  color: var(--text-muted);
-  font-size: 14px;
-  text-align: center;
-}
-
-.sm__nav {
-  display: flex;
-  flex-direction: column;
-  padding: 6px 10px 16px;
-  border-right: 1px solid var(--border);
-  background: var(--bg-raised);
-  overflow-y: auto;
-}
-
-.sm__content {
-  min-width: 0;
-  padding: 22px 28px 32px;
-  overflow-y: auto;
-}
-
-.sm-nav__group {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.sm-nav__label {
-  padding: 14px 10px 6px;
-  color: var(--text-faint);
-  font-size: 12px;
-}
-
-.sm-nav__item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 36px;
-  padding: 0 10px;
-  border-radius: var(--radius-md);
-  color: var(--text-muted);
-  font-size: 14px;
-  text-align: left;
-  transition:
-    background-color 0.15s,
-    color 0.15s;
-}
-
-.sm-nav__item:hover {
-  background: var(--hover);
-  color: var(--text);
-}
-
-.sm-nav__item--on,
-.sm-nav__item--on:hover {
-  background: var(--select-tint);
-  color: var(--text);
-}
-
-.sm-nav__icon {
-  display: inline-flex;
-}
-
+/* Stream manager: the now strip and timeline, sections and their parts. */
 /* Hidden on screen, read by screen readers. */
 .sm-sr {
   position: absolute;
@@ -4308,8 +4205,7 @@ option::checkmark {
 }
 
 .sm-now {
-  grid-column: 1 / -1;
-  padding: 18px 24px 16px;
+  padding: 14px 16px 12px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-raised);
 }

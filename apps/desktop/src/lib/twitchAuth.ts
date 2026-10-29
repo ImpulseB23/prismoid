@@ -2,7 +2,6 @@
 // apps/desktop/src-tauri/src/twitch_auth/commands.rs.
 
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 export type AuthStatusState = "logged_out" | "logged_in";
@@ -74,13 +73,6 @@ export function enableScopeGroup(group: ScopeGroup): Promise<AuthStatus> {
 
 export function disableScopeGroup(group: ScopeGroup): Promise<AuthStatus> {
   return invoke("twitch_disable_scope_group", { group });
-}
-
-/** Follows sign-ins, reconnects and sign-outs made in any window. */
-export function onAuthChanged(
-  handler: (status: AuthStatus) => void,
-): Promise<UnlistenFn> {
-  return listen<AuthStatus>("twitch_auth_changed", (e) => handler(e.payload));
 }
 
 const ALLOWED_HOSTS = ["www.twitch.tv", "id.twitch.tv"];

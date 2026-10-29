@@ -1,10 +1,8 @@
 import "./styles.css";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { boot } from "./boot";
+import { render } from "solid-js/web";
+import App from "./App";
 import { forwardConsole } from "./lib/log";
 
 forwardConsole();
 
-boot(getCurrentWindow().label, document.getElementById("root")!).catch(
-  (err: unknown) => console.error("failed to boot window", err),
-);
+render(() => <App />, document.getElementById("root")!);
