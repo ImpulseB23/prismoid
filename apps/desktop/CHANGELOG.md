@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.8.3](https://github.com/ImpulseB23/prismoid/compare/v0.8.2...v0.8.3) (2026-10-29)
+
+
+### Bug Fixes
+
+* 0.8.3 what's new notes ([#299](https://github.com/ImpulseB23/prismoid/issues/299)) ([a0a317b](https://github.com/ImpulseB23/prismoid/commit/a0a317baf296218eb11ead78c6f23231a66c9fd0))
+* dev builds no longer install the release over themselves ([#296](https://github.com/ImpulseB23/prismoid/issues/296)) ([391036e](https://github.com/ImpulseB23/prismoid/commit/391036e48591ce7113330150d551437feccd93f4))
+* gold edge on raids and gift bombs ([#292](https://github.com/ImpulseB23/prismoid/issues/292)) ([9c39589](https://github.com/ImpulseB23/prismoid/commit/9c39589e36337d72d5fdd68aa00d06ceb07c0c32))
+* gold edge on the what's new card ([#291](https://github.com/ImpulseB23/prismoid/issues/291)) ([e7b2081](https://github.com/ImpulseB23/prismoid/commit/e7b2081a96dd2b9a6b7950f9b87c5c37ce9a872b))
+* gold install button for updates ([#290](https://github.com/ImpulseB23/prismoid/issues/290)) ([715ebf0](https://github.com/ImpulseB23/prismoid/commit/715ebf0270807930b90ddcc229b2acf482cbd814))
+* gold update progress bar ([#289](https://github.com/ImpulseB23/prismoid/issues/289)) ([1168b0b](https://github.com/ImpulseB23/prismoid/commit/1168b0be221b58512bc04d509337ae407394205a))
+* mention chime preview, volume and foreground option ([#294](https://github.com/ImpulseB23/prismoid/issues/294)) ([c7af6ab](https://github.com/ImpulseB23/prismoid/commit/c7af6ab713786e986011732be15be2f2f24ddb38))
+* reorganize settings so each section owns one thing ([#295](https://github.com/ImpulseB23/prismoid/issues/295)) ([51159cb](https://github.com/ImpulseB23/prismoid/commit/51159cbde7bde71e6946e22199aeb57029867468))
+* settings badge marks the section and row it points at ([#293](https://github.com/ImpulseB23/prismoid/issues/293)) ([1941f00](https://github.com/ImpulseB23/prismoid/commit/1941f00b55e6b6d4bced20b07b4deab0b649cffa))
+* updates download in the background and offer a restart button ([#298](https://github.com/ImpulseB23/prismoid/issues/298)) ([c75df3b](https://github.com/ImpulseB23/prismoid/commit/c75df3bf3470b9b210a3ba6709ee24331713f75b))
+* user card stats wrap instead of clipping long values ([#300](https://github.com/ImpulseB23/prismoid/issues/300)) ([a5b6476](https://github.com/ImpulseB23/prismoid/commit/a5b64760e01100c93da8b4eea35a92d93e386c51))
+* warn and a timeout picker for moderators ([#297](https://github.com/ImpulseB23/prismoid/issues/297)) ([aa7ffb1](https://github.com/ImpulseB23/prismoid/commit/aa7ffb10e61e57c85e6c2e372f71d940d8cdfd18))
+
 ## [0.8.2](https://github.com/ImpulseB23/prismoid/compare/v0.8.1...v0.8.2) (2026-10-29)
 
 
