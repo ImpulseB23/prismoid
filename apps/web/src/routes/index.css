@@ -446,10 +446,13 @@
   border-left: 2px solid var(--band-purple);
 }
 
-.manager__list strong,
-.roadmap__list strong {
-  color: var(--text);
-  font-weight: 600;
+.manager__note {
+  color: var(--text-muted);
+  font-weight: 300;
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  max-width: 40rem;
+  margin-top: var(--space-2xl);
 }
 
 /* cta */

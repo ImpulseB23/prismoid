@@ -61,7 +61,7 @@ function Download(props: { platform: Platform | undefined }) {
       <a
         href={`/download/${target()}`}
         rel="external"
-        class="btn btn-primary btn-hero"
+        class="btn btn-primary btn-gold btn-hero"
       >
         <WindowsIcon /> Download for {PLATFORM_NAMES[target()]}
       </a>
@@ -297,18 +297,20 @@ export default function Home() {
   const platform = createAsync(() => visitorPlatform(), { deferStream: true });
   return (
     <>
-      <Title>prismoid - Twitch chat and your stream, in one window</Title>
+      <Title>
+        prismoid - Twitch chat and a stream manager for your desktop
+      </Title>
       <Meta
         name="description"
-        content="A desktop app for Twitch chat and for running your stream. Tabs, chat history that survives a restart, mod actions you can see, your emotes, and a stream manager for your title, ads, polls and more. Free, open source, ultra lightweight."
+        content="A desktop app for Twitch chat with a stream manager built in. Chat in tabs, history that survives a restart, mod actions you can see and your 7TV, BTTV and FFZ emotes. Your title, ads and polls are a button away. Free and open source."
       />
       <Meta
         property="og:title"
-        content="prismoid - Twitch chat and your stream, in one window"
+        content="prismoid - Twitch chat and a stream manager for your desktop"
       />
       <Meta
         property="og:description"
-        content="Tabs, history, mod actions you can see, your emotes, and a stream manager that drops down over chat. Free, open source, ultra lightweight."
+        content="Twitch chat in tabs with history, visible mod actions and your emotes, plus a stream manager that drops down over chat. Free and open source."
       />
       <Meta property="og:image" content="/icons/icon-512.png" />
       <Meta property="og:url" content="https://prismoid.org" />
@@ -318,16 +320,17 @@ export default function Home() {
         <div class="hero__beam" aria-hidden="true" />
         <div class="hero__copy">
           <h1>
-            Twitch chat and your stream,
+            Your Twitch chat,
             <br />
-            in one window.
+            with the stream controls right above it.
           </h1>
           <p class="lede">
-            prismoid is Twitch chat for your desktop. Every channel in a tab,
-            history that survives a restart, mod actions you can actually see,
-            and your 7TV, BTTV and FFZ emotes. Streaming? Pull down the stream
-            manager to change your title, run a poll or clip the moment without
-            leaving chat. Free, open source, ultra lightweight.
+            prismoid is a desktop app for Twitch chat. Every channel gets a tab,
+            history survives a restart, you see timeouts and bans as they
+            happen, and your 7TV, BTTV and FFZ emotes show up like they should.
+            If you stream, the stream manager drops down over chat so you can
+            change your title, run a poll or clip something without leaving it.
+            It is free and open source.
           </p>
           <div class="hero-actions">
             <Download platform={platform()} />
@@ -352,42 +355,40 @@ export default function Home() {
       </section>
 
       <section class="why">
-        <h2>Light enough to forget it is open.</h2>
+        <h2>Leave it open all stream</h2>
         <div class="why__grid">
           <div class="why__item">
             <Icon name="feather" class="why__icon" />
-            <h3>Ultra lightweight.</h3>
+            <h3>Light on your PC</h3>
             <p>
-              Installs in seconds and sits next to your stream without eating
-              into it. No browser hidden inside the download, nothing running
-              that you did not ask for.
+              It installs quickly and sits next to your stream without taking
+              anything from it. There is no browser bundled into the download,
+              and nothing runs in the background that you did not start.
             </p>
           </div>
           <div class="why__item">
             <Icon name="bolt" class="why__icon" />
-            <h3>Hyper fast.</h3>
+            <h3>Keeps up with big chats</h3>
             <p>
-              Opens instantly and keeps up with the busiest chats on Twitch
-              without a stutter. Scrolling stays smooth when everyone is
-              spamming at once.
+              It opens right away, and scrolling stays smooth even when the
+              biggest channel on Twitch is spamming all at once.
             </p>
           </div>
           <div class="why__item">
             <Icon name="shield" class="why__icon" />
-            <h3>Hard to knock over.</h3>
+            <h3>Gets back up by itself</h3>
             <p>
-              The connection lives in its own little box. If it hiccups, it
-              comes back on its own in seconds while you keep reading, and the
-              window never goes with it.
+              If the connection to Twitch drops, prismoid reconnects in the
+              background while you keep reading. The app stays open the whole
+              time.
             </p>
           </div>
           <div class="why__item">
             <Icon name="direct" class="why__icon" />
-            <h3>Nothing in between.</h3>
+            <h3>Just you and Twitch</h3>
             <p>
-              Your PC talks to Twitch directly. No account with us, no cloud in
-              the middle, nothing to subscribe to, and your sign-in never leaves
-              your machine.
+              Your PC talks straight to Twitch. There is no prismoid account to
+              make or pay for, and your sign-in stays on your machine.
             </p>
           </div>
         </div>
@@ -396,12 +397,12 @@ export default function Home() {
       <section class="moments">
         <div class="moment">
           <Icon name="history" class="moment__icon" />
-          <h2>You tab back and chat is 400 messages ahead.</h2>
+          <h2>You tab back and chat has moved on without you.</h2>
           <p>
-            Scroll up as far as you like. prismoid keeps every channel's chat on
-            your disk and puts it back when you open the channel, restart or
-            not. First time in a channel? It pulls the last few hundred lines
-            anyway, so you never arrive to an empty window.
+            Scroll up as far as you like. prismoid saves each channel's chat on
+            your PC and loads it again when you come back, even after a restart.
+            The first time you open a channel it grabs the recent messages too,
+            so you never start out staring at an empty chat.
           </p>
         </div>
         <div class="moment">
@@ -410,26 +411,27 @@ export default function Home() {
           <p>
             Timeouts, bans and deletions show up in chat as they happen, in
             every channel. Where you moderate, you also get who did it and the
-            reason, and you can act straight from the message: timeout, ban,
-            delete, done.
+            reason, and you can time someone out, ban them or delete the message
+            right from chat.
           </p>
         </div>
         <div class="moment">
           <Icon name="tabs" class="moment__icon" />
-          <h2>Five channels, five windows.</h2>
+          <h2>Your browser is full of chat popouts.</h2>
           <p>
-            Tabs. Ctrl+Tab between them, unread counts on the ones you're not
-            looking at, and all of it on one connection so Twitch never cuts you
-            off for having too many open.
+            Give every channel a tab instead. Ctrl+Tab moves between them, the
+            ones you are not looking at show an unread count, and they all share
+            one connection, so Twitch never cuts you off for having too many
+            open.
           </p>
         </div>
         <div class="moment">
           <Icon name="smile" class="moment__icon" />
-          <h2>Your emotes, in your chat.</h2>
+          <h2>The emotes your chat actually uses</h2>
           <p>
-            7TV, BTTV and FFZ next to Twitch's own, badges and replies drawn the
-            way you expect. Right-click any emote to see what it is and where it
-            came from.
+            7TV, BTTV and FFZ emotes show up next to Twitch's own, and badges
+            and replies look the way you expect. Right-click an emote to see
+            what it is and where it came from.
           </p>
         </div>
         <div class="moment">
@@ -437,105 +439,86 @@ export default function Home() {
           <h2>Watching in the browser anyway?</h2>
           <p>
             Turn on follow mode and prismoid switches to whatever Twitch channel
-            is in your front browser window. Pin it on top of the stream and
-            forget the site's chat exists.
+            is open in your front browser window. Keep it on top of the stream
+            and you can stop using the site's chat.
           </p>
         </div>
       </section>
 
       <section class="manager">
-        <h2>Run your stream without leaving chat.</h2>
+        <h2>If you stream, it all sits behind one button</h2>
         <p class="manager__lede">
-          The stream manager drops down over chat like a curtain from a button
-          in the header. Chat keeps running underneath, and it rolls back up
-          when you are done.
+          Click the stream manager button in the header and it drops down over
+          chat. Chat keeps running underneath, and the panel rolls back up when
+          you are done. In there you can:
         </p>
         <ul class="manager__list">
           <li>
             <Icon name="sliders" class="manager__icon" />
             <p>
-              <strong>Your stream info, right there.</strong> Change the title,
-              category, tags, language, content labels and branded content while
-              chat keeps moving below.
+              Change your title, category, tags, language, content labels and
+              branded content.
             </p>
           </li>
           <li>
             <Icon name="history" class="manager__icon" />
             <p>
-              <strong>The stream so far.</strong> Uptime and viewers at a
-              glance, and a timeline that shows where every ad break, marker and
-              poll landed.
+              Check uptime and viewers, with a timeline of where each ad break,
+              marker and poll landed.
             </p>
           </li>
           <li>
             <Icon name="bolt" class="manager__icon" />
             <p>
-              <strong>The buttons you reach for live.</strong> Drop a marker,
-              clip what just happened, shout out a friend, post an announcement
-              or turn on Shield Mode.
+              Drop a marker, clip what just happened, shout out a friend, post
+              an announcement or turn on Shield Mode.
             </p>
           </li>
           <li>
             <Icon name="poll" class="manager__icon" />
             <p>
-              <strong>Ads, polls and predictions.</strong> See when the next ad
-              is coming, snooze it or run one now. Start a poll or a prediction
-              and watch the votes come in. For Twitch Affiliates and Partners.
-            </p>
-          </li>
-          <li>
-            <Icon name="gavel" class="manager__icon" />
-            <p>
-              <strong>Chat manager for you and your mods.</strong> Room modes as
-              tiles you tap, the AutoMod queue and the mod log, all in one
-              panel.
-            </p>
-          </li>
-          <li>
-            <Icon name="key" class="manager__icon" />
-            <p>
-              <strong>Only asks for what you use.</strong> prismoid asks Twitch
-              for stream permissions when you turn a part of the stream manager
-              on, and not before.
+              See when the next ad is due and snooze it or run one now. If you
+              are an Affiliate or Partner you can also start polls and
+              predictions and watch the votes come in.
             </p>
           </li>
         </ul>
+        <p class="manager__note">
+          Mods get a chat manager panel with room modes, the AutoMod queue and
+          the mod log. prismoid only asks Twitch for stream permissions when you
+          turn a part of the stream manager on, and not before.
+        </p>
       </section>
 
       <section class="roadmap">
-        <h2>What is next.</h2>
+        <h2>Coming later</h2>
         <p class="roadmap__lede">
-          Twitch first, until it is right. Then this, one piece at a time.
+          Twitch comes first until it feels finished. After that, these get
+          added one at a time.
         </p>
         <ul class="roadmap__list">
           <li>
             <Icon name="layers" class="roadmap__icon" />
             <p>
-              <strong>YouTube and Kick in the same window.</strong> Stream to
-              all three, read one chat. Time someone out and it happens where
-              they are.
+              YouTube and Kick chat merged in with Twitch, so you can stream to
+              all three and read a single chat. A timeout lands on whichever
+              platform that person is on.
             </p>
           </li>
           <li>
             <Icon name="cast" class="roadmap__icon" />
             <p>
-              <strong>Chat on your stream.</strong> Drop it into OBS straight
-              from the app, every platform in one feed, no widget service
-              needed.
+              A way to put chat on your stream in OBS straight from the app,
+              with every platform in one feed and no widget service in between.
             </p>
           </li>
           <li>
             <Icon name="puzzle" class="roadmap__icon" />
-            <p>
-              <strong>Your own additions.</strong> Plugins for the things we did
-              not think of.
-            </p>
+            <p>Plugins, for the things we did not think of.</p>
           </li>
           <li>
             <Icon name="laptop" class="roadmap__icon" />
-            <p>
-              <strong>Mac and Linux.</strong> Same app, same download page.
-            </p>
+            <p>Mac and Linux versions, from the same download page.</p>
           </li>
         </ul>
       </section>
