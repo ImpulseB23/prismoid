@@ -1256,24 +1256,27 @@ option::checkmark {
   overflow-wrap: anywhere;
 }
 
+/* Each stat sizes to its value and wraps to a new row when the card runs
+   out of width. The 1px gap shows the border color through as dividers,
+   so they stay right however the stats wrap. */
 .user-card__stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
   margin: 0 16px 12px;
+  background: var(--border);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
 }
 
 .user-card__stat {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 8px 12px;
-}
-
-.user-card__stat + .user-card__stat {
-  border-left: 1px solid var(--border);
+  background: var(--bg-raised);
 }
 
 .user-card__stat dt {
@@ -1286,6 +1289,7 @@ option::checkmark {
 
 .user-card__stat dd {
   margin: 0;
+  white-space: nowrap;
   font-size: 13px;
   font-weight: 500;
 }
