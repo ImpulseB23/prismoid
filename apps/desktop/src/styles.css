@@ -41,6 +41,10 @@
      other emphasis is neutral, so no single platform's color takes over. */
   --prism: linear-gradient(90deg, #6f38c9, #ea3247 55%, #4db332);
   --prism-vertical: linear-gradient(180deg, #6f38c9, #ea3247 55%, #4db332);
+  /* Primary actions (send, primary buttons): light gold into white on the
+     dark themes, deep gold into charcoal on light. */
+  --action: linear-gradient(135deg, #e8bf5e, #f6dfa4 45%, #fffbf2);
+  --action-text: #1c1505;
   --prism-tint: linear-gradient(
     90deg,
     rgba(111, 56, 201, 0.14),
@@ -109,6 +113,8 @@
 
 :root[data-theme="light"] {
   --bg: #f7f7f8;
+  --action: linear-gradient(135deg, #94691a, #2b2a2e);
+  --action-text: #ffffff;
   --bg-raised: #ffffff;
   --bg-surface: #ebebef;
   --bg-hover: #dcdce2;
@@ -1741,8 +1747,8 @@ option::checkmark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #ffffff;
-  background: var(--prism) border-box no-repeat;
+  color: var(--action-text);
+  background: var(--action) border-box no-repeat;
   transition: opacity 0.15s;
 }
 
@@ -1784,8 +1790,8 @@ option::checkmark {
 }
 
 .btn--primary {
-  color: var(--color-base-50);
-  background: var(--prism) border-box no-repeat;
+  color: var(--action-text);
+  background: var(--action) border-box no-repeat;
   border-color: transparent;
 }
 
@@ -3230,12 +3236,12 @@ option::checkmark {
 }
 
 .btn--small.btn--primary {
-  background: var(--prism) border-box no-repeat;
-  color: var(--color-base-50);
+  background: var(--action) border-box no-repeat;
+  color: var(--action-text);
 }
 
 .btn--small.btn--primary:hover:not(:disabled) {
-  background: var(--prism) border-box no-repeat;
+  background: var(--action) border-box no-repeat;
   opacity: 0.85;
 }
 
