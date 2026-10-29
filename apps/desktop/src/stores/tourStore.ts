@@ -43,6 +43,11 @@ export const TOUR_STEPS: TourStep[] = [
     body: "Chat modes, the AutoMod queue and the mod log, all in the tab on the right edge of the chat.",
   },
   {
+    target: "stream-manager",
+    title: "Your stream manager",
+    body: "The broadcast button drops your stream controls over the chat: title, category, tags, ads, polls and quick actions. Anything Twitch keeps for Affiliates tells you so.",
+  },
+  {
     section: "appearance",
     title: "Make it comfortable",
     body: "Pick a theme and the text and window size that read well from where you sit.",
