@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 import {
+  canModerateIn,
   clearRoles,
   createRoleStore,
   noteModerator,
@@ -55,6 +56,23 @@ describe("roleStore", () => {
     ]);
     clearRoles();
     setAuthStatus(null);
+  });
+
+  it("checks moderation in the channel asked about, not the one on screen", () => {
+    setAuthStatus({
+      state: "logged_in",
+      login: "me",
+      user_id: "1",
+      missing_scopes: [],
+      enabled_scope_groups: [],
+    });
+    expect(canModerateIn("1")).toBe(true);
+    expect(canModerateIn("7")).toBe(false);
+    noteModerator("7");
+    expect(canModerateIn("7")).toBe(true);
+    clearRoles();
+    setAuthStatus(null);
+    expect(canModerateIn("1")).toBe(false);
   });
 
   it("records a role observed live and clears on sign out", async () => {

@@ -126,6 +126,7 @@ pub fn run() {
             browser_follow::set_browser_follow,
             backlog::set_chat_backlog,
             tray::set_close_to_tray,
+            tray::show_main_window,
             first_messages::set_first_messages,
             twitch_channel::twitch_get_channel,
             twitch_channel::twitch_search_channels,

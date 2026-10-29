@@ -85,13 +85,18 @@ export function reconnectScopes(): string[] {
 }
 
 /**
- * Whether moderation controls should show for the active channel: the
- * user is its broadcaster or holds the moderator role there, and the
- * token carries the scopes those calls need.
+ * Whether moderation controls should show in a channel: the user is its
+ * broadcaster or holds the moderator role there, and the token carries the
+ * scopes those calls need.
  */
+export function canModerateIn(channelId: string): boolean {
+  const userId = currentUserId();
+  if (!userId || moderationNeedsReconnect()) return false;
+  return channelId === userId || defaultStore.isModeratorOf(channelId);
+}
+
+/** {@link canModerateIn} for the channel on screen. */
 export function canModerate(): boolean {
   const channel = activeChannel();
-  const userId = currentUserId();
-  if (!channel || !userId || moderationNeedsReconnect()) return false;
-  return channel.id === userId || defaultStore.isModeratorOf(channel.id);
+  return channel ? canModerateIn(channel.id) : false;
 }

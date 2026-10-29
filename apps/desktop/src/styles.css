@@ -1348,11 +1348,19 @@ option::checkmark {
 }
 
 /* User card */
+/* The card fills its own window under the title bar. */
 .user-card {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  width: min(420px, 100%);
-  max-height: calc(100vh - 66px);
+  min-height: 0;
+  background: var(--bg-raised);
+  outline: 0;
+}
+
+.user-card .palette__body {
+  flex: 1;
+  max-height: none;
 }
 
 /* The card is a height-capped column: only the scrolling message list
@@ -2456,13 +2464,6 @@ option::checkmark {
 .msg__user:hover {
   text-decoration: underline;
   text-underline-offset: 2px;
-}
-
-/* The clicked name pulses while its card loads; a spinner beside it would
-   change the measured row width. */
-.msg__user--loading {
-  cursor: progress;
-  animation: name-pulse 0.9s ease-in-out infinite;
 }
 
 @keyframes name-pulse {

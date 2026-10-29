@@ -232,6 +232,24 @@ describe("ChatFeed", () => {
     expect(jumpRequest()).not.toBeNull();
   });
 
+  it("opens a card window for the name clicked", async () => {
+    const { container } = render(() => <ChatFeed login="me" />);
+    await tick();
+    emit("chat_messages", [msg("hi")]);
+    await tick();
+    fireEvent.click(rowFor(container, "hi").querySelector(".msg__user")!);
+    expect(invoke).toHaveBeenCalledWith("user_card_open", {
+      user: {
+        channel_id: "chan",
+        platform_user_id: "7",
+        username: "viewer",
+        display_name: "Viewer",
+        color: null,
+        badges: [],
+      },
+    });
+  });
+
   it("hides the mod buttons from viewers", async () => {
     render(() => <ChatFeed login="me" />);
     await tick();

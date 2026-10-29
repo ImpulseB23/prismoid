@@ -128,13 +128,7 @@ import { nameStyle } from "../lib/paint";
 import { shownPaint, syncPaints } from "../stores/paintStore";
 import { isLight, logo } from "../stores/themeStore";
 import MessagePieces from "./MessagePieces";
-import UserCard from "./UserCard";
-import {
-  cardUser,
-  closeUserCard,
-  cardLoading,
-  openUserCard,
-} from "../stores/userCardStore";
+import { openUserCard } from "../lib/userCardWindow";
 import EmoteCard from "./EmoteCard";
 import EmoteTooltip from "./EmoteTooltip";
 
@@ -307,7 +301,6 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
           anchor = null;
           setStickToBottom(true);
           setReadUpTo(null);
-          closeUserCard();
         }
         if (id !== undefined && viewport().count === 0) {
           history.begin(loadHistory(id));
@@ -737,17 +730,14 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
 
   const openCard = (msg: ChatMessage) => {
     if (msg.platform !== "Twitch" || !msg.platform_user_id) return;
-    openUserCard(
-      {
-        channel_id: msg.channel_id,
-        platform_user_id: msg.platform_user_id,
-        username: msg.username,
-        display_name: msg.display_name,
-        color: msg.color,
-        badges: msg.badges,
-      },
-      msg.id,
-    );
+    openUserCard({
+      channel_id: msg.channel_id,
+      platform_user_id: msg.platform_user_id,
+      username: msg.username,
+      display_name: msg.display_name,
+      color: msg.color,
+      badges: msg.badges,
+    }).catch((err: unknown) => console.error("open user card", err));
   };
 
   // Right-click on a row: viewer actions for everyone, moderation for mods.
@@ -1335,12 +1325,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                         </For>
                         <span
                           class="msg__user"
-                          classList={{
-                            "name--painted": name().painted,
-                            "msg__user--loading":
-                              cardLoading() === row().msg.id,
-                          }}
-                          aria-busy={cardLoading() === row().msg.id}
+                          classList={{ "name--painted": name().painted }}
                           role="button"
                           tabIndex={0}
                           title={
@@ -1422,7 +1407,6 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
         )}
       </Show>
 
-      <UserCard user={cardUser()} login={props.login} onClose={closeUserCard} />
       <EmoteCard />
       <EmoteTooltip />
       <Thread />
