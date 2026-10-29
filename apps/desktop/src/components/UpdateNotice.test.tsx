@@ -33,9 +33,9 @@ describe("UpdateNotice", () => {
     expect(screen.getByRole("status").textContent).toContain(
       "Version 0.2 is ready.",
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Install and restart" }),
-    );
+    const install = screen.getByRole("button", { name: "Install and restart" });
+    expect(install.classList.contains("btn--primary")).toBe(true);
+    fireEvent.click(install);
     expect(onInstall).toHaveBeenCalledOnce();
 
     setState({ kind: "ready", version: "0.2.0" });
@@ -54,7 +54,9 @@ describe("UpdateNotice", () => {
     expect(screen.getByRole("alert").textContent).toContain(
       "signature mismatch",
     );
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    const retry = screen.getByRole("button", { name: "Try again" });
+    expect(retry.classList.contains("btn--outline")).toBe(true);
+    fireEvent.click(retry);
     expect(onInstall).toHaveBeenCalledOnce();
   });
 });

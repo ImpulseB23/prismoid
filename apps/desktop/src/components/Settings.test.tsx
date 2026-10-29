@@ -98,9 +98,15 @@ describe("Settings", () => {
     await vi.waitFor(() =>
       expect(screen.getByText("Prismoid v0.6")).toBeTruthy(),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Check for updates" }));
+    const checkButton = screen.getByRole("button", {
+      name: "Check for updates",
+    });
+    expect(checkButton.classList.contains("btn--outline")).toBe(true);
+    fireEvent.click(checkButton);
     await vi.waitFor(() =>
       expect(screen.getByText("Version 0.7 is available")).toBeTruthy(),
     );
+    const install = screen.getByRole("button", { name: "Install and restart" });
+    expect(install.classList.contains("btn--primary")).toBe(true);
   });
 });

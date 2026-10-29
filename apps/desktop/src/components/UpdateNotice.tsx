@@ -59,7 +59,11 @@ const UpdateNotice: Component<UpdateNoticeProps> = (props) => (
           {(label) => (
             <button
               type="button"
-              class="btn btn--outline"
+              class="btn"
+              classList={{
+                "btn--primary": !notice().error,
+                "btn--outline": notice().error,
+              }}
               onClick={() => props.onInstall()}
             >
               {label()}
