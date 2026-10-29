@@ -40,25 +40,36 @@ describe("formatSendError", () => {
     expect(
       formatSendError({ kind: "message_too_long", max_bytes: 500 }),
     ).toContain("500");
-    expect(formatSendError({ kind: "sidecar_not_running" })).toMatch(/ready/i);
+    expect(formatSendError({ kind: "sidecar_not_running" })).toMatch(
+      /connecting/i,
+    );
     expect(formatSendError({ kind: "not_logged_in", message: "x" })).toMatch(
       /sign in/i,
     );
-    expect(formatSendError({ kind: "auth", message: "boom" })).toContain(
-      "boom",
+    // Raw error text never reaches the status line.
+    expect(formatSendError({ kind: "auth", message: "boom" })).toMatch(
+      /^Your Twitch sign-in needs a refresh/,
     );
-    expect(formatSendError({ kind: "io", message: "pipe" })).toContain("pipe");
-    expect(formatSendError({ kind: "json", message: "bad" })).toContain("bad");
+    expect(formatSendError({ kind: "io", message: "pipe" })).not.toContain(
+      "pipe",
+    );
+    expect(formatSendError({ kind: "json", message: "bad" })).not.toContain(
+      "bad",
+    );
     expect(
       formatSendError({
         kind: "helix",
         code: "msg_duplicate",
-        message: "duplicate message",
+        message: "Your message is identical to the one you sent.",
       }),
-    ).toContain("msg_duplicate");
+    ).toBe("Your message is identical to the one you sent.");
     expect(
-      formatSendError({ kind: "helix", code: "", message: "blocked" }),
-    ).toContain("blocked");
+      formatSendError({
+        kind: "helix",
+        code: "",
+        message: "twitch helix: status 400",
+      }),
+    ).toBe("Twitch did not take the message. Try again in a moment.");
     expect(
       formatSendError({ kind: "helix", code: "unauthorized", message: "x" }),
     ).toMatch(/reconnect/i);
@@ -88,10 +99,10 @@ describe("formatSendError", () => {
         code: "youtube_api",
         message: "chat ended",
       }),
-    ).toContain("chat ended");
+    ).toMatch(/^YouTube did not take the message/);
     expect(
       formatSendError({ kind: "youtube", code: "", message: "blocked" }),
-    ).toContain("blocked");
+    ).not.toContain("blocked");
   });
 });
 

@@ -20,8 +20,10 @@ export function fitsLimit(text: string): boolean {
   return new TextEncoder().encode(text).byteLength <= MAX_CHAT_MESSAGE_BYTES;
 }
 
-// Maps a structured Tauri command error into a short human message
-// suitable for an inline status line under the input.
+// Maps a structured Tauri command error into a short sentence for the
+// status line under the input. Twitch writes its drop reasons for the
+// people chatting, so those show as they are; everything else gets our own
+// words instead of raw error text.
 export function formatSendError(err: SendMessageError): string {
   switch (err.kind) {
     case "not_logged_in":
@@ -33,20 +35,20 @@ export function formatSendError(err: SendMessageError): string {
     case "message_too_long_chars":
       return `Message exceeds ${err.max_chars} characters.`;
     case "sidecar_not_running":
-      return "Chat connection is not ready yet.";
+      return "Chat is still connecting. Try again in a moment.";
     case "auth":
-      return `Auth error: ${err.message}`;
+      return "Your Twitch sign-in needs a refresh. Reconnect in Settings.";
     case "io":
-      return `Connection error: ${err.message}`;
+      return "Lost the connection to chat for a moment. Try again.";
     case "json":
-      return `Encoding error: ${err.message}`;
+      return "Prismoid could not send that message. Try again.";
     case "helix":
       if (err.code === "unauthorized") {
         return "Twitch rejected the session. Reconnect in Settings.";
       }
-      return err.code
-        ? `Twitch rejected message (${err.code}): ${err.message}`
-        : `Twitch rejected message: ${err.message}`;
+      return err.code && err.message
+        ? err.message
+        : "Twitch did not take the message. Try again in a moment.";
     case "youtube":
       switch (err.code) {
         case "unauthorized":
@@ -54,9 +56,7 @@ export function formatSendError(err: SendMessageError): string {
         case "quota_exceeded":
           return "YouTube daily quota exceeded. Try again later.";
         default:
-          return err.code
-            ? `YouTube rejected message (${err.code}): ${err.message}`
-            : `YouTube rejected message: ${err.message}`;
+          return "YouTube did not take the message. Try again in a moment.";
       }
   }
 }

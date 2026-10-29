@@ -1530,6 +1530,57 @@ func TestHandleSendChatMessage_RetriesServerErrorsThenSucceeds(t *testing.T) {
 	}
 }
 
+// sendAgainst points sends at a test server answering with `bodies` in
+// turn, the last one repeating, and returns the result and call count.
+func sendAgainst(t *testing.T, bodies ...string) (SendChatResultPayload, int32) {
+	t.Helper()
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n := int(calls.Add(1))
+		_, _ = io.WriteString(w, bodies[min(n, len(bodies))-1])
+	}))
+	t.Cleanup(srv.Close)
+	prev := twitchHelixBase
+	twitchHelixBase = srv.URL
+	t.Cleanup(func() { twitchHelixBase = prev })
+	prevBackoff := sendRetryBase
+	sendRetryBase = time.Millisecond
+	t.Cleanup(func() { sendRetryBase = prevBackoff })
+
+	var got SendChatResultPayload
+	HandleSendChatMessage(context.Background(), control.Command{
+		Cmd:           "send_chat_message",
+		BroadcasterID: "b", UserID: "u", ClientID: "c", Token: "t",
+		Message: "x", RequestID: 9,
+	}, func(_ string, p any) { got = p.(SendChatResultPayload) }, zerolog.Nop())
+	return got, calls.Load()
+}
+
+const (
+	transientBody = `{"data":[{"message_id":"","is_sent":false,"drop_reason":{"code":"msg_rejected","message":"Your message could not be sent, please try again later."}}]}`
+	automodBody   = `{"data":[{"message_id":"","is_sent":false,"drop_reason":{"code":"msg_rejected","message":"Your message is being checked by mods and has not been sent."}}]}`
+	sentBody      = `{"data":[{"message_id":"ok-2","is_sent":true}]}`
+)
+
+func TestHandleSendChatMessage_RetriesTwitchsTransientDrop(t *testing.T) {
+	got, calls := sendAgainst(t, transientBody, sentBody)
+	if !got.Ok || got.MessageID != "ok-2" || calls != 2 {
+		t.Fatalf("unexpected payload %+v after %d calls", got, calls)
+	}
+
+	got, calls = sendAgainst(t, transientBody)
+	if got.Ok || got.DropCode != "msg_rejected" || calls != sendAttempts {
+		t.Fatalf("a drop that persists should end after %d tries with its reason, got %+v after %d", sendAttempts, got, calls)
+	}
+}
+
+func TestHandleSendChatMessage_NeverResendsAnAutoModHold(t *testing.T) {
+	got, calls := sendAgainst(t, automodBody, sentBody)
+	if got.Ok || calls != 1 || got.DropMessage == "" {
+		t.Fatalf("an AutoMod hold must not be sent again, got %+v after %d calls", got, calls)
+	}
+}
+
 func TestHandleSendChatMessage_DoesNotRetryClientErrors(t *testing.T) {
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

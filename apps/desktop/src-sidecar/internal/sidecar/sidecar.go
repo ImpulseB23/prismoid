@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -540,12 +541,13 @@ type SendChatResultPayload struct {
 	HTTPStatus int `json:"http_status,omitempty"`
 }
 
-// Attempts made per send before giving up on a transport error or 5xx.
+// Attempts made per send before giving up on a transport error, a 5xx or
+// Twitch's transient drop.
 const sendAttempts = 3
 
 // sendRetryBase is the first backoff; each further attempt doubles it.
 // A variable so tests can shrink it.
-var sendRetryBase = 300 * time.Millisecond
+var sendRetryBase = time.Second
 
 // helixStatus returns the HTTP status carried by a Helix error, or 0 for
 // transport-level failures and non-Helix errors.
@@ -561,6 +563,18 @@ func helixStatus(err error) int {
 // request never produced a response (dial, reset, timeout) or Twitch
 // answered 5xx. Client errors and a consumed 429 retry are final, and a
 // cancelled context means the caller has moved on.
+// transientDrop reports Twitch's "could not be sent, please try again
+// later" drop, which goes through on a resend moments later. Twitch gives
+// it the same msg_rejected code as an AutoMod hold, which must never be
+// sent twice, and publishes no list of codes, so its wording is the only
+// way to tell them apart.
+func transientDrop(resp *twitch.SendChatMessageResponse) bool {
+	if resp == nil || len(resp.Data) == 0 || resp.Data[0].IsSent {
+		return false
+	}
+	return strings.Contains(strings.ToLower(resp.Data[0].DropReason.Message), "try again later")
+}
+
 func retryableSend(err error) bool {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
@@ -577,10 +591,14 @@ func sendWithRetry(ctx context.Context, client *twitch.HelixClient, cmd control.
 	backoff := sendRetryBase
 	for attempt := 1; ; attempt++ {
 		resp, err := client.SendChatMessage(ctx, cmd.BroadcasterID, cmd.UserID, cmd.Message, cmd.ReplyParentMessageID)
-		if err == nil || attempt == sendAttempts || !retryableSend(err) {
+		retry := transientDrop(resp)
+		if err != nil {
+			retry = retryableSend(err)
+		}
+		if !retry || attempt == sendAttempts {
 			return resp, err
 		}
-		logger.Warn().Err(err).Int("attempt", attempt).Msg("send_chat_message failed; retrying")
+		logger.Warn().Err(err).Bool("dropped", err == nil).Int("attempt", attempt).Msg("send_chat_message failed; retrying")
 		timer := time.NewTimer(backoff)
 		select {
 		case <-ctx.Done():
