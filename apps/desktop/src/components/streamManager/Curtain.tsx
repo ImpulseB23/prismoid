@@ -12,10 +12,7 @@ import {
 } from "solid-js";
 import { liveSince } from "../../lib/streamInfo";
 import type { StreamInfo } from "../../lib/twitchChannel";
-import {
-  scopeGroupReady,
-  streamManagerNeedsReconnect,
-} from "../../stores/authStore";
+import { scopeGroupReady } from "../../stores/authStore";
 import {
   STREAM_MANAGER_HEIGHT,
   settings,
@@ -26,13 +23,13 @@ import {
   setStreamManagerTab,
   streamManagerTab,
 } from "../../stores/streamManagerPanelStore";
-import TwitchReconnect from "../TwitchReconnect";
 import AdsSection from "./AdsSection";
 import AffiliateGate from "./AffiliateGate";
 import NowStrip from "./NowStrip";
 import PollsSection from "./PollsSection";
 import QuickActions from "./QuickActions";
 import RunningNow from "./RunningNow";
+import ScopeGroupCard from "./ScopeGroupCard";
 import SectionTabs, { panelId, tabId } from "./SectionTabs";
 import StreamSetup from "./StreamSetup";
 
@@ -111,13 +108,8 @@ const Curtain: Component<{
           aria-labelledby={tabId(streamManagerTab())}
         >
           <Show
-            when={!streamManagerNeedsReconnect()}
-            fallback={
-              <TwitchReconnect
-                title="The stream manager needs a new Twitch permission"
-                hint="Editing your stream, polls and predictions came after you signed in. Reconnect once to allow them."
-              />
-            }
+            when={scopeGroupReady("stream")}
+            fallback={<ScopeGroupCard group="stream" />}
           >
             <Switch>
               <Match when={streamManagerTab() === "live"}>

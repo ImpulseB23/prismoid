@@ -19,9 +19,16 @@ pub const FILE_NAME: &str = "twitch_scope_groups.json";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ScopeGroup {
+    Stream,
     Ads,
     LiveActions,
 }
+
+const STREAM: &[Scope] = &[
+    Scope::ChannelManageBroadcast,
+    Scope::ChannelManagePolls,
+    Scope::ChannelManagePredictions,
+];
 
 const ADS: &[Scope] = &[
     Scope::ChannelReadAds,
@@ -39,6 +46,7 @@ const LIVE_ACTIONS: &[Scope] = &[
 impl ScopeGroup {
     pub fn scopes(self) -> &'static [Scope] {
         match self {
+            Self::Stream => STREAM,
             Self::Ads => ADS,
             Self::LiveActions => LIVE_ACTIONS,
         }
@@ -50,6 +58,7 @@ impl FromStr for ScopeGroup {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            "stream" => Ok(Self::Stream),
             "ads" => Ok(Self::Ads),
             "live_actions" => Ok(Self::LiveActions),
             _ => Err(AuthError::UnknownScopeGroup(s.to_owned())),
@@ -143,7 +152,7 @@ mod tests {
 
     #[test]
     fn names_round_trip_through_serde() {
-        for group in [ScopeGroup::Ads, ScopeGroup::LiveActions] {
+        for group in [ScopeGroup::Stream, ScopeGroup::Ads, ScopeGroup::LiveActions] {
             let name = serde_json::to_value(group).unwrap();
             assert_eq!(name.as_str().unwrap().parse::<ScopeGroup>().unwrap(), group);
         }
@@ -160,6 +169,14 @@ mod tests {
     #[test]
     fn groups_hold_their_scopes() {
         let names = |g: ScopeGroup| g.scopes().iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            names(ScopeGroup::Stream),
+            [
+                "channel:manage:broadcast",
+                "channel:manage:polls",
+                "channel:manage:predictions"
+            ]
+        );
         assert_eq!(
             names(ScopeGroup::Ads),
             [
