@@ -1273,7 +1273,7 @@ const EmptyState: Component<{ loading: boolean }> = (props) => {
   const status = () => channelStatus();
   const opening = () => {
     const c = channel();
-    return c ? `Opening ${c.display_name} chat` : "Finding the channel";
+    return c ? `Opening ${c.display_name}'s chat` : "Finding the channel";
   };
   return (
     <div class="feed__empty" aria-live="polite">
