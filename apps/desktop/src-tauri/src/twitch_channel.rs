@@ -1108,6 +1108,10 @@ pub struct UserInfo {
     /// RFC 3339 account creation time.
     #[serde(default)]
     pub created_at: String,
+    /// "partner", "affiliate", or empty for neither. Ads, polls, predictions
+    /// and Channel Points need one of the two.
+    #[serde(default)]
+    pub broadcaster_type: String,
 }
 
 #[derive(Deserialize)]
@@ -1742,6 +1746,7 @@ mod tests {
         assert_eq!(got.len(), 2);
         assert_eq!(got[0].created_at, "2020-01-01T00:00:00Z");
         assert_eq!(got[0].description, "hi");
+        assert_eq!(got[0].broadcaster_type, "affiliate");
     }
 
     #[tokio::test]
