@@ -3,7 +3,7 @@
 
 import { createSignal } from "solid-js";
 
-export type StreamManagerTab = "live";
+export type StreamManagerTab = "live" | "ads" | "polls";
 
 const [streamManagerOpen, setStreamManagerOpen] = createSignal(false);
 const [streamManagerTab, setStreamManagerTab] =

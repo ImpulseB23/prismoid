@@ -6,6 +6,9 @@ import { invoke } from "@tauri-apps/api/core";
 /** Longest commercial Twitch runs, in seconds. */
 export const COMMERCIAL_MAX_SECS = 180;
 
+/** The lengths Twitch's own dashboard offers, in seconds. */
+export const COMMERCIAL_LENGTHS = [30, 60, 90, 120, 150, 180];
+
 /** What "Run ad" asks for until the user picks a length. */
 export const DEFAULT_COMMERCIAL_SECS = 90;
 

@@ -10,6 +10,7 @@ import {
   createSignal,
   onCleanup,
 } from "solid-js";
+import { liveSince } from "../../lib/streamInfo";
 import type { StreamInfo } from "../../lib/twitchChannel";
 import {
   scopeGroupReady,
@@ -25,7 +26,9 @@ import {
   streamManagerTab,
 } from "../../stores/streamManagerPanelStore";
 import TwitchReconnect from "../TwitchReconnect";
+import AdsSection from "./AdsSection";
 import NowStrip from "./NowStrip";
+import PollsSection from "./PollsSection";
 import QuickActions from "./QuickActions";
 import RunningNow from "./RunningNow";
 import SectionTabs, { panelId, tabId } from "./SectionTabs";
@@ -124,6 +127,12 @@ const Curtain: Component<{
                     <RunningNow now={now()} />
                   </div>
                 </div>
+              </Match>
+              <Match when={streamManagerTab() === "ads"}>
+                <AdsSection now={now()} since={liveSince(props.info)} />
+              </Match>
+              <Match when={streamManagerTab() === "polls"}>
+                <PollsSection now={now()} />
               </Match>
             </Switch>
           </Show>
