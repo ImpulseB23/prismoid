@@ -17,6 +17,9 @@ export interface OpenMenu {
   x: number;
   y: number;
   items: MenuItem[];
+  /** What was right-clicked; the menu closes when something holding it
+   * scrolls, not when an unrelated chat scrolls on its own. */
+  anchor: Element | null;
 }
 
 const [contextMenu, setContextMenu] = createSignal<OpenMenu | null>(null);
@@ -24,12 +27,22 @@ const [contextMenu, setContextMenu] = createSignal<OpenMenu | null>(null);
 export { contextMenu };
 
 export function openContextMenu(
-  e: { clientX: number; clientY: number; preventDefault(): void },
+  e: {
+    clientX: number;
+    clientY: number;
+    target: EventTarget | null;
+    preventDefault(): void;
+  },
   items: MenuItem[],
 ): void {
   e.preventDefault();
   if (items.length === 0) return;
-  setContextMenu({ x: e.clientX, y: e.clientY, items });
+  setContextMenu({
+    x: e.clientX,
+    y: e.clientY,
+    items,
+    anchor: e.target instanceof Element ? e.target : null,
+  });
 }
 
 export function closeContextMenu(): void {

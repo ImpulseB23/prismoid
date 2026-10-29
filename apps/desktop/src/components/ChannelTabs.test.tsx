@@ -17,8 +17,9 @@ vi.mock("../stores/channelStore", () => ({
   focusChannel: (id: string) => focusChannel(id),
   unreadCount: () => 0,
 }));
+const openPicker = vi.fn();
 vi.mock("../stores/pickerStore", () => ({
-  openPicker: () => {},
+  openPicker: (opts?: unknown) => openPicker(opts),
   pickerLoading: () => false,
   prefetchLive: async () => {},
 }));
@@ -62,6 +63,19 @@ describe("ChannelTabs", () => {
     menu.closeContextMenu();
     fireEvent.contextMenu(tab("B"));
     expect(menu.contextMenu()).toBeNull();
+  });
+
+  it("opens the picker for a new pane, until four are open", async () => {
+    await mount();
+    const button = screen.getByRole("button", {
+      name: "Open a channel in a new pane",
+    });
+    fireEvent.click(button);
+    expect(openPicker).toHaveBeenCalledWith({ split: true });
+    layout.splitPane("b");
+    layout.splitPane("c");
+    layout.splitPane("d");
+    expect((button as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("hands its channel to the panes while dragged", async () => {

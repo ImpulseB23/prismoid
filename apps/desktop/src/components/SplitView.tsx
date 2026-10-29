@@ -121,7 +121,6 @@ const EdgeDrop: Component = () => {
     <div
       class="split__edge"
       classList={{ "split__edge--over": over() }}
-      aria-hidden="true"
       onDragOver={(e) => {
         if (!e.dataTransfer?.types.includes(TAB_DRAG_TYPE)) return;
         e.preventDefault();
@@ -135,7 +134,9 @@ const EdgeDrop: Component = () => {
         e.preventDefault();
         splitPane(id, panes().at(-1)!.id);
       }}
-    />
+    >
+      New pane
+    </div>
   );
 };
 

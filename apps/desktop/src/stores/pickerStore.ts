@@ -15,6 +15,8 @@ export type LiveState = "ready" | "needs_scope" | "failed";
 export const LIVE_FRESH_MS = 30_000;
 
 const [pickerOpen, setOpen] = createSignal(false);
+/** The picked channel opens in a new pane instead of the focused one. */
+const [pickerSplits, setSplits] = createSignal(false);
 const [pickerLoading, setLoading] = createSignal(false);
 const [followedLive, setFollowedLive] = createSignal<FollowedLive[]>([]);
 const [liveState, setLiveState] = createSignal<LiveState>("ready");
@@ -57,8 +59,9 @@ export function prefetchLive(): Promise<void> {
 }
 
 /** Opens once the live list is ready; a failed load still opens. */
-export function openPicker(): void {
+export function openPicker(opts: { split?: boolean } = {}): void {
   if (pickerOpen()) return;
+  setSplits(opts.split === true);
   const seq = ++openSeq;
   setLoading(true);
   void prefetchLive().then(() => {
@@ -74,4 +77,4 @@ export function closePicker(): void {
   setOpen(false);
 }
 
-export { pickerOpen, pickerLoading, followedLive, liveState };
+export { pickerOpen, pickerSplits, pickerLoading, followedLive, liveState };
