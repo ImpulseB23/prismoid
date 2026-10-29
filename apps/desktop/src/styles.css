@@ -473,9 +473,14 @@ option::checkmark {
     border-color 0.15s;
 }
 
-.tabs__add:hover {
+.tabs__add:hover:not(:disabled) {
   color: var(--text);
   border-color: var(--border-strong);
+}
+
+.tabs__add:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .icon-btn__badge {
@@ -4302,9 +4307,17 @@ option::checkmark {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 56px;
+  width: 72px;
   z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-left: 2px dashed var(--border-strong);
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: center;
   transition: background 0.12s;
 }
 

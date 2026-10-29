@@ -202,12 +202,39 @@ const ChannelTabs: Component = () => {
       <button
         type="button"
         class="tabs__add"
+        title={
+          canSplitPane()
+            ? "Open a channel next to this one"
+            : "Four chats is the most side by side"
+        }
+        aria-label="Open a channel in a new pane"
+        disabled={!canSplitPane()}
+        onPointerEnter={() => void prefetchLive()}
+        onClick={() => openPicker({ split: true })}
+      >
+        <svg width="14" height="12" viewBox="0 0 14 12" aria-hidden="true">
+          <rect
+            x="0.75"
+            y="0.75"
+            width="12.5"
+            height="10.5"
+            rx="2"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
+          <path d="M7 1v10" stroke="currentColor" stroke-width="1.5" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="tabs__add"
         data-tour="add-channel"
         title="Open a channel (Ctrl+K)"
         aria-label="Open a channel"
         aria-busy={pickerLoading()}
         onPointerEnter={() => void prefetchLive()}
-        onClick={openPicker}
+        onClick={() => openPicker()}
       >
         <Show
           when={!pickerLoading()}
