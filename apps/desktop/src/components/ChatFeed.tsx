@@ -58,6 +58,8 @@ import {
   type SendMessageError,
 } from "../lib/twitchAuth";
 import { openModPopover } from "../stores/modPopoverStore";
+import { noteOwnBadges } from "../stores/ownBadgeStore";
+import { currentUserId } from "../stores/authStore";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { formatSeconds } from "../lib/slashCommands";
 import { messageMenuItems } from "../lib/messageMenu";
@@ -266,7 +268,13 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     setReadUpTo(null);
   };
 
-  const history = createHistoryGate(addMessages);
+  // Stored history can hold the user's newest message in a channel when
+  // the live feed does not.
+  const history = createHistoryGate((batch) => {
+    addMessages(batch);
+    const me = currentUserId();
+    if (me) for (const m of batch) noteOwnBadges(m, me);
+  });
   onCleanup(() => history.cancel());
 
   // A channel switch empties the view. Indices stay monotonic so the
@@ -529,10 +537,12 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       // Messages for other tabs only move their unread count; the host's
       // log holds them until that tab is shown. Every channel's pulse counts
       // all of its chat, ignored chatters included, whether shown or not.
+      const me = currentUserId();
       for (const m of event.payload) {
         if (m.platform === "Twitch" && !m.notice && m.platform_user_id) {
           recordPulse(m.channel_id, m.platform_user_id, m.arrival_time);
         }
+        if (me) noteOwnBadges(m, me);
         if (m.platform === "Twitch" && !isForChannel(m, id) && !m.notice) {
           noteUnread(m.channel_id);
         }

@@ -7,6 +7,7 @@ import type { ChatMessage } from "../stores/chatStore";
 import { messageRevision, recentMessagesByUser } from "../stores/chatStore";
 import { activeChannel } from "../stores/channelStore";
 import { currentUserId } from "../stores/authStore";
+import { ownBadges } from "../stores/ownBadgeStore";
 import { canModerate } from "../stores/roleStore";
 import { badgeRevision, resolveBadge } from "../stores/badgeStore";
 import { cardLoading, openUserCard } from "../stores/userCardStore";
@@ -18,7 +19,8 @@ import {
 
 const AccountAvatar: Component<{ login: string }> = (props) => {
   // The newest message the user sent here carries their exact badges and
-  // color. Before their first message, their role stands in for the badge.
+  // color. When none is loaded, the badges remembered from their last
+  // message in the channel stand in, then their role.
   const self = createMemo(() => {
     messageRevision();
     const me = currentUserId();
@@ -39,7 +41,7 @@ const AccountAvatar: Component<{ login: string }> = (props) => {
       username: last?.username ?? props.login,
       display_name: last?.display_name ?? props.login,
       color: last?.color ?? null,
-      badges: last?.badges ?? roleBadges,
+      badges: last?.badges ?? ownBadges(channel.id) ?? roleBadges,
     };
   });
 
