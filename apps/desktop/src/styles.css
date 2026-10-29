@@ -4871,6 +4871,146 @@ option::checkmark {
   background: #f5009b;
 }
 
+.sm-section,
+.sm-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 760px;
+}
+
+.sm-form {
+  gap: 16px;
+}
+
+.sm-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.sm-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-raised);
+}
+
+.sm-tile__value {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+/* A row of choices drawn as one control; real radios underneath. */
+.sm-seg {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg);
+}
+
+.sm-seg__option {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+
+.sm-seg__option:hover {
+  color: var(--text);
+}
+
+.sm-seg__option--on,
+.sm-seg__option--on:hover {
+  background: var(--select);
+  color: #ffffff;
+}
+
+.sm-seg__option:has(input:focus-visible) {
+  outline: 2px solid var(--select-text);
+  outline-offset: 2px;
+}
+
+.sm-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.sm-list__title {
+  margin-bottom: 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sm-list .sm-heading {
+  margin-bottom: 6px;
+}
+
+.sm-list__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.sm-list__row:last-child {
+  border-bottom: 0;
+}
+
+.sm-list__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.sm-list__meta {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+.sm-list__time {
+  width: 70px;
+  color: var(--text-faint);
+  font-size: 12px;
+  text-align: right;
+}
+
+.sm-link--start {
+  align-self: flex-start;
+}
+
+.sm-toggle--bare {
+  padding: 0;
+  border-top: 0;
+  min-height: 38px;
+}
+
+.sm-inline--center {
+  align-items: center;
+}
+
+.sm-inline .sm-input--short {
+  flex: 0 1 120px;
+}
+
 .cc__item--danger .cc__title {
   color: var(--color-red-light);
 }

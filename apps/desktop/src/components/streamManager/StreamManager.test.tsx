@@ -23,7 +23,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 const { default: StreamManager } = await import("./StreamManager");
 const { setAuthStatus } = await import("../../stores/authStore");
-const { setStreamManagerOpen } =
+const { setStreamManagerOpen, setStreamManagerTab } =
   await import("../../stores/streamManagerPanelStore");
 const { settings, updateSettings } = await import("../../stores/settingsStore");
 
@@ -149,6 +149,29 @@ describe("StreamManager", () => {
     expect(settings().streamManagerHeight).toBeCloseTo(0.7);
     fireEvent.pointerMove(handle(), { pointerId: 1, clientY: 120 });
     expect(frame.style.height).toBe("70%");
+  });
+
+  it("moves between tabs with the keyboard", () => {
+    signIn();
+    render(() => <StreamManager />);
+    setStreamManagerOpen(true);
+    const tab = (name: string) => screen.getByRole("tab", { name });
+    fireEvent.keyDown(tab("Live"), { key: "ArrowRight" });
+    expect(tab("Ads").ariaSelected).toBe("true");
+    expect(document.activeElement).toBe(tab("Ads"));
+    expect(screen.getByRole("tabpanel").id).toBe("sm-panel-ads");
+    fireEvent.keyDown(tab("Ads"), { key: "End" });
+    expect(tab("Polls and predictions").ariaSelected).toBe("true");
+    expect(screen.getByText("Start a poll")).toBeTruthy();
+    fireEvent.keyDown(tab("Polls and predictions"), { key: "ArrowRight" });
+    expect(tab("Live").ariaSelected).toBe("true");
+    fireEvent.keyDown(tab("Live"), { key: "ArrowLeft" });
+    fireEvent.keyDown(tab("Polls and predictions"), { key: "Home" });
+    fireEvent.keyDown(tab("Live"), { key: "Tab" });
+    expect(tab("Live").ariaSelected).toBe("true");
+    fireEvent.click(tab("Ads"));
+    expect(screen.getByText("Run your ads from here")).toBeTruthy();
+    setStreamManagerTab("live");
   });
 
   it("asks for a reconnect when the grant predates it", () => {
