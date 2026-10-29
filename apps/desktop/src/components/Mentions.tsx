@@ -7,6 +7,7 @@ import { channelTabs } from "../stores/channelStore";
 import { jumpToMessage } from "../stores/jumpStore";
 import {
   clearMentions,
+  isNewMention,
   mentions,
   mentionsOpen,
   setMentionsOpen,
@@ -85,7 +86,7 @@ const Mentions: Component = () => {
                     return (
                       <MessageRow
                         msg={m}
-                        mention
+                        unread={isNewMention(m)}
                         lead={
                           <Show
                             when={channel()?.profile_image_url}

@@ -33,6 +33,12 @@ export function isMentionFor(
 export interface MentionsStore {
   mentions: () => ChatMessage[];
   unread: () => number;
+  /**
+   * Whether a mention was new when the list was opened, or arrived while it
+   * is open. Opening marks everything read at once, so the list keeps what
+   * was unread for as long as it stays open.
+   */
+  isNew: (msg: ChatMessage) => boolean;
   open: () => boolean;
   record: (msg: ChatMessage) => void;
   /** Looks through a channel's stored history once per session. */
@@ -55,6 +61,7 @@ export function createMentionsStore(
   const [mentions, setMentions] = createSignal<ChatMessage[]>([]);
   const [open, setOpenSignal] = createSignal(false);
   const [seenAt, setSeenAtSignal] = createSignal(readTime(storage, SEEN_KEY));
+  const [newSince, setNewSince] = createSignal(seenAt());
   // Clear hides everything up to that moment for good, so history scans on
   // later launches do not bring cleared mentions back.
   let clearedAt = readTime(storage, CLEARED_KEY);
@@ -100,12 +107,16 @@ export function createMentionsStore(
   return {
     mentions,
     unread,
+    isNew: (msg) => msg.timestamp > newSince(),
     open,
     record: (msg) => add([msg]),
     scanHistory,
     setOpen: (value) => {
       setOpenSignal(value);
-      if (value) setSeenAt(now());
+      if (value) {
+        setNewSince(seenAt());
+        setSeenAt(now());
+      }
     },
     clear: () => {
       clearedAt = now();
@@ -150,6 +161,7 @@ function defaultStorage(): StorageLike | null {
 const defaultStore = createMentionsStore();
 export const mentions = defaultStore.mentions;
 export const unreadMentions = defaultStore.unread;
+export const isNewMention = defaultStore.isNew;
 export const mentionsOpen = defaultStore.open;
 export const recordMention = defaultStore.record;
 export const scanMentionHistory = defaultStore.scanHistory;

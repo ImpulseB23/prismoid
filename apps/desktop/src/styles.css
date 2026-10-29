@@ -1051,6 +1051,19 @@ option::checkmark {
   background: var(--prism-tint);
 }
 
+.msg-row--unread::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--prism);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
 .msg-row--deleted .msg-row__text {
   opacity: 0.45;
   text-decoration: line-through;

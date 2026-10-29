@@ -23,6 +23,8 @@ export interface MessageRowProps {
   /** Shown at the end on hover, e.g. a delete button. */
   trailing?: JSX.Element;
   mention?: boolean;
+  /** Not yet seen: a thin prism line under the message. */
+  unread?: boolean;
   /** Indented under the message above, for replies in a thread. */
   reply?: boolean;
   onClick?: () => void;
@@ -38,6 +40,7 @@ const MessageRow: Component<MessageRowProps> = (props) => (
       classList={{
         "msg-row--action": props.onClick !== undefined,
         "msg-row--mention": props.mention === true,
+        "msg-row--unread": props.unread === true,
         "msg-row--deleted": props.msg.deleted === true,
       }}
     >
