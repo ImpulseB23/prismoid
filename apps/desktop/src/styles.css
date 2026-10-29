@@ -699,8 +699,55 @@ option::checkmark {
 }
 
 .palette__item[aria-selected="true"],
-.palette__item:hover {
+.palette__item:hover,
+.palette__item--on {
   background: var(--bg-surface);
+}
+
+.search-suggestions {
+  list-style: none;
+  margin-bottom: 6px;
+}
+
+.search-suggestions .palette__item {
+  cursor: pointer;
+}
+
+.search-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.search-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--select-tint);
+  color: var(--select-text);
+  font-size: 12px;
+}
+
+.search-chip__key {
+  color: var(--text-muted);
+}
+
+.search-chip__remove {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  color: var(--text-muted);
+}
+
+.search-chip__remove:hover {
+  background: var(--hover);
+  color: var(--text);
 }
 
 .palette__item-avatar {
