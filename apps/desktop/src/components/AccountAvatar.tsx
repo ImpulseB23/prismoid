@@ -8,7 +8,7 @@ import { sessionFor } from "../lib/chatSession";
 import { activeChannel } from "../stores/channelStore";
 import { currentUserId } from "../stores/authStore";
 import { ownBadges } from "../stores/ownIdentityStore";
-import { canModerate } from "../stores/roleStore";
+import { holdsModRole } from "../stores/roleStore";
 import { accountOpen, setAccountOpen } from "../stores/accountPanelStore";
 import AccountPanel from "./AccountPanel";
 import type { Attention } from "../lib/settingsAttention";
@@ -50,7 +50,7 @@ const AccountAvatar: Component<{
     const roleBadges =
       channel.id === me
         ? [{ set_id: "broadcaster", id: "1" }]
-        : canModerate()
+        : holdsModRole(channel.id)
           ? [{ set_id: "moderator", id: "1" }]
           : [];
     return {

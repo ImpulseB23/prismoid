@@ -31,6 +31,7 @@ function appliers(): SettingsAppliers & {
   firsts: boolean[];
   paints: boolean[];
   managers: boolean[];
+  mods: boolean[];
 } {
   const tops: boolean[] = [];
   const zooms: number[] = [];
@@ -38,6 +39,7 @@ function appliers(): SettingsAppliers & {
   const firsts: boolean[] = [];
   const paints: boolean[] = [];
   const managers: boolean[] = [];
+  const mods: boolean[] = [];
   return {
     tops,
     zooms,
@@ -45,6 +47,7 @@ function appliers(): SettingsAppliers & {
     firsts,
     paints,
     managers,
+    mods,
     alwaysOnTop: async (v) => {
       tops.push(v);
     },
@@ -62,6 +65,9 @@ function appliers(): SettingsAppliers & {
     },
     streamManager: async (v) => {
       managers.push(v);
+    },
+    modTools: async (v) => {
+      mods.push(v);
     },
     theme: async (v) => {
       themes.push(v);
@@ -92,6 +98,7 @@ describe("settingsStore", () => {
       splitView: true,
       streamVideo: true,
       streamManager: true,
+      modTools: true,
       hideViewers: false,
       hideUptime: false,
       hideChatRate: false,
@@ -183,6 +190,7 @@ describe("settingsStore", () => {
         highlightFirstMessages: async () => {},
         showPaints: async () => {},
         streamManager: async () => {},
+        modTools: async () => {},
         theme: async () => {},
       },
       memStorage(),
@@ -249,6 +257,7 @@ describe("settingsStore", () => {
       splitView: true,
       streamVideo: false,
       streamManager: false,
+      modTools: true,
       hideViewers: false,
       hideUptime: false,
       hideChatRate: false,
@@ -397,22 +406,27 @@ describe("settingsStore", () => {
     expect(b.paints).toEqual([false]);
   });
 
-  it("stops the stream manager feeds when switched off, also at startup", async () => {
+  it("stops a feature's feeds when switched off, also at startup", async () => {
     const a = appliers();
     const on = createSettingsStore(a, memStorage());
     await on.apply();
     expect(a.managers).toEqual([]);
-    await on.update({ streamManager: false });
+    await on.update({ streamManager: false, modTools: false });
     expect(a.managers).toEqual([false]);
+    expect(a.mods).toEqual([false]);
 
     const b = appliers();
     await createSettingsStore(
       b,
       memStorage({
-        "prismoid.settings": JSON.stringify({ streamManager: false }),
+        "prismoid.settings": JSON.stringify({
+          streamManager: false,
+          modTools: false,
+        }),
       }),
     ).apply();
     expect(b.managers).toEqual([false]);
+    expect(b.mods).toEqual([false]);
   });
 });
 

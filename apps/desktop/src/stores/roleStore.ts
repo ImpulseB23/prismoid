@@ -8,7 +8,7 @@ import {
   getModeratedChannels,
   type ModeratedChannel,
 } from "../lib/twitchChannel";
-import { activeChannel } from "./channelStore";
+import { settings } from "./settingsStore";
 import {
   FOLLOWERS_SCOPE,
   WARN_SCOPE,
@@ -84,19 +84,22 @@ export function reconnectScopes(): string[] {
     : missing.filter((s) => !MOD_ONLY_SCOPES.includes(s));
 }
 
-/**
- * Whether moderation controls should show in a channel: the user is its
- * broadcaster or holds the moderator role there, and the token carries the
- * scopes those calls need.
- */
-export function canModerateIn(channelId: string): boolean {
+/** The user is the channel's broadcaster or one of its moderators. */
+export function holdsModRole(channelId: string): boolean {
   const userId = currentUserId();
-  if (!userId || moderationNeedsReconnect()) return false;
+  if (!userId) return false;
   return channelId === userId || defaultStore.isModeratorOf(channelId);
 }
 
-/** {@link canModerateIn} for the channel on screen. */
-export function canModerate(): boolean {
-  const channel = activeChannel();
-  return channel ? canModerateIn(channel.id) : false;
+/**
+ * Whether moderation controls should show in a channel: the user holds the
+ * role there, the token carries the scopes those calls need, and mod tools
+ * are switched on in Features.
+ */
+export function canModerateIn(channelId: string): boolean {
+  return (
+    settings().modTools &&
+    !moderationNeedsReconnect() &&
+    holdsModRole(channelId)
+  );
 }

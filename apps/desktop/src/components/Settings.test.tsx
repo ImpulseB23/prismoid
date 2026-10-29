@@ -238,6 +238,7 @@ describe("Settings", () => {
       [/Split view/, "splitView"],
       [/Stream video/, "streamVideo"],
       [/Stream manager/, "streamManager"],
+      [/Mod tools/, "modTools"],
       [/Mention alerts/, "mentionAlerts"],
     ] as const) {
       fireEvent.click(screen.getByRole("checkbox", { name }));
