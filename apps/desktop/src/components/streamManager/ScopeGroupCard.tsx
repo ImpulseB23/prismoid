@@ -25,6 +25,10 @@ const COPY: Record<ScopeGroup, { title: string; body: string }> = {
     title: "Run your ads from here",
     body: "See when the next ad comes, snooze it, and start a break when it suits you. Prismoid asks Twitch for access to your ads once you turn this on.",
   },
+  chat_color: {
+    title: "Change your name color",
+    body: "Pick the color your name shows in on Twitch, everywhere you chat. Prismoid asks Twitch for this once you turn it on.",
+  },
   live_actions: {
     title: "Clips, shoutouts and more",
     body: "Make clips, send shoutouts and announcements, and switch on Shield Mode from here. Prismoid asks Twitch for these once you turn them on.",

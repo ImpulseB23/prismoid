@@ -30,7 +30,8 @@ export type ChannelError =
   | { kind: "no_snoozes_left"; message: string }
   | { kind: "no_ad_to_snooze"; message: string }
   /** retry_at: Unix ms when the next commercial may run, if known. */
-  | { kind: "commercial_cooldown"; message: string; retry_at: number | null };
+  | { kind: "commercial_cooldown"; message: string; retry_at: number | null }
+  | { kind: "color_needs_turbo"; message: string };
 
 /** Opens a channel as a tab and shows it. */
 export function joinChannel(login: string): Promise<Channel> {
@@ -108,6 +109,8 @@ export function formatChannelError(e: unknown): string {
       return "No snoozes left. Twitch gives you another one later.";
     case "no_ad_to_snooze":
       return "There is no ad to snooze. Snoozing needs a live stream with an ad coming up.";
+    case "color_needs_turbo":
+      return "Custom colors need Turbo or Prime. Pick one of the colors above instead.";
     case "commercial_cooldown": {
       if (e.retry_at === null)
         return "Twitch needs 8 minutes between ads. Try again later.";
@@ -133,6 +136,32 @@ export interface ChatSettings {
 
 /** Send only the fields being changed; a duration needs its mode set true. */
 export type ChatSettingsPatch = Partial<ChatSettings>;
+
+/** The name colors every Twitch user may pick. */
+export type NamedChatColor =
+  | "blue"
+  | "blue_violet"
+  | "cadet_blue"
+  | "chocolate"
+  | "coral"
+  | "dodger_blue"
+  | "firebrick"
+  | "golden_rod"
+  | "green"
+  | "hot_pink"
+  | "orange_red"
+  | "red"
+  | "sea_green"
+  | "spring_green"
+  | "yellow_green";
+
+/**
+ * Sets the user's name color: a named color, or with Turbo or Prime a
+ * `#RRGGBB` one. Needs the chat_color scope group.
+ */
+export function updateChatColor(color: NamedChatColor | string): Promise<void> {
+  return invoke("twitch_update_chat_color", { color });
+}
 
 /**
  * Anyone can read a room's modes; a moderator also gets the non-moderator

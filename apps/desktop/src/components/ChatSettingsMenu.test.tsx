@@ -23,6 +23,10 @@ vi.mock("../stores/settingsStore", () => ({
   PAUSE_CHAT: ["scroll", "hover", "alt", "hoverAlt"],
 }));
 
+vi.mock("./ChatIdentity", () => ({
+  default: (p: { login: string }) => <p>identity of {p.login}</p>,
+}));
+
 const { default: ChatSettingsMenu } = await import("./ChatSettingsMenu");
 
 function mount() {
@@ -32,6 +36,7 @@ function mount() {
   render(() => (
     <ChatSettingsMenu
       open={open()}
+      login="viewer"
       anchor={gear}
       onClose={() => setOpen(false)}
     />
@@ -72,5 +77,16 @@ describe("ChatSettingsMenu", () => {
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(again.open()).toBe(false);
     expect(document.activeElement).toBe(again.gear);
+  });
+
+  it("opens chat identity and comes back", () => {
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: /Chat identity/ }));
+    expect(screen.getByText("identity of viewer")).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: /Timestamps/ })).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Back to chat settings" }),
+    );
+    expect(screen.getByRole("checkbox", { name: /Timestamps/ })).toBeTruthy();
   });
 });
