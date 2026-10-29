@@ -87,6 +87,21 @@ describe("layoutStore", () => {
     expect(channels(s)).toEqual([null]);
   });
 
+  it("remembers the video per pane", () => {
+    const store = memStorage();
+    const s = createLayoutStore(store);
+    s.show("a");
+    s.split("b");
+    const [first, second] = s.panes().map((p) => p.id);
+    s.toggleVideo(first!);
+    expect(s.panes().map((p) => p.video === true)).toEqual([true, false]);
+    const again = createLayoutStore(memStorage(store.saved()));
+    expect(again.panes().map((p) => p.video === true)).toEqual([true, false]);
+    again.toggleVideo(first!);
+    again.toggleVideo(second!);
+    expect(again.panes().map((p) => p.video === true)).toEqual([false, true]);
+  });
+
   it("comes back as it was saved and ignores what it cannot use", () => {
     const store = memStorage();
     const s = createLayoutStore(store);

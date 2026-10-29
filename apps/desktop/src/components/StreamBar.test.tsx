@@ -1,0 +1,41 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
+
+vi.mock("../stores/streamStore", () => ({
+  streamLoading: () => false,
+  streamClock: () => 0,
+  streamInfo: () => ({
+    is_live: true,
+    title: "Finals",
+    game_name: "Counter-Strike",
+    viewer_count: 28000,
+    started_at: null,
+  }),
+}));
+vi.mock("../stores/channelStore", () => ({
+  activeChannel: () => ({ id: "c", login: "c", display_name: "C" }),
+}));
+vi.mock("../stores/pulseStore", () => ({
+  startPulse: () => () => {},
+  messagesPerMinute: () => 0,
+  activeChatters: () => 0,
+}));
+
+const { default: StreamBar } = await import("./StreamBar");
+const layout = await import("../stores/layoutStore");
+
+describe("StreamBar", () => {
+  afterEach(cleanup);
+
+  it("shows and hides the stream in the focused pane", () => {
+    render(() => <StreamBar />);
+    const focused = () =>
+      layout.panes().find((p) => p.id === layout.focusedPaneId());
+    fireEvent.click(screen.getByRole("button", { name: "Watch the stream" }));
+    expect(focused()?.video).toBe(true);
+    const hide = screen.getByRole("button", { name: "Hide the stream" });
+    expect(hide.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(hide);
+    expect(focused()?.video).toBe(false);
+  });
+});

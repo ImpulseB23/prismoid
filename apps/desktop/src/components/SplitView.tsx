@@ -27,6 +27,7 @@ import ChatPane from "./ChatPane";
 import ChatFeed from "./ChatFeed";
 import CommandCenter from "./CommandCenter";
 import MessageInput from "./MessageInput";
+import StreamVideo from "./StreamVideo";
 
 const report = (what: string) => (err: unknown) => console.error(what, err);
 
@@ -98,6 +99,11 @@ const SplitView: Component<{ login: string }> = (props) => {
                   picture={channel()?.profile_image_url}
                   onClose={() => closePane(slotId)}
                 />
+              </Show>
+              <Show when={slot().video ? channel() : null}>
+                {(c) => (
+                  <StreamVideo login={c().login} name={c().display_name} />
+                )}
               </Show>
               <div class="chat-area">
                 <ChatFeed login={props.login} />

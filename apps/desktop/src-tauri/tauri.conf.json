@@ -19,6 +19,7 @@
         "img-src": "'self' https: data:",
         "font-src": "'self'",
         "connect-src": "ipc: http://ipc.localhost",
+        "frame-src": "https://player.twitch.tv",
         "object-src": "'none'",
         "base-uri": "'self'"
       }

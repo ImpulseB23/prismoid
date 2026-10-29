@@ -1,6 +1,7 @@
 // One quiet line under the tabs: live marker, category and stream title on
 // the left, the numbers on the right (viewers, uptime, messages a minute,
-// people chatting), each one switchable in Settings. A channel loading for
+// people chatting), each one switchable in Settings, and the button that
+// shows the stream above the focused pane's chat. A channel loading for
 // the first time gets a placeholder of the same height so nothing below it
 // jumps.
 
@@ -9,6 +10,7 @@ import { formatUptime, formatViewers } from "../lib/streamInfo";
 import { streamClock, streamInfo, streamLoading } from "../stores/streamStore";
 import { activeChannel } from "../stores/channelStore";
 import { settings } from "../stores/settingsStore";
+import { focusedPaneId, panes, togglePaneVideo } from "../stores/layoutStore";
 import {
   activeChatters,
   messagesPerMinute,
@@ -17,6 +19,8 @@ import {
 
 const StreamBar: Component = () => {
   onMount(() => onCleanup(startPulse()));
+  const videoOn = () =>
+    panes().find((p) => p.id === focusedPaneId())?.video === true;
 
   return (
     <Show
@@ -81,6 +85,36 @@ const StreamBar: Component = () => {
                     </span>
                   </Show>
                 </span>
+                <button
+                  type="button"
+                  class="stream-bar__video"
+                  classList={{ "stream-bar__video--on": videoOn() }}
+                  aria-pressed={videoOn()}
+                  aria-label={
+                    videoOn() ? "Hide the stream" : "Watch the stream"
+                  }
+                  title={videoOn() ? "Hide the stream" : "Watch the stream"}
+                  onClick={() => togglePaneVideo(focusedPaneId())}
+                >
+                  <svg
+                    width="16"
+                    height="12"
+                    viewBox="0 0 16 12"
+                    aria-hidden="true"
+                  >
+                    <rect
+                      x="0.75"
+                      y="0.75"
+                      width="10.5"
+                      height="10.5"
+                      rx="2"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                    />
+                    <path d="M12 4.5l3.25-2v7L12 7.5z" fill="currentColor" />
+                  </svg>
+                </button>
               </div>
             )}
           </Show>

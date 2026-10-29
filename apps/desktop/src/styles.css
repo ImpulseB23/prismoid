@@ -2884,6 +2884,36 @@ option::checkmark {
   display: none;
 }
 
+/* Shows the stream above the focused pane; lit while it is showing. */
+.stream-bar__video {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 22px;
+  margin-left: 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  transition:
+    color 0.15s,
+    background 0.15s;
+}
+
+.stream-bar__stats:empty + .stream-bar__video {
+  margin-left: auto;
+}
+
+.stream-bar__video:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.stream-bar__video--on {
+  color: var(--text);
+  background: var(--prism-tint);
+}
+
 .stream-bar__skeleton-end {
   margin-left: auto;
 }
@@ -4279,6 +4309,28 @@ option::checkmark {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The stream above a pane's chat, centred when the pane is taller than the
+   video can use. */
+.stream-video {
+  display: flex;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #000;
+  border-bottom: 1px solid var(--border);
+}
+
+.stream-video__player {
+  display: block;
+  border: 0;
+}
+
+.stream-video__small {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 /* Drop targets for a dragged tab: the whole pane shows it there, the
