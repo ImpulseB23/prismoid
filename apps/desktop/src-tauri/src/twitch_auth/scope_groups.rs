@@ -22,6 +22,7 @@ pub enum ScopeGroup {
     Stream,
     Ads,
     LiveActions,
+    ChatColor,
 }
 
 const STREAM: &[Scope] = &[
@@ -36,6 +37,8 @@ const ADS: &[Scope] = &[
     Scope::ChannelEditCommercial,
 ];
 
+const CHAT_COLOR: &[Scope] = &[Scope::UserManageChatColor];
+
 const LIVE_ACTIONS: &[Scope] = &[
     Scope::ModeratorManageShoutouts,
     Scope::ModeratorManageAnnouncements,
@@ -49,6 +52,7 @@ impl ScopeGroup {
             Self::Stream => STREAM,
             Self::Ads => ADS,
             Self::LiveActions => LIVE_ACTIONS,
+            Self::ChatColor => CHAT_COLOR,
         }
     }
 }
@@ -61,6 +65,7 @@ impl FromStr for ScopeGroup {
             "stream" => Ok(Self::Stream),
             "ads" => Ok(Self::Ads),
             "live_actions" => Ok(Self::LiveActions),
+            "chat_color" => Ok(Self::ChatColor),
             _ => Err(AuthError::UnknownScopeGroup(s.to_owned())),
         }
     }
@@ -152,7 +157,12 @@ mod tests {
 
     #[test]
     fn names_round_trip_through_serde() {
-        for group in [ScopeGroup::Stream, ScopeGroup::Ads, ScopeGroup::LiveActions] {
+        for group in [
+            ScopeGroup::Stream,
+            ScopeGroup::Ads,
+            ScopeGroup::LiveActions,
+            ScopeGroup::ChatColor,
+        ] {
             let name = serde_json::to_value(group).unwrap();
             assert_eq!(name.as_str().unwrap().parse::<ScopeGroup>().unwrap(), group);
         }
@@ -194,6 +204,7 @@ mod tests {
                 "clips:edit"
             ]
         );
+        assert_eq!(names(ScopeGroup::ChatColor), ["user:manage:chat_color"]);
     }
 
     #[test]

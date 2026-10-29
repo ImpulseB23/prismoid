@@ -236,6 +236,11 @@ pub enum ChannelError {
     NoAdToSnooze {
         message: String,
     },
+    /// Update User Chat Color refused a hex color (400): only Turbo and
+    /// Prime users may pick one; everyone has the named colors.
+    ColorNeedsTurbo {
+        message: String,
+    },
     /// Start Commercial answered 429: the last ad is too recent.
     /// `retry_at` (Unix ms) is when the next one is allowed, if known.
     CommercialCooldown {
@@ -1206,6 +1211,82 @@ pub async fn twitch_own_chat_color(
     .await
 }
 
+/// The named colors every user may pick, from the Update User Chat Color
+/// reference. Turbo and Prime users may also use a `#rrggbb` hex color.
+pub const NAMED_CHAT_COLORS: [&str; 15] = [
+    "blue",
+    "blue_violet",
+    "cadet_blue",
+    "chocolate",
+    "coral",
+    "dodger_blue",
+    "firebrick",
+    "golden_rod",
+    "green",
+    "hot_pink",
+    "orange_red",
+    "red",
+    "sea_green",
+    "spring_green",
+    "yellow_green",
+];
+
+fn is_hex_color(color: &str) -> bool {
+    color.len() == 7 && color.starts_with('#') && color[1..].bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// Sets `user_id`'s name color with Helix `PUT /chat/color`. A color
+/// Twitch would refuse never leaves the app, and a hex color refused for
+/// lack of Turbo or Prime comes back as [`ChannelError::ColorNeedsTurbo`].
+pub async fn update_chat_color(
+    http: &reqwest::Client,
+    helix_base: &str,
+    access_token: &str,
+    user_id: &str,
+    color: &str,
+) -> Result<(), ChannelError> {
+    let hex = is_hex_color(color);
+    if !hex && !NAMED_CHAT_COLORS.contains(&color) {
+        return Err(ChannelError::InvalidSetting {
+            message: format!("{color} is not a Twitch chat color"),
+        });
+    }
+    match helix_send(
+        http,
+        reqwest::Method::PUT,
+        format!("{helix_base}/chat/color"),
+        &[("user_id", user_id), ("color", color)],
+        access_token,
+    )
+    .await
+    {
+        Ok(_) => Ok(()),
+        Err(ChannelError::Helix {
+            status: 400,
+            message,
+        }) if hex => Err(ChannelError::ColorNeedsTurbo { message }),
+        Err(e) => Err(e),
+    }
+}
+
+/// Sets the signed-in user's name color; needs the chat_color scope group.
+#[tauri::command]
+pub async fn twitch_update_chat_color(
+    auth: State<'_, AuthState>,
+    channels: State<'_, ChannelState>,
+    color: String,
+) -> Result<(), ChannelError> {
+    let tokens = auth.manager.load_or_refresh().await?;
+    update_chat_color(
+        auth.manager.http_client(),
+        &channels.helix_base,
+        &tokens.access_token,
+        &tokens.user_id,
+        &color,
+    )
+    .await
+}
+
 /// Public profile fields from Helix `GET /users`, for the account insight
 /// shown on chatters: how old the account is and what it looks like.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1572,6 +1653,63 @@ mod tests {
         assert_eq!(big.calls(), 1);
         assert_eq!(got[0].login, "jynsmall");
         assert!(got[0].followed);
+    }
+
+    #[tokio::test]
+    async fn chat_color_update_sends_named_and_hex_colors() {
+        let server = MockServer::start_async().await;
+        let named = server.mock(|when, then| {
+            when.method(PUT)
+                .path("/chat/color")
+                .query_param("user_id", "1")
+                .query_param("color", "blue_violet")
+                .header("Authorization", "Bearer tok");
+            then.status(204);
+        });
+        let hex = server.mock(|when, then| {
+            when.method(PUT)
+                .path("/chat/color")
+                .query_param("user_id", "1")
+                .query_param("color", "#9146FF");
+            then.status(204);
+        });
+        let http = reqwest::Client::new();
+        let base = server.base_url();
+        update_chat_color(&http, &base, "tok", "1", "blue_violet")
+            .await
+            .unwrap();
+        update_chat_color(&http, &base, "tok", "1", "#9146FF")
+            .await
+            .unwrap();
+        assert_eq!(named.calls(), 1);
+        assert_eq!(hex.calls(), 1);
+    }
+
+    #[tokio::test]
+    async fn chat_color_update_explains_refusals() {
+        let server = MockServer::start_async().await;
+        let refused = server.mock(|when, then| {
+            when.method(PUT).path("/chat/color");
+            then.status(400)
+                .body("To specify a Hex color code, the user must be a Turbo or Prime user.");
+        });
+        let http = reqwest::Client::new();
+        let base = server.base_url();
+        let err = update_chat_color(&http, &base, "tok", "1", "#123456")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ChannelError::ColorNeedsTurbo { .. }));
+        let err = update_chat_color(&http, &base, "tok", "1", "blue")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ChannelError::Helix { status: 400, .. }));
+        for bad in ["purple", "#12345", "#12345g", "9146FF"] {
+            let err = update_chat_color(&http, &base, "tok", "1", bad)
+                .await
+                .unwrap_err();
+            assert!(matches!(err, ChannelError::InvalidSetting { .. }), "{bad}");
+        }
+        assert_eq!(refused.calls(), 2);
     }
 
     #[tokio::test]

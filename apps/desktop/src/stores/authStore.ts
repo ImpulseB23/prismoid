@@ -63,6 +63,7 @@ const SCOPE_GROUPS: Record<ScopeGroup, string[]> = {
     "moderator:manage:shield_mode",
     "clips:edit",
   ],
+  chat_color: ["user:manage:chat_color"],
 };
 
 export function scopeGroupEnabled(group: ScopeGroup): boolean {

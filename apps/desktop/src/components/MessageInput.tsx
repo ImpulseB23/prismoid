@@ -489,6 +489,7 @@ const MessageInput: Component<Props> = (props) => {
       />
       <ChatSettingsMenu
         open={menuOpen()}
+        login={props.login}
         anchor={gear()}
         onClose={() => setMenuOpen(false)}
       />
