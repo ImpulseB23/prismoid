@@ -22,11 +22,22 @@ const AccountAvatar: Component<{ login: string; onSignOut: () => void }> = (
 ) => {
   // The newest message the user sent here carries their exact badges and
   // color. When none is loaded, the badges remembered from their last
-  // message in the channel stand in, then their role.
+  // message in the channel stand in, then their role. With no channel open
+  // the avatar stays, without badges, so the account is always in reach.
   const self = createMemo(() => {
     const me = currentUserId();
+    if (!me) return null;
     const channel = activeChannel();
-    if (!me || !channel) return null;
+    if (!channel) {
+      return {
+        channel_id: null,
+        platform_user_id: me,
+        username: props.login,
+        display_name: props.login,
+        color: null,
+        badges: [],
+      };
+    }
     const chat = sessionFor(channel.id)?.chat;
     chat?.messageRevision();
     const last: ChatMessage | undefined = chat
