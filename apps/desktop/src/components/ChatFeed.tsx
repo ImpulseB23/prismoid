@@ -43,8 +43,7 @@ import { openModPopover } from "../stores/modPopoverStore";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { formatSeconds } from "../lib/slashCommands";
 import { messageMenuItems } from "../lib/messageMenu";
-import { contextMenu, openContextMenu } from "../stores/contextMenuStore";
-import { emoteHoverPane } from "../stores/emoteCardStore";
+import { openContextMenu } from "../stores/contextMenuStore";
 import { formatSendError, toSendError } from "../lib/messageInput";
 import { retainPulse } from "../stores/pulseStore";
 import { canModerateIn } from "../stores/roleStore";
@@ -150,7 +149,6 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     const c = session().channel;
     return c !== null && canModerateIn(c.id);
   };
-  let rootRef: HTMLDivElement | undefined;
   let containerRef: HTMLDivElement | undefined;
   const entryCache = new Map<number, CachedEntry>();
   let cachedFor: ChatSession | undefined;
@@ -197,19 +195,9 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       setAltDown(false);
     });
   });
-  // A menu or emote tooltip opened from this feed holds it still too, so
-  // what it points at stays put until it closes.
-  const popupOpen = () => {
-    const anchor = contextMenu()?.anchor;
-    return (
-      (anchor != null && rootRef?.contains(anchor) === true) ||
-      emoteHoverPane() === pane
-    );
-  };
   const held = () => {
     const mode = settings().pauseChat;
     return (
-      popupOpen() ||
       ((mode === "hover" || mode === "hoverAlt") && hovering()) ||
       ((mode === "alt" || mode === "hoverAlt") && altDown())
     );
@@ -714,7 +702,6 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
 
   return (
     <div
-      ref={(el) => (rootRef = el)}
       class="feed"
       data-tour="feed"
       onPointerEnter={() => setHovering(true)}

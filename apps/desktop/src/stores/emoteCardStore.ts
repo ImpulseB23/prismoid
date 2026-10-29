@@ -21,12 +21,9 @@ export interface EmoteHover {
 export const HOVER_DELAY_MS = 150;
 
 const [hoveredEmote, setHoveredEmote] = createSignal<EmoteHover | null>(null);
-// The pane whose emote is under the pointer, from the moment it is pointed
-// at, so its feed holds still while the tooltip is on its way.
-const [emoteHoverPane, setEmoteHoverPane] = createSignal<Pane | undefined>();
 let hoverSeq = 0;
 
-export { hoveredEmote, emoteHoverPane };
+export { hoveredEmote };
 
 /** The large image the tooltip and card show. */
 export const largeUrl = (e: EmoteMeta) => e.url_4x || e.url_2x || e.url_1x;
@@ -40,7 +37,6 @@ export function hoverEmote(
   pane: Pane | undefined,
 ): void {
   const seq = ++hoverSeq;
-  setEmoteHoverPane(pane);
   void Promise.all([
     new Promise((r) => setTimeout(r, HOVER_DELAY_MS)),
     preloadImages([emote, ...overlays].map(largeUrl), 400),
@@ -58,7 +54,6 @@ export function hoverEmote(
 export function endEmoteHover(): void {
   ++hoverSeq;
   setHoveredEmote(null);
-  setEmoteHoverPane(undefined);
 }
 
 const [inspectedEmote, setInspectedEmote] = createSignal<EmoteMeta | null>(
