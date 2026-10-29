@@ -38,6 +38,7 @@ export interface Settings {
   /** Features that can be switched off whole, UI and background work. */
   splitView: boolean;
   streamVideo: boolean;
+  streamManager: boolean;
   /** Hide the live viewer count in the stream bar. */
   hideViewers: boolean;
   hideUptime: boolean;
@@ -123,6 +124,7 @@ export const DEFAULT_SETTINGS: Settings = {
   animatedEmotes: true,
   splitView: true,
   streamVideo: true,
+  streamManager: true,
   hideViewers: false,
   hideUptime: false,
   hideChatRate: false,
@@ -162,6 +164,8 @@ export interface SettingsAppliers {
   closeToTray: (value: boolean) => Promise<void>;
   highlightFirstMessages: (value: boolean) => Promise<void>;
   showPaints: (value: boolean) => Promise<void>;
+  /** Starts or stops the poll, prediction and ad break feeds. */
+  streamManager: (value: boolean) => Promise<void>;
   theme: (value: Theme) => Promise<void>;
 }
 
@@ -195,6 +199,8 @@ const defaultAppliers: SettingsAppliers = {
   closeToTray: (v) => invoke("set_close_to_tray", { enabled: v }),
   highlightFirstMessages: (v) => invoke("set_first_messages", { enabled: v }),
   showPaints: (v) => invoke("set_seventv_paints", { enabled: v }),
+  streamManager: (v) =>
+    invoke("set_twitch_feed", { feed: "broadcaster", enabled: v }),
   // "system" hands the title bar back to Windows; midnight shares dark chrome.
   theme: (v) =>
     getCurrentWindow().setTheme(
@@ -235,6 +241,9 @@ export function createSettingsStore(
     if (next.showPaints !== current.showPaints) {
       await appliers.showPaints(next.showPaints);
     }
+    if (next.streamManager !== current.streamManager) {
+      await appliers.streamManager(next.streamManager);
+    }
     if (next.theme !== current.theme) {
       await appliers.theme(next.theme);
     }
@@ -268,6 +277,7 @@ export function createSettingsStore(
     if (s.closeToTray) await appliers.closeToTray(true);
     if (!s.highlightFirstMessages) await appliers.highlightFirstMessages(false);
     if (!s.showPaints) await appliers.showPaints(false);
+    if (!s.streamManager) await appliers.streamManager(false);
     if (s.theme !== "system") await appliers.theme(s.theme);
   }
 
@@ -333,6 +343,10 @@ function readSettings(storage: StorageLike | null): Settings {
         typeof p.streamVideo === "boolean"
           ? p.streamVideo
           : DEFAULT_SETTINGS.streamVideo,
+      streamManager:
+        typeof p.streamManager === "boolean"
+          ? p.streamManager
+          : DEFAULT_SETTINGS.streamManager,
       hideViewers:
         typeof p.hideViewers === "boolean"
           ? p.hideViewers

@@ -417,6 +417,25 @@ const Settings: Component<SettingsProps> = (props) => {
             </label>
             <label class="settings__row settings__row--toggle">
               <div class="settings__text">
+                <span class="settings__name">Stream manager</span>
+                <span class="settings__hint">
+                  Title, category, ads, polls and predictions for your own
+                  channel
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                class="switch"
+                checked={settings().streamManager}
+                onChange={(e) =>
+                  run(
+                    updateSettings({ streamManager: e.currentTarget.checked }),
+                  )
+                }
+              />
+            </label>
+            <label class="settings__row settings__row--toggle">
+              <div class="settings__text">
                 <span class="settings__name">Load earlier messages</span>
                 <span class="settings__hint">
                   When you open a channel, fetch what was said before you joined

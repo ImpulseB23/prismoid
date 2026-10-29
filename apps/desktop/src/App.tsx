@@ -284,7 +284,9 @@ const ChatShell: Component<{ login: string; onSignOut: () => void }> = (
         <ChannelTabs />
         <StreamBar />
         <SplitView login={props.login} />
-        <StreamManager />
+        <Show when={settings().streamManager}>
+          <StreamManager />
+        </Show>
       </div>
       <Tour />
       <PatchNotes />

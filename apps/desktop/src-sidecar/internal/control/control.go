@@ -75,8 +75,11 @@ type Command struct {
 	// matches it back when the result line arrives.
 	RequestID uint64 `json:"request_id,omitempty"`
 
-	// Enabled is the switch carried by first_messages.
+	// Enabled is the switch carried by first_messages, seventv_paints and
+	// twitch_feed.
 	Enabled bool `json:"enabled,omitempty"`
+	// Feed names the subscription group twitch_feed switches.
+	Feed string `json:"feed,omitempty"`
 
 	// YouTube fields
 	VideoID    string `json:"video_id,omitempty"`
