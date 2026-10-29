@@ -224,6 +224,8 @@ var chatSubscriptions = []string{
 	"channel.chat.message_delete",
 	"channel.chat.clear_user_messages",
 	"channel.chat.clear",
+	// Room modes, so the composer knows about slow mode even for viewers.
+	"channel.chat_settings.update",
 }
 
 // Subscribe creates the EventSub subscriptions in chatSubscriptions that

@@ -483,7 +483,8 @@ impl Store {
                 | ChatEvent::AutomodResolved { .. }
                 | ChatEvent::PollUpdate(_)
                 | ChatEvent::PredictionUpdate(_)
-                | ChatEvent::AdBreak(_) => {}
+                | ChatEvent::AdBreak(_)
+                | ChatEvent::ChatSettings { .. } => {}
             }
         }
         tx.commit()
