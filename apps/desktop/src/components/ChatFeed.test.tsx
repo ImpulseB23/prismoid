@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
-import type { ChatMessage, EmoteMeta } from "../stores/chatStore";
+import type { ChatMessage } from "../stores/chatStore";
 import type { PreparedMessage, TextMetrics } from "../lib/messageLayout";
 
 const handlers = new Map<string, (event: { payload: unknown }) => void>();
@@ -42,7 +42,6 @@ vi.mock("../lib/chatHistory", async (importOriginal) => ({
   loadHistory: async () => [],
 }));
 vi.mock("../lib/emoteBundle", () => ({ currentEmoteBundle: async () => null }));
-vi.mock("../lib/preload", () => ({ preloadImages: async () => {} }));
 // Pretext needs a canvas, which jsdom lacks; layout is covered by its own
 // module, here only the row classes matter.
 vi.mock("../lib/messageLayout", async (importOriginal) => ({
@@ -203,9 +202,7 @@ describe("ChatFeed", () => {
     expect(modPopover()).toMatchObject({ kind: "warn", x: 40, y: 50 });
   });
 
-  it("holds still while a menu or emote from it is open", async () => {
-    const { hoverEmote, endEmoteHover } =
-      await import("../stores/emoteCardStore");
+  it("keeps following chat while a menu from it is open", async () => {
     const { container } = renderFeed("me");
     emit("chat_messages", [msg("held")]);
     await tick();
@@ -214,29 +211,11 @@ describe("ChatFeed", () => {
       clientY: 50,
     });
     expect(contextMenu()).not.toBeNull();
-    expect(screen.getByText("Chat paused")).toBeTruthy();
+    emit("chat_messages", [msg("after")]);
+    await tick();
+    expect(contextMenu()).not.toBeNull();
+    expect(screen.queryByText(/paused/i)).toBeNull();
     closeContextMenu();
-    expect(screen.queryByText("Chat paused")).toBeNull();
-
-    const emote = document.createElement("span");
-    container.append(emote);
-    const pane = (await import("../lib/pane")).focusedPane();
-    const meta: EmoteMeta = {
-      id: "x",
-      code: "x",
-      provider: "7tv",
-      url_1x: "x1",
-      url_2x: "x2",
-      url_4x: "x4",
-      width: 28,
-      height: 28,
-      animated: false,
-      zero_width: false,
-    };
-    hoverEmote(emote, meta, [], pane);
-    expect(screen.getByText("Chat paused")).toBeTruthy();
-    endEmoteHover();
-    expect(screen.queryByText("Chat paused")).toBeNull();
   });
 
   it("remembers the user's own badges from live chat", async () => {

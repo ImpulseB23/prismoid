@@ -19,8 +19,8 @@ const EmoteTooltip: Component = () => {
 
   createEffect(() => {
     if (!hoveredEmote()) return;
-    // Only the user's own scrolling moves the emote away; the feed holds
-    // still on its own while the tooltip shows.
+    // Only the user's own scrolling ends it; chat following new messages
+    // does not.
     window.addEventListener("wheel", endEmoteHover, {
       capture: true,
       passive: true,

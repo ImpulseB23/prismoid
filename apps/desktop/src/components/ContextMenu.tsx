@@ -31,8 +31,8 @@ const ContextMenu: Component = () => {
       if (e.key === "Escape") closeContextMenu();
     };
     const close = () => closeContextMenu();
-    // Only the user scrolling closes the menu. Chat moving on its own does
-    // not: the feed a menu came from holds still while it is open.
+    // Only the user scrolling closes the menu; chat following new messages
+    // does not, and the menu acts on what was clicked wherever it moves.
     const onWheel = (e: WheelEvent) => {
       if (menuRef && e.target instanceof Node && menuRef.contains(e.target)) {
         return;
