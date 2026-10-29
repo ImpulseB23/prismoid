@@ -24,6 +24,9 @@
 }
 
 :root {
+  /* The chat text size setting; the app sets it from settings. */
+  --chat-text: 20px;
+
   /* base - derived from logo prism grays, mirrors the website */
   --color-base-900: #0e0e10;
   --color-base-800: #1a1a1d;
@@ -1100,7 +1103,7 @@ option::checkmark {
   align-items: baseline;
   gap: 8px;
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--chat-text);
 }
 
 .msg-row__name {
@@ -1145,12 +1148,13 @@ option::checkmark {
   margin-left: auto;
   color: var(--text-faint);
   font-family: var(--font-mono);
-  font-size: 11px;
+  /* Chat's timestamp ratio, 12 to 15. */
+  font-size: calc(var(--chat-text) * 0.8);
 }
 
 .msg-row__text {
   color: var(--text);
-  font-size: 14px;
+  font-size: var(--chat-text);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }

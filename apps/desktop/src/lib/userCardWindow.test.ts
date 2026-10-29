@@ -46,8 +46,11 @@ describe("userCardWindow", () => {
   });
 
   it("calls the host commands", async () => {
-    await openUserCard(user);
-    expect(invoke).toHaveBeenLastCalledWith("user_card_open", { user });
+    await openUserCard(user, 1.25);
+    expect(invoke).toHaveBeenLastCalledWith("user_card_open", {
+      user,
+      zoom: 1.25,
+    });
     await currentCardUser();
     expect(invoke).toHaveBeenLastCalledWith("user_card_current", undefined);
     await cardReady();
@@ -80,7 +83,9 @@ describe("userCardWindow", () => {
 
   it("passes host errors through", async () => {
     invoke.mockRejectedValueOnce({ kind: "window", message: "no monitor" });
-    const caught: unknown = await openUserCard(user).catch((e: unknown) => e);
+    const caught: unknown = await openUserCard(user, 1).catch(
+      (e: unknown) => e,
+    );
     expect(isUserCardError(caught) && caught.kind).toBe("window");
   });
 

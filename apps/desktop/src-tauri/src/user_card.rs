@@ -10,8 +10,8 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    AppHandle, Emitter, EventTarget, Manager, PhysicalPosition, Runtime, State, WebviewUrl,
-    WebviewWindow, WebviewWindowBuilder, WindowEvent,
+    AppHandle, Emitter, EventTarget, LogicalSize, Manager, PhysicalPosition, Runtime, State,
+    WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
 
 use crate::message::Badge;
@@ -19,10 +19,18 @@ use crate::message::Badge;
 const LABEL_PREFIX: &str = "user-card-";
 /// Sent to a reused card with its new user.
 const SHOW_EVENT: &str = "user_card_show";
-const WIDTH: f64 = 420.0;
-const HEIGHT: f64 = 640.0;
-const MIN_WIDTH: f64 = 320.0;
-const MIN_HEIGHT: f64 = 400.0;
+// The card's layout in CSS pixels. The window is that times the app's zoom,
+// so it holds the same content at every zoom and text size.
+const CONTENT_WIDTH: f64 = 320.0;
+const CONTENT_HEIGHT: f64 = 480.0;
+const MIN_CONTENT_WIDTH: f64 = 240.0;
+const MIN_CONTENT_HEIGHT: f64 = 300.0;
+/// Bounds on the zoom setting the app sends, against a bad value.
+const MIN_ZOOM: f64 = 0.5;
+const MAX_ZOOM: f64 = 6.0;
+/// The scale Prismoid is drawn for; mirrors `TARGET_UI_SCALE` in
+/// src/lib/uiScale.ts.
+const TARGET_UI_SCALE: f64 = 1.5;
 
 pub fn is_card(label: &str) -> bool {
     label.starts_with(LABEL_PREFIX)
@@ -95,9 +103,30 @@ fn place(cursor: Point, size: (u32, u32), area: Area) -> Point {
 
 /// The card's outer size on a monitor with this scale factor. Cards are
 /// frameless on Windows, so the outer size is the inner one.
-fn card_size(scale: f64) -> (u32, u32) {
-    let px = |logical: f64| (logical * scale).round() as u32;
-    (px(WIDTH), px(HEIGHT))
+fn clamp_zoom(zoom: f64) -> f64 {
+    if zoom.is_finite() {
+        zoom.clamp(MIN_ZOOM, MAX_ZOOM)
+    } else {
+        1.0
+    }
+}
+
+/// The webview zoom the card ends up with on a monitor with `scale`: the
+/// setting on top of what that monitor's own scaling leaves to reach the
+/// target, as in `baseZoom` in src/lib/uiScale.ts.
+fn effective_zoom(setting: f64, scale: f64) -> f64 {
+    setting * (TARGET_UI_SCALE / scale).max(1.0)
+}
+
+/// Window size in logical pixels for content drawn at `zoom`.
+fn logical_size(zoom: f64) -> (f64, f64) {
+    (CONTENT_WIDTH * zoom, CONTENT_HEIGHT * zoom)
+}
+
+/// Window size in physical pixels on a monitor with `scale`.
+fn card_size(scale: f64, zoom: f64) -> (u32, u32) {
+    let (w, h) = logical_size(zoom);
+    ((w * scale).round() as u32, (h * scale).round() as u32)
 }
 
 struct Card {
@@ -208,22 +237,38 @@ trait Host {
     /// Work area and scale factor of the monitor under `at`.
     fn work_area(&self, at: Point) -> Option<(Area, f64)>;
     /// Builds a hidden card; it shows once its webview calls ready.
-    fn create(&self, label: &str, at: Point, user: &CardUser) -> Result<(), String>;
-    /// Moves an existing card, hands it `user`, and brings it forward when
-    /// it is already showing.
-    fn reuse(&self, label: &str, at: Point, user: &CardUser, showing: bool) -> Result<(), String>;
+    fn create(&self, label: &str, at: Point, user: &CardUser, zoom: f64) -> Result<(), String>;
+    /// Moves and resizes an existing card, hands it `user`, and brings it
+    /// forward when it is already showing.
+    fn reuse(
+        &self,
+        label: &str,
+        at: Point,
+        user: &CardUser,
+        zoom: f64,
+        showing: bool,
+    ) -> Result<(), String>;
 }
 
-async fn open_on(host: &impl Host, cards: &UserCards, user: CardUser) -> Result<(), UserCardError> {
+async fn open_on(
+    host: &impl Host,
+    cards: &UserCards,
+    user: CardUser,
+    zoom: f64,
+) -> Result<(), UserCardError> {
     let _turn = cards.opening.lock().await;
+    let setting = clamp_zoom(zoom);
     let cursor = host.cursor().map_err(UserCardError::window)?;
-    let at = match host.work_area(cursor) {
-        Some((area, scale)) => place(cursor, card_size(scale), area),
-        None => cursor,
+    let (at, zoom) = match host.work_area(cursor) {
+        Some((area, scale)) => {
+            let zoom = effective_zoom(setting, scale);
+            (place(cursor, card_size(scale, zoom), area), zoom)
+        }
+        None => (cursor, effective_zoom(setting, 1.0)),
     };
     let reusable = cards.lock().reuse(&user);
     if let Some((label, showing)) = reusable {
-        match host.reuse(&label, at, &user, showing) {
+        match host.reuse(&label, at, &user, zoom, showing) {
             Ok(()) => return Ok(()),
             Err(e) => {
                 tracing::warn!(error = %e, label, "user card gone, opening a new one");
@@ -232,7 +277,7 @@ async fn open_on(host: &impl Host, cards: &UserCards, user: CardUser) -> Result<
         }
     }
     let label = cards.lock().add(user.clone());
-    host.create(&label, at, &user).map_err(|e| {
+    host.create(&label, at, &user, zoom).map_err(|e| {
         cards.lock().forget(&label);
         UserCardError::window(e)
     })
@@ -247,8 +292,9 @@ pub async fn user_card_open<R: Runtime>(
     app: AppHandle<R>,
     cards: State<'_, UserCards>,
     user: CardUser,
+    zoom: f64,
 ) -> Result<(), UserCardError> {
-    open_on(&App(app), &cards, user).await
+    open_on(&App(app), &cards, user, zoom).await
 }
 
 /// The user of the card that calls this.
@@ -372,12 +418,13 @@ impl<R: Runtime> Host for App<R> {
         Some((area, monitor.scale_factor()))
     }
 
-    fn create(&self, label: &str, at: Point, user: &CardUser) -> Result<(), String> {
+    fn create(&self, label: &str, at: Point, user: &CardUser, zoom: f64) -> Result<(), String> {
+        let (width, height) = logical_size(zoom);
         let builder =
             WebviewWindowBuilder::new(&self.0, label, WebviewUrl::App("index.html".into()))
                 .title(&user.display_name)
-                .inner_size(WIDTH, HEIGHT)
-                .min_inner_size(MIN_WIDTH, MIN_HEIGHT)
+                .inner_size(width, height)
+                .min_inner_size(MIN_CONTENT_WIDTH * zoom, MIN_CONTENT_HEIGHT * zoom)
                 .visible(false);
         // Same chrome as the main window: the card draws its own title bar
         // on Windows.
@@ -392,11 +439,22 @@ impl<R: Runtime> Host for App<R> {
             .map_err(|e| e.to_string())
     }
 
-    fn reuse(&self, label: &str, at: Point, user: &CardUser, showing: bool) -> Result<(), String> {
+    fn reuse(
+        &self,
+        label: &str,
+        at: Point,
+        user: &CardUser,
+        zoom: f64,
+        showing: bool,
+    ) -> Result<(), String> {
         let window = self
             .0
             .get_webview_window(label)
             .ok_or_else(|| format!("no window {label}"))?;
+        let (width, height) = logical_size(zoom);
+        window
+            .set_size(LogicalSize::new(width, height))
+            .map_err(|e| e.to_string())?;
         window
             .set_position(PhysicalPosition::new(at.x, at.y))
             .map_err(|e| e.to_string())?;
@@ -472,9 +530,28 @@ mod tests {
     }
 
     #[test]
-    fn card_size_follows_the_monitor_scale() {
-        assert_eq!(card_size(1.0), (420, 640));
-        assert_eq!(card_size(1.5), (630, 960));
+    fn card_size_follows_the_monitor_scale_and_the_zoom() {
+        assert_eq!(card_size(1.0, 1.0), (320, 480));
+        assert_eq!(card_size(1.5, 1.0), (480, 720));
+        assert_eq!(card_size(1.0, 1.5), (480, 720));
+        assert_eq!(card_size(1.5, 1.5), (720, 1080));
+    }
+
+    #[test]
+    fn zoom_tops_up_what_the_monitor_scale_leaves() {
+        assert_eq!(effective_zoom(1.0, 1.0), 1.5);
+        assert_eq!(effective_zoom(1.0, 1.5), 1.0);
+        assert_eq!(effective_zoom(1.0, 2.0), 1.0);
+        assert_eq!(effective_zoom(1.25, 1.0), 1.875);
+    }
+
+    #[test]
+    fn a_bad_zoom_is_clamped() {
+        assert_eq!(clamp_zoom(f64::NAN), 1.0);
+        assert_eq!(clamp_zoom(f64::INFINITY), 1.0);
+        assert_eq!(clamp_zoom(0.01), MIN_ZOOM);
+        assert_eq!(clamp_zoom(100.0), MAX_ZOOM);
+        assert_eq!(clamp_zoom(1.25), 1.25);
     }
 
     #[test]
@@ -579,9 +656,9 @@ mod tests {
             (!self.no_monitor).then_some((AREA, 1.0))
         }
 
-        fn create(&self, label: &str, at: Point, user: &CardUser) -> Result<(), String> {
+        fn create(&self, label: &str, at: Point, user: &CardUser, zoom: f64) -> Result<(), String> {
             self.calls.borrow_mut().push(format!(
-                "create {label} {},{} {}",
+                "create {label} {},{} {} x{zoom}",
                 at.x, at.y, user.username
             ));
             if self.create_fails {
@@ -595,10 +672,11 @@ mod tests {
             label: &str,
             at: Point,
             user: &CardUser,
+            zoom: f64,
             showing: bool,
         ) -> Result<(), String> {
             self.calls.borrow_mut().push(format!(
-                "reuse {label} {},{} {} {showing}",
+                "reuse {label} {},{} {} x{zoom} {showing}",
                 at.x, at.y, user.username
             ));
             if self.gone.iter().any(|g| g == label) {
@@ -618,14 +696,14 @@ mod tests {
     async fn open_creates_then_reuses_at_the_clamped_cursor() {
         let host = Fake::default();
         let cards = UserCards::default();
-        open_on(&host, &cards, user("a")).await.unwrap();
+        open_on(&host, &cards, user("a"), 1.0).await.unwrap();
         cards.lock().mark_ready("user-card-1");
-        open_on(&host, &cards, user("b")).await.unwrap();
+        open_on(&host, &cards, user("b"), 1.0).await.unwrap();
         assert_eq!(
             host.calls(),
             [
-                "create user-card-1 1500,100 a",
-                "reuse user-card-1 1500,100 b true"
+                "create user-card-1 1440,100 a x1.5",
+                "reuse user-card-1 1440,100 b x1.5 true"
             ]
         );
     }
@@ -634,10 +712,10 @@ mod tests {
     async fn open_beside_a_pinned_card_makes_a_new_one() {
         let host = Fake::default();
         let cards = UserCards::default();
-        open_on(&host, &cards, user("a")).await.unwrap();
+        open_on(&host, &cards, user("a"), 1.0).await.unwrap();
         cards.lock().set_pinned("user-card-1", true);
-        open_on(&host, &cards, user("b")).await.unwrap();
-        assert_eq!(host.calls()[1], "create user-card-2 1500,100 b");
+        open_on(&host, &cards, user("b"), 1.0).await.unwrap();
+        assert_eq!(host.calls()[1], "create user-card-2 1440,100 b x1.5");
         assert_eq!(cards.lock().user("user-card-1").unwrap().username, "a");
     }
 
@@ -648,9 +726,9 @@ mod tests {
             ..Fake::default()
         };
         let cards = UserCards::default();
-        open_on(&host, &cards, user("a")).await.unwrap();
-        open_on(&host, &cards, user("b")).await.unwrap();
-        assert_eq!(host.calls()[2], "create user-card-2 1500,100 b");
+        open_on(&host, &cards, user("a"), 1.0).await.unwrap();
+        open_on(&host, &cards, user("b"), 1.0).await.unwrap();
+        assert_eq!(host.calls()[2], "create user-card-2 1440,100 b x1.5");
         assert!(cards.lock().user("user-card-1").is_none());
     }
 
@@ -661,8 +739,8 @@ mod tests {
             ..Fake::default()
         };
         let cards = UserCards::default();
-        open_on(&host, &cards, user("a")).await.unwrap();
-        assert_eq!(host.calls(), ["create user-card-1 1900,100 a"]);
+        open_on(&host, &cards, user("a"), 1.0).await.unwrap();
+        assert_eq!(host.calls(), ["create user-card-1 1900,100 a x1.5"]);
     }
 
     #[tokio::test]
@@ -672,7 +750,7 @@ mod tests {
             create_fails: true,
             ..Fake::default()
         };
-        let err = open_on(&host, &cards, user("a")).await.unwrap_err();
+        let err = open_on(&host, &cards, user("a"), 1.0).await.unwrap_err();
         assert_eq!(err, UserCardError::window("build failed"));
         assert!(cards.lock().user("user-card-1").is_none());
 
@@ -680,7 +758,7 @@ mod tests {
             cursor_fails: true,
             ..Fake::default()
         };
-        let err = open_on(&host, &cards, user("a")).await.unwrap_err();
+        let err = open_on(&host, &cards, user("a"), 1.0).await.unwrap_err();
         assert_eq!(err.kind, "window");
         assert!(host.calls().is_empty());
     }
