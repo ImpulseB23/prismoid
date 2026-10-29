@@ -1,21 +1,28 @@
-// The reply thread open in the thread panel, keyed by the message that
-// started it.
+// The reply thread open in a pane's thread panel, keyed by the message
+// that started it.
 
 import { createSignal } from "solid-js";
 import type { ChatMessage } from "./chatStore";
-
-const [threadRoot, setThreadRoot] = createSignal<string | null>(null);
 
 /** The thread a reply belongs to: Twitch names the root, else the parent stands in. */
 export function threadRootOf(msg: ChatMessage): string | null {
   return msg.reply_parent?.thread_id || msg.reply_to;
 }
 
-export function openThread(msg: ChatMessage): void {
-  const root = threadRootOf(msg);
-  if (root) setThreadRoot(root);
+export interface ThreadPanel {
+  root: () => string | null;
+  open: (msg: ChatMessage) => void;
+  close: () => void;
 }
 
-export const closeThread = () => setThreadRoot(null);
-
-export { threadRoot };
+export function createThreadPanel(): ThreadPanel {
+  const [root, setRoot] = createSignal<string | null>(null);
+  return {
+    root,
+    open: (msg) => {
+      const r = threadRootOf(msg);
+      if (r) setRoot(r);
+    },
+    close: () => setRoot(null),
+  };
+}

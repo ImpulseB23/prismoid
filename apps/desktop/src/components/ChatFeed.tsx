@@ -17,6 +17,7 @@ import {
 } from "solid-js";
 import type { ChatMessage } from "../stores/chatStore";
 import { useSession, type ChatSession } from "../lib/chatSession";
+import { requirePane } from "../lib/pane";
 import {
   activeChannel,
   channelBannedIn,
@@ -28,7 +29,6 @@ import {
 import { clearJump, jumpRequest } from "../stores/jumpStore";
 import { isIgnored, setIgnored, settings } from "../stores/settingsStore";
 import { isHighlighted, isSpotlit } from "../lib/highlight";
-import { openThread } from "../stores/threadStore";
 import Thread from "./Thread";
 import {
   banUser,
@@ -44,7 +44,6 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { formatSeconds } from "../lib/slashCommands";
 import { messageMenuItems } from "../lib/messageMenu";
 import { openContextMenu } from "../stores/contextMenuStore";
-import { notice, notify } from "../stores/noticeStore";
 import { formatSendError, toSendError } from "../lib/messageInput";
 import { retainPulse } from "../stores/pulseStore";
 import { canModerateIn } from "../stores/roleStore";
@@ -54,7 +53,6 @@ import {
   userInfo,
   userInfoRevision,
 } from "../stores/userInfoStore";
-import { requestMention, requestReply } from "../stores/composerStore";
 import { isFirstMessage } from "../stores/firstMessageStore";
 import {
   BADGE_GAP_PX,
@@ -76,8 +74,6 @@ import { shownPaint } from "../stores/paintStore";
 import { isLight, logo } from "../stores/themeStore";
 import MessagePieces from "./MessagePieces";
 import { openUserCard } from "../lib/userCardWindow";
-import EmoteCard from "./EmoteCard";
-import EmoteTooltip from "./EmoteTooltip";
 
 const OVERSCAN = 6;
 const STICK_THRESHOLD = 40;
@@ -141,7 +137,10 @@ export interface ChatFeedProps {
 }
 
 const ChatFeed: Component<ChatFeedProps> = (props) => {
-  const session = useSession();
+  const pane = requirePane();
+  const session = pane.session;
+  const { notice, notify } = pane.notice;
+  const { requestMention, requestReply } = pane.composer;
   const chat = () => session().chat;
   const moderates = () => {
     const c = session().channel;
@@ -1015,7 +1014,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                         }}
                         onClick={(e) => {
                           e.stopPropagation();
-                          openThread(row().msg);
+                          pane.thread.open(row().msg);
                         }}
                       >
                         <svg
@@ -1163,8 +1162,6 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
         )}
       </Show>
 
-      <EmoteCard />
-      <EmoteTooltip />
       <Thread />
     </div>
   );

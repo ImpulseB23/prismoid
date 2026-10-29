@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Pane } from "../lib/pane";
 import type { EmoteMeta } from "./chatStore";
 import type { SevenTvUser } from "../lib/sevenTvUsers";
 
@@ -26,6 +27,7 @@ const {
   inspectLoading,
   inspectedAddedBy,
   inspectedEmote,
+  inspectedPane,
   largeUrl,
   providerLabel,
   providerPage,
@@ -110,7 +112,7 @@ describe("emote hover", () => {
     vi.useFakeTimers();
     const e = emote("7tv", "a", { url_4x: "big" });
     const o = emote("7tv", "b", { url_2x: "over" });
-    hoverEmote(anchor(), e, [o]);
+    hoverEmote(anchor(), e, [o], undefined);
     await vi.advanceTimersByTimeAsync(HOVER_DELAY_MS - 1);
     expect(hoveredEmote()).toBeNull();
     await vi.advanceTimersByTimeAsync(1);
@@ -121,7 +123,7 @@ describe("emote hover", () => {
 
   it("stays hidden when the pointer leaves first", async () => {
     vi.useFakeTimers();
-    hoverEmote(anchor(), emote("7tv"), []);
+    hoverEmote(anchor(), emote("7tv"), [], undefined);
     endEmoteHover();
     await vi.advanceTimersByTimeAsync(HOVER_DELAY_MS);
     expect(hoveredEmote()).toBeNull();
@@ -130,7 +132,7 @@ describe("emote hover", () => {
   it("stays hidden when the emote left the page", async () => {
     vi.useFakeTimers();
     const el = anchor();
-    hoverEmote(el, emote("7tv"), []);
+    hoverEmote(el, emote("7tv"), [], undefined);
     el.remove();
     await vi.advanceTimersByTimeAsync(HOVER_DELAY_MS);
     expect(hoveredEmote()).toBeNull();
@@ -138,7 +140,7 @@ describe("emote hover", () => {
 
   it("hides on end", async () => {
     vi.useFakeTimers();
-    hoverEmote(anchor(), emote("7tv"), []);
+    hoverEmote(anchor(), emote("7tv"), [], undefined);
     await vi.advanceTimersByTimeAsync(HOVER_DELAY_MS);
     expect(hoveredEmote()).not.toBeNull();
     endEmoteHover();
@@ -158,10 +160,12 @@ describe("emote inspect", () => {
       { id: "u1", login: "xqc", display_name: "xQc" },
     ]);
     const e = emote("7tv", "a", { added_by_id: "u1" });
-    inspectEmote(e);
+    const pane = {} as Pane;
+    inspectEmote(e, pane);
     expect(inspectLoading()).toBe("a");
     expect(inspectedEmote()).toBeNull();
     await vi.waitFor(() => expect(inspectedEmote()).toBe(e));
+    expect(inspectedPane()).toBe(pane);
     expect(inspectLoading()).toBeNull();
     expect(inspectedAddedBy()?.display_name).toBe("xQc");
     expect(getSevenTvUsers).toHaveBeenCalledWith(["u1"]);
@@ -171,7 +175,7 @@ describe("emote inspect", () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     getSevenTvUsers.mockRejectedValue(new Error("down"));
     const e = emote("7tv", "a", { added_by_id: "u1" });
-    inspectEmote(e);
+    inspectEmote(e, undefined);
     await vi.waitFor(() => expect(inspectedEmote()).toBe(e));
     expect(inspectedAddedBy()).toBeNull();
     expect(err).toHaveBeenCalled();
@@ -181,21 +185,21 @@ describe("emote inspect", () => {
   it("opens without a name when 7tv does not know the adder", async () => {
     getSevenTvUsers.mockResolvedValue([]);
     const e = emote("7tv", "a", { added_by_id: "u1" });
-    inspectEmote(e);
+    inspectEmote(e, undefined);
     await vi.waitFor(() => expect(inspectedEmote()).toBe(e));
     expect(inspectedAddedBy()).toBeNull();
   });
 
   it("skips the lookup without an adder", async () => {
     const e = emote("bttv");
-    inspectEmote(e);
+    inspectEmote(e, undefined);
     await vi.waitFor(() => expect(inspectedEmote()).toBe(e));
     expect(getSevenTvUsers).not.toHaveBeenCalled();
   });
 
   it("does not open after closing while loading", async () => {
     const e = emote("bttv");
-    inspectEmote(e);
+    inspectEmote(e, undefined);
     closeEmoteCard();
     expect(inspectLoading()).toBeNull();
     await Promise.resolve();

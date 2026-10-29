@@ -8,17 +8,14 @@ import {
   emoteSetName,
   inspectedAddedBy,
   inspectedEmote,
+  inspectedPane,
   largeUrl,
   providerLabel,
   providerPage,
 } from "../stores/emoteCardStore";
-import { activeChannel } from "../stores/channelStore";
 import ProviderIcon from "./ProviderIcon";
-import { requestInsert } from "../stores/composerStore";
-import { useSession } from "../lib/chatSession";
 
 const EmoteCard: Component = () => {
-  const session = useSession();
   const [copied, setCopied] = createSignal(false);
   let dialogRef: HTMLDivElement | undefined;
 
@@ -30,11 +27,15 @@ const EmoteCard: Component = () => {
   });
 
   const setName = () => {
-    const emotes = session().emotes;
-    emotes.revision();
+    const session = inspectedPane()?.session();
+    session?.emotes.revision();
     const e = inspectedEmote();
     return e
-      ? emoteSetName(e, emotes.scopeOf(e), activeChannel()?.display_name)
+      ? emoteSetName(
+          e,
+          session?.emotes.scopeOf(e),
+          session?.channel?.display_name,
+        )
       : "";
   };
 
@@ -131,7 +132,7 @@ const EmoteCard: Component = () => {
                   type="button"
                   class="btn btn--small btn--primary"
                   onClick={() => {
-                    requestInsert(e().code);
+                    inspectedPane()?.composer.requestInsert(e().code);
                     closeEmoteCard();
                   }}
                 >

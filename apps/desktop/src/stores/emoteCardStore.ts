@@ -1,17 +1,20 @@
 // Which emote the inspect card is showing, if any, and which one the hover
 // tooltip is showing. Set from any emote a message renders; both are
-// mounted once in the feed.
+// mounted once for the window, and each remembers the pane the emote came
+// from (none in a user card window) for its channel's sets and composer.
 
 import { createSignal } from "solid-js";
 import type { EmoteMeta } from "./chatStore";
 import type { EmoteScope } from "./emoteStore";
 import { preloadImages } from "../lib/preload";
 import { getSevenTvUsers, type SevenTvUser } from "../lib/sevenTvUsers";
+import type { Pane } from "../lib/pane";
 
 export interface EmoteHover {
   emote: EmoteMeta;
   overlays: EmoteMeta[];
   anchor: DOMRect;
+  pane: Pane | undefined;
 }
 
 /** Hover intent before the tooltip shows, so sweeping across chat is quiet. */
@@ -31,6 +34,7 @@ export function hoverEmote(
   el: HTMLElement,
   emote: EmoteMeta,
   overlays: EmoteMeta[],
+  pane: Pane | undefined,
 ): void {
   const seq = ++hoverSeq;
   void Promise.all([
@@ -38,7 +42,12 @@ export function hoverEmote(
     preloadImages([emote, ...overlays].map(largeUrl), 400),
   ]).then(() => {
     if (seq !== hoverSeq || !el.isConnected) return;
-    setHoveredEmote({ emote, overlays, anchor: el.getBoundingClientRect() });
+    setHoveredEmote({
+      emote,
+      overlays,
+      anchor: el.getBoundingClientRect(),
+      pane,
+    });
   });
 }
 
@@ -51,7 +60,9 @@ const [inspectedEmote, setInspectedEmote] = createSignal<EmoteMeta | null>(
   null,
 );
 
-export { inspectedEmote };
+const [inspectedPane, setInspectedPane] = createSignal<Pane | undefined>();
+
+export { inspectedEmote, inspectedPane };
 
 const [inspectedAddedBy, setInspectedAddedBy] =
   createSignal<SevenTvUser | null>(null);
@@ -63,7 +74,7 @@ export { inspectedAddedBy, inspectLoading };
 // Opens once the large image and, for 7TV channel emotes, the name of whoever
 // added it are in hand; `inspectLoading` names the emote meanwhile. A failed
 // lookup still opens the card, without the name.
-export function inspectEmote(emote: EmoteMeta): void {
+export function inspectEmote(emote: EmoteMeta, pane: Pane | undefined): void {
   endEmoteHover();
   const seq = ++inspectSeq;
   const id = emote.added_by_id;
@@ -81,6 +92,7 @@ export function inspectEmote(emote: EmoteMeta): void {
     if (seq !== inspectSeq) return;
     setInspectLoading(null);
     setInspectedAddedBy(by);
+    setInspectedPane(pane);
     setInspectedEmote(emote);
   });
 }
@@ -89,6 +101,7 @@ export function closeEmoteCard(): void {
   ++inspectSeq;
   setInspectLoading(null);
   setInspectedAddedBy(null);
+  setInspectedPane(undefined);
   setInspectedEmote(null);
 }
 

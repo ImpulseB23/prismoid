@@ -4202,6 +4202,14 @@ option::checkmark {
   }
 }
 
+/* One chat pane: its chat area over its composer. */
+.chat-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 /* Chat plus the command center tab and panel, which sit over its right edge. */
 .chat-area {
   position: relative;
