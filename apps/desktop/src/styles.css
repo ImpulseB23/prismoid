@@ -3660,21 +3660,18 @@ option::checkmark {
   opacity: 1;
 }
 
-/* Over Settings the bare title bar has no space of its own to give back, so
-   it slides over the page instead. */
+/* In fullscreen the bare title bar slides in from the top edge; the screen
+   under it makes room in step (see .settings-page--chrome). */
 .titlebar--autohide {
   position: fixed;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   transform: translateY(-100%);
-  transition:
-    transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
-    box-shadow 0.2s;
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .titlebar--shown {
   transform: none;
-  box-shadow: 0 8px 24px var(--shadow);
 }
 
 .chrome-hotzone {
@@ -3764,8 +3761,20 @@ option::checkmark {
   animation: card-in 0.15s ease;
 }
 
+/* Room for the title bar. In fullscreen it comes and goes with the bar, so
+   the bar pushes the page down instead of covering its top. */
 .settings-page--chrome {
   padding-top: 32px;
+}
+
+.settings-page {
+  transition: padding-top 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-page {
+    transition: none;
+  }
 }
 
 .settings-page__nav {
