@@ -37,9 +37,16 @@ vi.mock("./CommandCenter", () => ({ default: () => null }));
 const openVideoWindow = vi.fn<(login: string, title: string) => Promise<void>>(
   async () => {},
 );
+const [out, setOut] = createSignal<string[]>([]);
+let popIn: (login: string) => void = () => {};
 vi.mock("../lib/videoWindow", () => ({
   openVideoWindow: (login: string, title: string) =>
     openVideoWindow(login, title),
+  isPoppedOut: (login: string) => out().includes(login),
+  followVideoWindows: async (onPopIn: (login: string) => void) => {
+    popIn = onPopIn;
+    return () => {};
+  },
 }));
 vi.mock("./StreamVideo", () => ({
   default: (p: { onPopOut: () => void; onClose: () => void }) => (
@@ -116,6 +123,23 @@ describe("SplitView", () => {
     fireEvent.click(screen.getByRole("button", { name: "pop out" }));
     expect(openVideoWindow).toHaveBeenCalledWith("a", "A's stream");
     expect(video()).toBe(false);
+  });
+
+  it("never shows a popped out stream in the corner, and takes it back in", async () => {
+    await mount();
+    const pane = layout.panes()[0]!.id;
+    setOut(["a"]);
+    layout.setPaneVideo(pane, true);
+    expect(screen.queryByRole("button", { name: "pop out" })).toBeNull();
+    layout.setPaneVideo(pane, false);
+    // Back to chat from the window: its channel's pane shows the preview
+    // once the window is gone.
+    popIn("a");
+    expect(layout.panes()[0]!.video).toBe(true);
+    setOut([]);
+    expect(screen.getByRole("button", { name: "pop out" })).toBeTruthy();
+    popIn("nobody");
+    expect(layout.panes()).toHaveLength(1);
   });
 
   it("takes a dragged tab on a pane or on the right edge", async () => {

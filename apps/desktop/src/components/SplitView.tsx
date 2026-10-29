@@ -3,7 +3,16 @@
 // in the focused pane, or focuses the pane already showing it. A tab
 // dragged onto a pane shows there, and onto the right edge opens a pane.
 
-import { Component, For, Show, createEffect, createSignal, on } from "solid-js";
+import {
+  Component,
+  For,
+  Show,
+  createEffect,
+  createSignal,
+  on,
+  onCleanup,
+  onMount,
+} from "solid-js";
 import {
   activeChannel,
   channelStatus,
@@ -22,6 +31,7 @@ import {
   splitPane,
   canSplitPane,
   togglePaneVideo,
+  setPaneVideo,
   TAB_DRAG_TYPE,
 } from "../stores/layoutStore";
 import ChatPane from "./ChatPane";
@@ -29,7 +39,11 @@ import ChatFeed from "./ChatFeed";
 import CommandCenter from "./CommandCenter";
 import MessageInput from "./MessageInput";
 import StreamVideo from "./StreamVideo";
-import { openVideoWindow } from "../lib/videoWindow";
+import {
+  followVideoWindows,
+  isPoppedOut,
+  openVideoWindow,
+} from "../lib/videoWindow";
 
 const report = (what: string) => (err: unknown) => console.error(what, err);
 
@@ -51,6 +65,29 @@ const SplitView: Component<{ login: string }> = (props) => {
       }
     }),
   );
+  // A pop-out asking to come back shows in the corner of its channel's
+  // pane, or of the focused pane when no pane has that channel.
+  onMount(() => {
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    void followVideoWindows((login) => {
+      const channel = channelTabs().find((c) => c.login === login);
+      if (!channel) return;
+      showInFocusedPane(channel.id);
+      const pane = panes().find((p) => p.channelId === channel.id);
+      if (pane) setPaneVideo(pane.id, true);
+    })
+      .then((fn) => {
+        if (disposed) fn();
+        else stop = fn;
+      })
+      .catch(report("follow video windows"));
+    onCleanup(() => {
+      disposed = true;
+      stop?.();
+    });
+  });
+
   // Once the saved tabs are back, panes of channels that did not come
   // back go. Before that the tabs are still arriving one by one.
   createEffect(() => {
@@ -104,7 +141,13 @@ const SplitView: Component<{ login: string }> = (props) => {
               </Show>
               <div class="chat-area">
                 <ChatFeed login={props.login} />
-                <Show when={slot().video ? channel() : null}>
+                <Show
+                  when={
+                    slot().video && !isPoppedOut(channel()?.login ?? "")
+                      ? channel()
+                      : null
+                  }
+                >
                   {(c) => (
                     <StreamVideo
                       login={c().login}
