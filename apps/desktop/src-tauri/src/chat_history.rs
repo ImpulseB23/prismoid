@@ -436,7 +436,9 @@ impl Store {
                 }
                 ChatEvent::ModAction(_)
                 | ChatEvent::AutomodHeld(_)
-                | ChatEvent::AutomodResolved { .. } => {}
+                | ChatEvent::AutomodResolved { .. }
+                | ChatEvent::PollUpdate(_)
+                | ChatEvent::PredictionUpdate(_) => {}
             }
         }
         tx.commit()

@@ -78,6 +78,10 @@ import { canModerate, noteModerator } from "../stores/roleStore";
 import { clearModLog, recordModAction } from "../stores/modLogStore";
 import { recordHeldMessage, resolveHeldMessage } from "../stores/automodStore";
 import {
+  applyPollUpdate,
+  applyPredictionUpdate,
+} from "../stores/streamManagerStore";
+import {
   MODE_ACTIONS,
   clearChatSettings,
   loadChatSettings,
@@ -571,6 +575,16 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
         }
         if (e.kind === "automod_resolved") {
           resolveHeldMessage(e);
+          continue;
+        }
+        // Only the user's own channel sends these, and the stream manager
+        // keeps them whichever tab is showing.
+        if (e.kind === "poll_update") {
+          applyPollUpdate(e);
+          continue;
+        }
+        if (e.kind === "prediction_update") {
+          applyPredictionUpdate(e);
           continue;
         }
         if (id !== undefined && e.channel_id !== id) continue;

@@ -40,3 +40,15 @@ export function moderationNeedsReconnect(): boolean {
 export function automodNeedsReconnect(): boolean {
   return missingScopes().includes("moderator:manage:automod");
 }
+
+const STREAM_MANAGER_SCOPES = [
+  "channel:manage:broadcast",
+  "channel:manage:polls",
+  "channel:manage:predictions",
+];
+
+/** True when the grant predates the stream manager on the user's channel. */
+export function streamManagerNeedsReconnect(): boolean {
+  const missing = missingScopes();
+  return STREAM_MANAGER_SCOPES.some((s) => missing.includes(s));
+}
