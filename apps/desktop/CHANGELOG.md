@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.8.0](https://github.com/ImpulseB23/prismoid/compare/v0.7.0...v0.8.0) (2026-10-29)
+
+
+### Features
+
+* ads, polls and predictions tabs in the stream manager ([#274](https://github.com/ImpulseB23/prismoid/issues/274)) ([01b24f8](https://github.com/ImpulseB23/prismoid/commit/01b24f82757542c48a60f4b953825ae0bc3be516))
+* chat manager redesign with mode tiles and tabs ([#275](https://github.com/ImpulseB23/prismoid/issues/275)) ([81d5f5a](https://github.com/ImpulseB23/prismoid/commit/81d5f5ac04dd31a0c367ab6dce15898f5dce2eb9))
+* click outside closes the stream manager ([#277](https://github.com/ImpulseB23/prismoid/issues/277)) ([a98bcd9](https://github.com/ImpulseB23/prismoid/commit/a98bcd93aa1e2db1f9879c43a98ba6a7b602bb0c))
+* grey out stream manager tabs your channel can't use yet ([#276](https://github.com/ImpulseB23/prismoid/issues/276)) ([e0734b7](https://github.com/ImpulseB23/prismoid/commit/e0734b7bc89fd67a76e732e16f4bf69ba4597c65))
+* rename the command center to chat manager ([#272](https://github.com/ImpulseB23/prismoid/issues/272)) ([c0a5ecd](https://github.com/ImpulseB23/prismoid/commit/c0a5ecd21c067aa03f2406ad180bbd7ac68994db))
+* stream manager data for title, category, polls and predictions ([#240](https://github.com/ImpulseB23/prismoid/issues/240)) ([82a6e52](https://github.com/ImpulseB23/prismoid/commit/82a6e52184379bc37e1f84e845451c8cdae74bb1))
+* stream manager permissions only once you turn it on ([#279](https://github.com/ImpulseB23/prismoid/issues/279)) ([00b5671](https://github.com/ImpulseB23/prismoid/commit/00b5671a599fdba1d9f2fb93714503a4fb700ef3))
+* stream manager step in the setup tour ([#278](https://github.com/ImpulseB23/prismoid/issues/278)) ([1b85a72](https://github.com/ImpulseB23/prismoid/commit/1b85a72ea2d545b5570ef315a74764dac6f3fcd8))
+* stream manager with stream setup, quick actions and ads ([#273](https://github.com/ImpulseB23/prismoid/issues/273)) ([04a9dbe](https://github.com/ImpulseB23/prismoid/commit/04a9dbe2e93fcbdb12bf731e12b12d4b96c93d21))
+
+
+### Bug Fixes
+
+* chat modes stuck on loading after switching channels ([#269](https://github.com/ImpulseB23/prismoid/issues/269)) ([f902cf4](https://github.com/ImpulseB23/prismoid/commit/f902cf4faa68609fcda012d735c5a930612c1925))
+* opening label says whose chat ([#271](https://github.com/ImpulseB23/prismoid/issues/271)) ([bdf490f](https://github.com/ImpulseB23/prismoid/commit/bdf490f682e8c08750641ac81ea5488d472ee30c))
+* title bar covered the top of settings in fullscreen ([#268](https://github.com/ImpulseB23/prismoid/issues/268)) ([573a16f](https://github.com/ImpulseB23/prismoid/commit/573a16f35e45e1d6305e7c8d69b4869156af9f18))
+
 ## [0.7.0](https://github.com/ImpulseB23/prismoid/compare/v0.6.0...v0.7.0) (2026-10-28)
 
 
