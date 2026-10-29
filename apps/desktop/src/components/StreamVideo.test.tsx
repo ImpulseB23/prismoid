@@ -7,13 +7,13 @@ describe("videoSize", () => {
     expect(videoSize(800, 1000)).toEqual({ width: 800, height: 450 });
   });
 
-  it("leaves chat at least half the pane", () => {
-    expect(videoSize(1200, 800)).toEqual({ width: 1200, height: 400 });
+  it("keeps room for chat by going narrower, not adding bars", () => {
+    expect(videoSize(1280, 584)).toEqual({ width: 682, height: 384 });
   });
 
-  it("refuses anything under Twitch's 400x300 minimum", () => {
-    expect(videoSize(399, 2000)).toBeNull();
-    expect(videoSize(700, 500)).toBeNull();
+  it("says which way a pane misses Twitch's 400x300 minimum", () => {
+    expect(videoSize(399, 2000)).toBe("narrow");
+    expect(videoSize(700, 480)).toBe("short");
   });
 });
 
@@ -66,9 +66,12 @@ describe("StreamVideo", () => {
     expect(frame.height).toBe("450");
   });
 
-  it("says so in a pane too narrow for the player", () => {
+  it("says so in a pane too narrow or too short for the player", () => {
     mountIn(300, 1000);
     expect(screen.queryByTitle("PGL's stream")).toBeNull();
     expect(screen.getByText(/at least 400px wide/)).toBeTruthy();
+    cleanup();
+    mountIn(900, 450);
+    expect(screen.getByText(/window taller/)).toBeTruthy();
   });
 });

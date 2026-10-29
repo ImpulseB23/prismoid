@@ -2,7 +2,7 @@
 // player: Twitch's own page in a frame, so none of Twitch's code runs in
 // the app. The frame is sandboxed so the player cannot navigate the window
 // away or open new ones. Twitch requires at least 400x300 and an unobscured
-// player, so a pane too small for that says so instead.
+// player, so a pane too small for that says which way it falls short.
 
 import {
   Show,
@@ -14,8 +14,8 @@ import {
 
 const MIN_WIDTH = 400;
 const MIN_HEIGHT = 300;
-/** The video never takes more of its pane than this, so chat stays usable. */
-const MAX_SHARE = 0.5;
+/** Chat keeps at least this much of the pane under the video. */
+const MIN_CHAT = 200;
 
 export function playerUrl(login: string, parent: string): string {
   const url = new URL("https://player.twitch.tv/");
@@ -25,14 +25,19 @@ export function playerUrl(login: string, parent: string): string {
   return url.toString();
 }
 
-/** 16:9 at the pane's width, capped at a share of its height. */
-export function videoSize(
-  paneWidth: number,
-  paneHeight: number,
-): { width: number; height: number } | null {
-  const height = Math.min((paneWidth * 9) / 16, paneHeight * MAX_SHARE);
-  if (paneWidth < MIN_WIDTH || height < MIN_HEIGHT) return null;
-  return { width: paneWidth, height: Math.floor(height) };
+export type VideoFit = { width: number; height: number } | "narrow" | "short";
+
+/**
+ * 16:9 as wide as the pane allows while chat keeps its share below; a
+ * shorter pane gets a narrower video rather than black bars.
+ */
+export function videoSize(paneWidth: number, paneHeight: number): VideoFit {
+  if (paneWidth < MIN_WIDTH) return "narrow";
+  const height = Math.floor(
+    Math.min((paneWidth * 9) / 16, paneHeight - MIN_CHAT),
+  );
+  if (height < MIN_HEIGHT) return "short";
+  return { width: Math.floor((height * 16) / 9), height };
 }
 
 const StreamVideo: Component<{ login: string; name: string }> = (props) => {
@@ -48,7 +53,11 @@ const StreamVideo: Component<{ login: string; name: string }> = (props) => {
     measure();
     onCleanup(() => ro.disconnect());
   });
-  const size = () => videoSize(pane().width, pane().height);
+  const fit = () => videoSize(pane().width, pane().height);
+  const size = () => {
+    const f = fit();
+    return typeof f === "string" ? null : f;
+  };
 
   return (
     <div class="stream-video" ref={(el) => (ref = el)}>
@@ -56,7 +65,9 @@ const StreamVideo: Component<{ login: string; name: string }> = (props) => {
         when={size()}
         fallback={
           <p class="stream-video__small">
-            Make this pane at least {MIN_WIDTH}px wide to show the stream.
+            {fit() === "narrow"
+              ? `Make this pane at least ${MIN_WIDTH}px wide to show the stream.`
+              : "Make the window taller to show the stream."}
           </p>
         }
       >
