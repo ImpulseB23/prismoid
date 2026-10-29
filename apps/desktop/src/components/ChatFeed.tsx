@@ -730,14 +730,17 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
 
   const openCard = (msg: ChatMessage) => {
     if (msg.platform !== "Twitch" || !msg.platform_user_id) return;
-    openUserCard({
-      channel_id: msg.channel_id,
-      platform_user_id: msg.platform_user_id,
-      username: msg.username,
-      display_name: msg.display_name,
-      color: msg.color,
-      badges: msg.badges,
-    }).catch((err: unknown) => console.error("open user card", err));
+    openUserCard(
+      {
+        channel_id: msg.channel_id,
+        platform_user_id: msg.platform_user_id,
+        username: msg.username,
+        display_name: msg.display_name,
+        color: msg.color,
+        badges: msg.badges,
+      },
+      settings().zoom,
+    ).catch((err: unknown) => console.error("open user card", err));
   };
 
   // Right-click on a row: viewer actions for everyone, moderation for mods.
