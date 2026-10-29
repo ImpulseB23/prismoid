@@ -97,6 +97,9 @@ interface PositionedMessage {
 }
 
 interface CachedEntry {
+  /** The message as it was prepared; the store swaps in a new object when
+   * one changes, so a different object here means prepare again. */
+  msg: ChatMessage;
   prepared: PreparedMessage;
   height: number;
   measuredWidth: number;
@@ -150,7 +153,6 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
   const entryCache = new Map<number, CachedEntry>();
   let cachedFor: ChatSession | undefined;
   let lastBadgeRev = 0;
-  let lastMessageRev = 0;
   let lastTimestamps: boolean | undefined;
   let lastMetrics: TextMetrics | undefined;
 
@@ -246,9 +248,9 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     // Read the badge revision so bundle reloads invalidate the prepared
     // cache and trigger a full re-measure.
     const rev = s.badges.revision();
-    // Read the message-mutation revision so reconciled or failed
-    // pending entries re-render with their new content.
-    const msgRev = s.chat.messageRevision();
+    // Changed messages (reconciled, failed, deleted) re-run the layout; only
+    // their own entries are prepared again, below.
+    s.chat.messageRevision();
     const timestamps = settings().showTimestamps;
     const markFirsts = settings().highlightFirstMessages;
     const metrics = textMetrics(settings().textSize);
@@ -265,10 +267,6 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     if (rev !== lastBadgeRev) {
       entryCache.clear();
       lastBadgeRev = rev;
-    }
-    if (msgRev !== lastMessageRev) {
-      entryCache.clear();
-      lastMessageRev = msgRev;
     }
     if (timestamps !== lastTimestamps) {
       entryCache.clear();
@@ -295,6 +293,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
           ? firstLabelWidth()
           : 0;
       let entry = entryCache.get(mono);
+      if (entry?.msg !== msg) entry = undefined;
       if (
         entry === undefined ||
         entry.measuredWidth !== w ||
@@ -308,7 +307,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                 metrics,
               });
         const height = measureMessageHeight(prepared, w, reserve);
-        entry = { prepared, height, measuredWidth: w, reserve };
+        entry = { msg, prepared, height, measuredWidth: w, reserve };
         entryCache.set(mono, entry);
       }
       const positioned: PositionedMessage = {
