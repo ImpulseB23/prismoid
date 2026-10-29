@@ -100,6 +100,8 @@ describe("settingsStore", () => {
       highlightFirstMessages: true,
       setupDone: false,
       mentionAlerts: true,
+      chimeAlways: false,
+      chimeVolume: 1,
       theme: "dark",
       streamManagerHeight: 0.58,
     });
@@ -197,6 +199,8 @@ describe("settingsStore", () => {
           highlightUsers: ["Friend", 3],
           highlightBadges: ["vip", "owner"],
           mentionAlerts: false,
+          chimeAlways: true,
+          chimeVolume: 1.5,
           theme: "neon",
           showPaints: false,
         }),
@@ -228,6 +232,8 @@ describe("settingsStore", () => {
       highlightFirstMessages: true,
       setupDone: false,
       mentionAlerts: false,
+      chimeAlways: true,
+      chimeVolume: 1,
       theme: "dark",
       streamManagerHeight: 0.58,
     });

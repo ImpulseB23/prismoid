@@ -45,6 +45,7 @@ import {
   updateState,
 } from "../stores/updateStore";
 import TwitchReconnect from "./TwitchReconnect";
+import { playChime } from "../lib/mentionAlert";
 import { markWhatsNewSeen, showPatchNotes } from "../stores/whatsNewStore";
 import type { Attention, AttentionRow } from "../lib/settingsAttention";
 import { notesSince } from "../releaseNotes";
@@ -787,6 +788,57 @@ const Settings: Component<SettingsProps> = (props) => {
                 }
               />
             </label>
+            <Show when={settings().mentionAlerts}>
+              <label class="settings__row settings__row--toggle">
+                <div class="settings__text">
+                  <span class="settings__name">Chime while I'm looking</span>
+                  <span class="settings__hint">
+                    Also play the chime when Prismoid is the window in front
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  class="switch"
+                  checked={settings().chimeAlways}
+                  onChange={(e) =>
+                    run(
+                      updateSettings({ chimeAlways: e.currentTarget.checked }),
+                    )
+                  }
+                />
+              </label>
+              <div class="settings__row">
+                <div class="settings__text">
+                  <span class="settings__name">Chime volume</span>
+                  <span class="settings__hint">
+                    {Math.round(settings().chimeVolume * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  class="settings__range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  aria-label="Chime volume"
+                  value={settings().chimeVolume}
+                  onChange={(e) =>
+                    run(
+                      updateSettings({
+                        chimeVolume: Number(e.currentTarget.value),
+                      }),
+                    )
+                  }
+                />
+                <button
+                  type="button"
+                  class="btn btn--outline"
+                  onClick={() => playChime(settings().chimeVolume)}
+                >
+                  Play
+                </button>
+              </div>
+            </Show>
           </Show>
           <Show when={settingsSection() === "moderation"}>
             <label class="settings__row">
