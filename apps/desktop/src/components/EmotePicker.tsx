@@ -13,11 +13,8 @@ import {
   createSignal,
   onCleanup,
 } from "solid-js";
-import {
-  emoteGroups,
-  emoteRevision,
-  type EmoteGroup,
-} from "../stores/emoteStore";
+import type { EmoteGroup } from "../stores/emoteStore";
+import { useSession } from "../lib/chatSession";
 import { activeChannel } from "../stores/channelStore";
 import {
   emoteSetName,
@@ -39,6 +36,7 @@ const setName = (g: EmoteGroup) =>
     : g.label;
 
 const EmotePicker: Component<EmotePickerProps> = (props) => {
+  const session = useSession();
   const [query, setQuery] = createSignal("");
   const [hovered, setHovered] = createSignal<EmoteMeta | null>(null);
   const [current, setCurrent] = createSignal(0);
@@ -48,10 +46,11 @@ const EmotePicker: Component<EmotePickerProps> = (props) => {
   const sections: HTMLElement[] = [];
 
   const groups = createMemo(() => {
-    emoteRevision();
+    const emotes = session().emotes;
+    emotes.revision();
     const q = query().trim().toLowerCase();
-    if (!q) return emoteGroups();
-    return emoteGroups().flatMap((g) => {
+    if (!q) return emotes.groups();
+    return emotes.groups().flatMap((g) => {
       const emotes = g.emotes.filter((e) => e.code.toLowerCase().includes(q));
       return emotes.length > 0 ? [{ ...g, emotes }] : [];
     });
@@ -204,7 +203,7 @@ const EmotePicker: Component<EmotePickerProps> = (props) => {
               when={groups().length > 0}
               fallback={
                 <div class="palette__empty palette__empty--center">
-                  {emoteGroups().length === 0
+                  {session().emotes.groups().length === 0
                     ? "Emotes load once the channel connects."
                     : `No emotes match "${query().trim()}".`}
                 </div>

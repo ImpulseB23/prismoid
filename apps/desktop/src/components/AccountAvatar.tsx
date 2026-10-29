@@ -9,7 +9,6 @@ import { activeChannel } from "../stores/channelStore";
 import { currentUserId } from "../stores/authStore";
 import { ownBadges } from "../stores/ownIdentityStore";
 import { canModerate } from "../stores/roleStore";
-import { badgeRevision, resolveBadge } from "../stores/badgeStore";
 import { accountOpen, setAccountOpen } from "../stores/accountPanelStore";
 import AccountPanel from "./AccountPanel";
 import {
@@ -51,9 +50,10 @@ const AccountAvatar: Component<{ login: string; onSignOut: () => void }> = (
 
   // Twitch lists the most important badge first.
   const topBadge = () => {
-    badgeRevision();
+    const badges = sessionFor(activeChannel()?.id)?.badges;
+    badges?.revision();
     for (const b of self()?.badges ?? []) {
-      const r = resolveBadge(b.set_id, b.id);
+      const r = badges?.resolve(b.set_id, b.id);
       if (r) return r;
     }
     return undefined;

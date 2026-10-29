@@ -15,12 +15,8 @@ import {
   onCleanup,
   onMount,
 } from "solid-js";
-import {
-  createChatStore,
-  type ChatMessage,
-  type ChatStore,
-} from "../stores/chatStore";
-import { useSession } from "../lib/chatSession";
+import type { ChatMessage } from "../stores/chatStore";
+import { useSession, type ChatSession } from "../lib/chatSession";
 import {
   activeChannel,
   channelBanned,
@@ -50,7 +46,6 @@ import { messageMenuItems } from "../lib/messageMenu";
 import { openContextMenu } from "../stores/contextMenuStore";
 import { notice, notify } from "../stores/noticeStore";
 import { formatSendError, toSendError } from "../lib/messageInput";
-import { resolveBadge, badgeRevision } from "../stores/badgeStore";
 import { retainPulse } from "../stores/pulseStore";
 import { canModerate } from "../stores/roleStore";
 import { BANNED_HINT, bannedText } from "../lib/chatAccess";
@@ -94,9 +89,6 @@ const CELEBRATIONS = new Set([
   "community_sub_gift",
   "shared_chat_community_sub_gift",
 ]);
-
-// What a feed with no channel open reads: never written, always empty.
-const idleChat = createChatStore();
 
 interface PositionedMessage {
   monoIndex: number;
@@ -150,11 +142,10 @@ export interface ChatFeedProps {
 
 const ChatFeed: Component<ChatFeedProps> = (props) => {
   const session = useSession();
-  const chat = () => session()?.chat ?? idleChat;
-  const historyLoading = () => session()?.historyLoading() ?? false;
+  const chat = () => session().chat;
   let containerRef: HTMLDivElement | undefined;
   const entryCache = new Map<number, CachedEntry>();
-  let cachedFor: ChatStore | undefined;
+  let cachedFor: ChatSession | undefined;
   let lastBadgeRev = 0;
   let lastMessageRev = 0;
   let lastTimestamps: boolean | undefined;
@@ -240,21 +231,21 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     byMono: Map<number, PositionedMessage>;
     totalHeight: number;
   }>(() => {
-    // Each session numbers its messages from zero, so rows cached for
-    // another channel would answer for this one's indices.
-    const store = chat();
-    if (store !== cachedFor) {
+    // Each session numbers its messages from zero and has its own badges,
+    // so rows cached for another channel would answer for this one's.
+    const s = session();
+    if (s !== cachedFor) {
       entryCache.clear();
-      cachedFor = store;
+      cachedFor = s;
     }
-    const v = store.viewport();
+    const v = s.chat.viewport();
     const w = width();
     // Read the badge revision so bundle reloads invalidate the prepared
     // cache and trigger a full re-measure.
-    const rev = badgeRevision();
+    const rev = s.badges.revision();
     // Read the message-mutation revision so reconciled or failed
     // pending entries re-render with their new content.
-    const msgRev = chat().messageRevision();
+    const msgRev = s.chat.messageRevision();
     const timestamps = settings().showTimestamps;
     const markFirsts = settings().highlightFirstMessages;
     const metrics = textMetrics(settings().textSize);
@@ -290,7 +281,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     let y = 0;
     let writeIdx = 0;
     for (let mono = liveStart; mono < liveEnd; mono++) {
-      const msg = chat().getMessage(mono);
+      const msg = s.chat.getMessage(mono);
       if (!msg) continue;
       // The first-message mark can land after the row was measured; the
       // label needs room on the right, so only the height is measured again.
@@ -309,7 +300,10 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
         const prepared =
           entry !== undefined
             ? entry.prepared
-            : prepareMessage(msg, resolveBadge, { timestamps, metrics });
+            : prepareMessage(msg, s.badges.resolve, {
+                timestamps,
+                metrics,
+              });
         const height = measureMessageHeight(prepared, w, reserve);
         entry = { prepared, height, measuredWidth: w, reserve };
         entryCache.set(mono, entry);
@@ -422,7 +416,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       }
       return;
     }
-    if (historyLoading()) return;
+    if (session().historyLoading()) return;
     const { byMono } = layout();
     const mono = chat().monoOf(j.message_id);
     if (mono === undefined) {
@@ -1128,7 +1122,9 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
 
       <Show when={fontsLoaded() && chat().viewport().count === 0}>
         <EmptyState
-          loading={channelStatus() === "connecting" || historyLoading()}
+          loading={
+            channelStatus() === "connecting" || session().historyLoading()
+          }
         />
       </Show>
 

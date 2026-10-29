@@ -92,8 +92,3 @@ export function createBadgeStore(): BadgeStore {
 
   return { loadBundle, resolve, revision };
 }
-
-const defaultStore = createBadgeStore();
-export const loadBadgeBundle = defaultStore.loadBundle;
-export const resolveBadge = defaultStore.resolve;
-export const badgeRevision = defaultStore.revision;

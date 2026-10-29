@@ -9,7 +9,7 @@ import {
   hoveredEmote,
   largeUrl,
 } from "../stores/emoteCardStore";
-import { emoteRevision, emoteScope } from "../stores/emoteStore";
+import { useSession } from "../lib/chatSession";
 import { activeChannel } from "../stores/channelStore";
 import ProviderIcon from "./ProviderIcon";
 
@@ -17,6 +17,7 @@ const EDGE_GAP = 8;
 const ANCHOR_GAP = 8;
 
 const EmoteTooltip: Component = () => {
+  const session = useSession();
   let ref: HTMLDivElement | undefined;
 
   createEffect(() => {
@@ -53,10 +54,11 @@ const EmoteTooltip: Component = () => {
     <Show when={hoveredEmote()}>
       {(h) => {
         const setName = () => {
-          emoteRevision();
+          const emotes = session().emotes;
+          emotes.revision();
           return emoteSetName(
             h().emote,
-            emoteScope(h().emote),
+            emotes.scopeOf(h().emote),
             activeChannel()?.display_name,
           );
         };

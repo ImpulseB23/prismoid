@@ -26,9 +26,9 @@ const Thread: Component = () => {
   };
 
   const thread = createMemo(() => {
-    const chat = session()?.chat;
+    const chat = session().chat;
     const root = threadRoot();
-    if (!root || !chat) return null;
+    if (!root) return null;
     chat.messageRevision();
     const replies = chat
       .search((m) => threadRootOf(m) === root, MAX_REPLIES)

@@ -1,6 +1,6 @@
-// One chat session per channel a pane shows: that channel's messages and
-// chatters, filled from its stored history and then live from the chat
-// router. Panes showing the same channel share one session, so its
+// One chat session per channel a pane shows: that channel's messages,
+// chatters, badges and emotes, filled from its stored history and bundle
+// and then live from the chat router. Panes showing the same channel share one session, so its
 // messages are added once however many panes draw them; it is dropped
 // when the last pane lets go.
 
@@ -25,29 +25,41 @@ import { ensureUserInfo } from "../stores/userInfoStore";
 import { canModerateIn, noteModerator } from "../stores/roleStore";
 import { recordModAction } from "../stores/modLogStore";
 import { MODE_ACTIONS, loadChatSettings } from "../stores/chatSettingsStore";
-import { loadBadgeBundle, type EmoteBundle } from "../stores/badgeStore";
-import { loadEmoteBundle, type EmoteBundleSets } from "../stores/emoteStore";
+import {
+  createBadgeStore,
+  type BadgeStore,
+  type EmoteBundle,
+} from "../stores/badgeStore";
+import {
+  createEmoteStore,
+  type EmoteBundleSets,
+  type EmoteStore,
+} from "../stores/emoteStore";
 
 export interface ChatSession {
   readonly channelId: string;
   readonly chat: ChatStore;
   readonly chatters: ChatterStore;
+  readonly badges: BadgeStore;
+  readonly emotes: EmoteStore;
   /** True while the stored tail is loading. */
   readonly historyLoading: () => boolean;
 }
+
+/** What a pane with no channel open reads: never written, always empty. */
+export const idleSession: ChatSession = {
+  channelId: "",
+  chat: createChatStore(),
+  chatters: createChatterStore(),
+  badges: createBadgeStore(),
+  emotes: createEmoteStore(),
+  historyLoading: () => false,
+};
 
 // Rows made here rather than by the host need their own ordering key.
 // Starting far above any host sequence keeps them at the tail where they
 // arrived, the same trick optimistic sends use.
 let nextLocalSeq = Number.MAX_SAFE_INTEGER - 2 ** 40;
-
-// Badges and emotes are still one set for the window, so only the
-// channel on screen loads its own.
-function applyBundle(channelId: string, bundle: EmoteBundle & EmoteBundleSets) {
-  if (activeChannel()?.id !== channelId) return;
-  loadBadgeBundle(bundle);
-  loadEmoteBundle(bundle);
-}
 
 function openSession(channel: Channel): {
   session: ChatSession;
@@ -55,6 +67,12 @@ function openSession(channel: Channel): {
 } {
   const chat = createChatStore();
   const chatters = createChatterStore();
+  const badges = createBadgeStore();
+  const emotes = createEmoteStore();
+  const applyBundle = (bundle: EmoteBundle & EmoteBundleSets) => {
+    badges.loadBundle(bundle);
+    emotes.loadBundle(bundle);
+  };
   const add = (batch: ChatMessage[]) => {
     chat.addMessages(batch);
     // Stored history can hold the user's newest message in a channel when
@@ -136,13 +154,13 @@ function openSession(channel: Channel): {
       }
     },
     banned: () => chat.addMessages([bannedNotice(channel, nextLocalSeq++)]),
-    bundle: (bundle) => applyBundle(channel.id, bundle),
+    bundle: applyBundle,
   });
 
   // The host keeps the bundle of every joined channel.
   currentEmoteBundle(channel.id)
     .then((bundle) => {
-      if (bundle) applyBundle(channel.id, bundle);
+      if (bundle) applyBundle(bundle);
     })
     .catch((err: unknown) =>
       console.error("failed to load emote bundle:", err),
@@ -153,6 +171,8 @@ function openSession(channel: Channel): {
       channelId: channel.id,
       chat,
       chatters,
+      badges,
+      emotes,
       historyLoading: history.loading,
     },
     close: () => {
@@ -201,13 +221,11 @@ export function sessionFor(
   return channelId === undefined ? undefined : held().get(channelId)?.session;
 }
 
-const SessionContext = createContext<() => ChatSession | undefined>(
-  () => undefined,
-);
+const SessionContext = createContext<() => ChatSession>(() => idleSession);
 
 export const SessionProvider = SessionContext.Provider;
 
-/** The session of the pane (or card window) this component is in. */
-export function useSession(): () => ChatSession | undefined {
+/** The session of the pane this component is in. */
+export function useSession(): () => ChatSession {
   return useContext(SessionContext);
 }

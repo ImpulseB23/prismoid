@@ -12,9 +12,10 @@ vi.mock("../stores/emoteCardStore", async (importOriginal) => ({
   hoveredEmote: () => hovered(),
   endEmoteHover: () => endHover(),
 }));
-vi.mock("../stores/emoteStore", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../stores/emoteStore")>()),
-  emoteScope: () => "channel",
+vi.mock("../lib/chatSession", () => ({
+  useSession: () => () => ({
+    emotes: { revision: () => 0, scopeOf: () => "channel" },
+  }),
 }));
 vi.mock("../stores/channelStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../stores/channelStore")>()),

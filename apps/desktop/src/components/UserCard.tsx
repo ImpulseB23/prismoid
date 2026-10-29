@@ -27,7 +27,7 @@ import { formatTimestamp } from "../lib/messageStyle";
 import { nameStyle } from "../lib/paint";
 import { shownPaint } from "../stores/paintStore";
 import { isLight } from "../stores/themeStore";
-import { resolveBadge, badgeRevision } from "../stores/badgeStore";
+import type { BadgeStore } from "../stores/badgeStore";
 import type { ChatMessage, ChatStore } from "../stores/chatStore";
 import {
   FOLLOWERS_SCOPE,
@@ -72,6 +72,8 @@ export interface UserCardProps {
   user: CardUser | null;
   /** Their messages in the card's channel. */
   chat: ChatStore;
+  /** The card's channel's badges. */
+  badges: BadgeStore;
   /** Signed-in login, so messages that mention it are highlighted. */
   login: string;
   onClose: () => void;
@@ -116,11 +118,12 @@ const UserCard: Component<UserCardProps> = (props) => {
   );
 
   const badges = createMemo(() => {
-    badgeRevision();
+    const store = props.badges;
+    store.revision();
     const u = props.user;
     if (!u) return [];
     return u.badges.flatMap((b) => {
-      const r = resolveBadge(b.set_id, b.id);
+      const r = store.resolve(b.set_id, b.id);
       return r ? [r] : [];
     });
   });
