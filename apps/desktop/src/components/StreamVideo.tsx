@@ -1,8 +1,9 @@
-// The channel's stream above a pane's chat, through Twitch's embedded
-// player: Twitch's own page in a frame, so none of Twitch's code runs in
-// the app. The frame is sandboxed so the player cannot navigate the window
-// away or open new ones. Twitch requires at least 400x300 and an unobscured
-// player, so a pane too small for that says which way it falls short.
+// A small preview of the channel's stream in the top right corner of a
+// pane's chat, through Twitch's embedded player: Twitch's own page in a
+// frame, so none of Twitch's code runs in the app. The frame is sandboxed
+// so the player cannot navigate the window away or open new ones. Twitch
+// requires at least 400x300, which sets the preview's size; a chat too
+// small for that says which way it falls short.
 
 import {
   Show,
@@ -14,8 +15,10 @@ import {
 
 const MIN_WIDTH = 400;
 const MIN_HEIGHT = 300;
-/** Chat keeps at least this much of the pane under the video. */
-const MIN_CHAT = 200;
+/** 16:9 at Twitch's minimum height. */
+const PREVIEW_WIDTH = 534;
+/** Gap between the preview and the chat's edges. */
+const INSET = 12;
 
 export function playerUrl(login: string, parent: string): string {
   const url = new URL("https://player.twitch.tv/");
@@ -28,16 +31,14 @@ export function playerUrl(login: string, parent: string): string {
 export type VideoFit = { width: number; height: number } | "narrow" | "short";
 
 /**
- * 16:9 as wide as the pane allows while chat keeps its share below; a
- * shorter pane gets a narrower video rather than black bars.
+ * The smallest player Twitch allows, 16:9 where the chat is wide enough
+ * and down to 400 wide where it is not.
  */
-export function videoSize(paneWidth: number, paneHeight: number): VideoFit {
-  if (paneWidth < MIN_WIDTH) return "narrow";
-  const height = Math.floor(
-    Math.min((paneWidth * 9) / 16, paneHeight - MIN_CHAT),
-  );
-  if (height < MIN_HEIGHT) return "short";
-  return { width: Math.floor((height * 16) / 9), height };
+export function videoSize(chatWidth: number, chatHeight: number): VideoFit {
+  const width = Math.min(PREVIEW_WIDTH, chatWidth - INSET * 2);
+  if (width < MIN_WIDTH) return "narrow";
+  if (chatHeight - INSET * 2 < MIN_HEIGHT) return "short";
+  return { width, height: MIN_HEIGHT };
 }
 
 const StreamVideo: Component<{ login: string; name: string }> = (props) => {
@@ -66,8 +67,8 @@ const StreamVideo: Component<{ login: string; name: string }> = (props) => {
         fallback={
           <p class="stream-video__small">
             {fit() === "narrow"
-              ? `Make this pane at least ${MIN_WIDTH}px wide to show the stream.`
-              : "Make the window taller to show the stream."}
+              ? "Widen this pane to show the stream"
+              : "Make the window taller to show the stream"}
           </p>
         }
       >

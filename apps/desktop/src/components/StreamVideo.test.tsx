@@ -3,17 +3,17 @@ import { cleanup, render, screen } from "@solidjs/testing-library";
 import StreamVideo, { playerUrl, videoSize } from "./StreamVideo";
 
 describe("videoSize", () => {
-  it("fills the pane width at 16:9", () => {
-    expect(videoSize(800, 1000)).toEqual({ width: 800, height: 450 });
+  it("is the smallest player Twitch allows, at 16:9", () => {
+    expect(videoSize(1280, 800)).toEqual({ width: 534, height: 300 });
   });
 
-  it("keeps room for chat by going narrower, not adding bars", () => {
-    expect(videoSize(1280, 584)).toEqual({ width: 682, height: 384 });
+  it("narrows toward 400 in a narrow chat", () => {
+    expect(videoSize(450, 800)).toEqual({ width: 426, height: 300 });
   });
 
-  it("says which way a pane misses Twitch's 400x300 minimum", () => {
-    expect(videoSize(399, 2000)).toBe("narrow");
-    expect(videoSize(700, 480)).toBe("short");
+  it("says which way a chat misses Twitch's 400x300 minimum", () => {
+    expect(videoSize(420, 800)).toBe("narrow");
+    expect(videoSize(900, 320)).toBe("short");
   });
 });
 
@@ -62,16 +62,16 @@ describe("StreamVideo", () => {
     expect(frame.getAttribute("sandbox")).toBe(
       "allow-scripts allow-same-origin allow-presentation",
     );
-    expect(frame.width).toBe("800");
-    expect(frame.height).toBe("450");
+    expect(frame.width).toBe("534");
+    expect(frame.height).toBe("300");
   });
 
-  it("says so in a pane too narrow or too short for the player", () => {
+  it("says so in a chat too narrow or too short for the player", () => {
     mountIn(300, 1000);
     expect(screen.queryByTitle("PGL's stream")).toBeNull();
-    expect(screen.getByText(/at least 400px wide/)).toBeTruthy();
+    expect(screen.getByText(/Widen this pane/)).toBeTruthy();
     cleanup();
-    mountIn(900, 450);
+    mountIn(900, 320);
     expect(screen.getByText(/window taller/)).toBeTruthy();
   });
 });

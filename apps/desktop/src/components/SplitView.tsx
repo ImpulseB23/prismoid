@@ -100,13 +100,13 @@ const SplitView: Component<{ login: string }> = (props) => {
                   onClose={() => closePane(slotId)}
                 />
               </Show>
-              <Show when={slot().video ? channel() : null}>
-                {(c) => (
-                  <StreamVideo login={c().login} name={c().display_name} />
-                )}
-              </Show>
               <div class="chat-area">
                 <ChatFeed login={props.login} />
+                <Show when={slot().video ? channel() : null}>
+                  {(c) => (
+                    <StreamVideo login={c().login} name={c().display_name} />
+                  )}
+                </Show>
                 <CommandCenter />
               </div>
               <MessageInput login={props.login} />

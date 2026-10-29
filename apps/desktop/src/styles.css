@@ -4311,14 +4311,20 @@ option::checkmark {
   white-space: nowrap;
 }
 
-/* The stream above a pane's chat, centred when the pane is taller than the
-   video can use. */
+/* The stream preview in the chat's top right corner. It sits under the tab
+   drop targets so a dragged tab can still land on its pane, and under the
+   chat manager, which only covers it while open. */
 .stream-video {
-  display: flex;
-  justify-content: center;
-  flex-shrink: 0;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  overflow: hidden;
+  border-radius: var(--radius-md);
   background: #000;
-  border-bottom: 1px solid var(--border);
+  box-shadow:
+    0 0 0 1px var(--border-strong),
+    0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 .stream-video__player {
@@ -4328,7 +4334,8 @@ option::checkmark {
 
 .stream-video__small {
   margin: 0;
-  padding: 10px 12px;
+  padding: 6px 10px;
+  background: var(--bg-raised);
   color: var(--text-muted);
   font-size: 12px;
 }
