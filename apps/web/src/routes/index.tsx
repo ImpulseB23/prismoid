@@ -12,7 +12,12 @@ import { getRequestEvent } from "solid-js/web";
 import { createAsync, query } from "@solidjs/router";
 import { Title, Meta } from "@solidjs/meta";
 import GithubPreview from "~/components/GithubPreview";
-import Icon from "~/components/Icons";
+import {
+  ChatManagerShot,
+  ChatShot,
+  ManagerShot,
+  ModFeedShot,
+} from "~/components/ProductMocks";
 import {
   detectPlatform,
   INSTALLERS,
@@ -61,7 +66,7 @@ function Download(props: { platform: Platform | undefined }) {
       <a
         href={`/download/${target()}`}
         rel="external"
-        class="btn btn-primary btn-hero"
+        class="btn btn-primary btn-gold btn-hero"
       >
         <WindowsIcon /> Download for {PLATFORM_NAMES[target()]}
       </a>
@@ -122,30 +127,29 @@ const FEED: Line[] = [
   {
     kind: "msg",
     badge: "sub",
-    name: "Tricklord",
+    name: "sleepyfern",
     color: "#4fa3ff",
     text: () => (
       <>
-        he is NOT reading chat <span class="mock__emote" />
+        she is NOT reading chat <span class="mock__emote" />
       </>
     ),
   },
   {
     kind: "msg",
     badge: "vip",
-    name: "supibot",
+    name: "remindbot",
     color: "#ff69b4",
-    text: () => <>@brayanx2, reminder from yourself (1m, 5s ago): $fish</>,
+    text: () => <>@noodle_hours, reminder from yourself (1m ago): feed cat</>,
   },
   {
     kind: "msg",
     badge: "mod",
-    name: "nymn",
+    name: "crumbs_42",
     color: "#3ddc84",
     text: () => (
       <>
-        pepeLaugh <span class="mock__emote mock__emote--b" /> he found the
-        setting
+        <span class="mock__emote mock__emote--b" /> she found the setting
       </>
     ),
   },
@@ -153,14 +157,14 @@ const FEED: Line[] = [
     kind: "notice",
     text: () => (
       <>
-        <b>nymn</b> timed out <b>spammer_4421</b> for 10m: links
+        <b>crumbs_42</b> timed out <b>spammer_4421</b> for 10m: links
       </>
     ),
   },
   {
     kind: "msg",
     badge: "sub",
-    name: "kebabloverr",
+    name: "kettlewhistle",
     color: "#ffb020",
     text: () => (
       <>
@@ -182,20 +186,20 @@ const FEED: Line[] = [
     color: "#a78bfa",
     text: () => (
       <>
-        <span class="mock__mention">@kebabloverr</span> it skips the website
+        <span class="mock__mention">@kettlewhistle</span> it skips the website
       </>
     ),
   },
   {
     kind: "msg",
-    name: "ramen_dev",
+    name: "noodle_hours",
     color: "#ff4d8d",
     text: () => <>wait it remembers the chat from before I opened it??</>,
   },
   {
     kind: "msg",
     badge: "vip",
-    name: "xqcL",
+    name: "tabby_owl",
     color: "#4fa3ff",
     text: () => (
       <>
@@ -232,19 +236,19 @@ function AppMock() {
     <div class="mock" aria-hidden="true">
       <div class="mock__bar">
         <span class="mock__logo" />
-        <span class="mock__channel">xqc</span>
+        <span class="mock__channel">pixelgoose</span>
         <span class="mock__dot" />
       </div>
       <div class="mock__tabs">
-        <span class="mock__tab mock__tab--active">xqc</span>
+        <span class="mock__tab mock__tab--active">pixelgoose</span>
         <span class="mock__tab">
-          forsen <b>12</b>
+          moss_rally <b>12</b>
         </span>
         <span class="mock__tab">your_mod_channel</span>
         <span class="mock__tab mock__tab--add">+</span>
       </div>
       <div class="mock__stream">
-        <b>Live</b> 41.2k viewers 3:12:08 <i>Just Chatting</i>
+        <b>Live</b> 2,318 viewers 3:12:08 <i>Just Chatting</i>
       </div>
       <div class="mock__feed">
         <For each={visible()}>
@@ -286,7 +290,7 @@ function AppMock() {
         </For>
       </div>
       <div class="mock__composer">
-        <span>Message xqc</span>
+        <span>Message pixelgoose</span>
         <span class="mock__send" />
       </div>
     </div>
@@ -297,18 +301,20 @@ export default function Home() {
   const platform = createAsync(() => visitorPlatform(), { deferStream: true });
   return (
     <>
-      <Title>prismoid - Twitch chat and your stream, in one window</Title>
+      <Title>
+        prismoid - Twitch chat and a stream manager for your desktop
+      </Title>
       <Meta
         name="description"
-        content="A desktop app for Twitch chat and for running your stream. Tabs, chat history that survives a restart, mod actions you can see, your emotes, and a stream manager for your title, ads, polls and more. Free, open source, ultra lightweight."
+        content="prismoid is a free, open source desktop app for Twitch chat. Channels sit in tabs and keep their history, mod actions show up in chat, and if you stream, your title, ads and polls are in a panel above it."
       />
       <Meta
         property="og:title"
-        content="prismoid - Twitch chat and your stream, in one window"
+        content="prismoid - Twitch chat and a stream manager for your desktop"
       />
       <Meta
         property="og:description"
-        content="Tabs, history, mod actions you can see, your emotes, and a stream manager that drops down over chat. Free, open source, ultra lightweight."
+        content="A free, open source desktop app for Twitch chat, with a stream manager for your title, ads and polls."
       />
       <Meta property="og:image" content="/icons/icon-512.png" />
       <Meta property="og:url" content="https://prismoid.org" />
@@ -317,17 +323,10 @@ export default function Home() {
       <section class="hero">
         <div class="hero__beam" aria-hidden="true" />
         <div class="hero__copy">
-          <h1>
-            Twitch chat and your stream,
-            <br />
-            in one window.
-          </h1>
+          <h1>A desktop app for Twitch chat and your stream</h1>
           <p class="lede">
-            prismoid is Twitch chat for your desktop. Every channel in a tab,
-            history that survives a restart, mod actions you can actually see,
-            and your 7TV, BTTV and FFZ emotes. Streaming? Pull down the stream
-            manager to change your title, run a poll or clip the moment without
-            leaving chat. Free, open source, ultra lightweight.
+            Read and moderate chat in tabs. When you go live, your title, ads
+            and polls sit right above it.
           </p>
           <div class="hero-actions">
             <Download platform={platform()} />
@@ -339,222 +338,75 @@ export default function Home() {
               <GitHubIcon /> View source
             </GithubPreview>
           </div>
+          <p class="hero__plain">Free and open source.</p>
           <DownloadNote platform={platform()} />
-          <ul class="works-with" aria-label="Works with">
-            <li>Works with</li>
-            <li>Twitch</li>
-            <li>7TV</li>
-            <li>BetterTTV</li>
-            <li>FrankerFaceZ</li>
-          </ul>
         </div>
         <AppMock />
       </section>
 
-      <section class="why">
-        <h2>Light enough to forget it is open.</h2>
-        <div class="why__grid">
-          <div class="why__item">
-            <Icon name="feather" class="why__icon" />
-            <h3>Ultra lightweight.</h3>
-            <p>
-              Installs in seconds and sits next to your stream without eating
-              into it. No browser hidden inside the download, nothing running
-              that you did not ask for.
-            </p>
-          </div>
-          <div class="why__item">
-            <Icon name="bolt" class="why__icon" />
-            <h3>Hyper fast.</h3>
-            <p>
-              Opens instantly and keeps up with the busiest chats on Twitch
-              without a stutter. Scrolling stays smooth when everyone is
-              spamming at once.
-            </p>
-          </div>
-          <div class="why__item">
-            <Icon name="shield" class="why__icon" />
-            <h3>Hard to knock over.</h3>
-            <p>
-              The connection lives in its own little box. If it hiccups, it
-              comes back on its own in seconds while you keep reading, and the
-              window never goes with it.
-            </p>
-          </div>
-          <div class="why__item">
-            <Icon name="direct" class="why__icon" />
-            <h3>Nothing in between.</h3>
-            <p>
-              Your PC talks to Twitch directly. No account with us, no cloud in
-              the middle, nothing to subscribe to, and your sign-in never leaves
-              your machine.
-            </p>
-          </div>
+      <section class="feature feature--chat">
+        <div class="feature__text">
+          <h2>Chat</h2>
+          <p>
+            Every channel gets its own tab. The ones you are not looking at
+            count what you missed.
+          </p>
+          <p>
+            Chat is still there after a restart, so you can scroll back to last
+            night.
+          </p>
+          <p>
+            7TV, BTTV and FFZ emotes show up next to Twitch's own. Right-click
+            one to see its name, which set it is from and who made it.
+          </p>
+        </div>
+        <ChatShot />
+      </section>
+
+      <section class="feature feature--mod">
+        <div class="feature__text">
+          <h2>Moderation</h2>
+          <p>
+            Timeouts and bans show up in chat right where they happened. In
+            channels you mod, you also see who did it and the reason they gave.
+          </p>
+          <ModFeedShot />
+        </div>
+        <div class="feature__side">
+          <ChatManagerShot />
+          <p>Room modes, the AutoMod queue and the mod log share one panel.</p>
         </div>
       </section>
 
-      <section class="moments">
-        <div class="moment">
-          <Icon name="history" class="moment__icon" />
-          <h2>You tab back and chat is 400 messages ahead.</h2>
+      <section class="feature feature--manager">
+        <div class="feature__text">
+          <h2>Stream manager</h2>
           <p>
-            Scroll up as far as you like. prismoid keeps every channel's chat on
-            your disk and puts it back when you open the channel, restart or
-            not. First time in a channel? It pulls the last few hundred lines
-            anyway, so you never arrive to an empty window.
+            One button pulls it down over chat like a curtain, and chat keeps
+            going underneath. Your uptime, viewers and next ad are along the
+            top, with the stream so far laid out on a timeline.
           </p>
+          <p>Change your title, category and tags without opening Twitch.</p>
         </div>
-        <div class="moment">
-          <Icon name="gavel" class="moment__icon" />
-          <h2>Someone got timed out and nobody knows why.</h2>
-          <p>
-            Timeouts, bans and deletions show up in chat as they happen, in
-            every channel. Where you moderate, you also get who did it and the
-            reason, and you can act straight from the message: timeout, ban,
-            delete, done.
-          </p>
-        </div>
-        <div class="moment">
-          <Icon name="tabs" class="moment__icon" />
-          <h2>Five channels, five windows.</h2>
-          <p>
-            Tabs. Ctrl+Tab between them, unread counts on the ones you're not
-            looking at, and all of it on one connection so Twitch never cuts you
-            off for having too many open.
-          </p>
-        </div>
-        <div class="moment">
-          <Icon name="smile" class="moment__icon" />
-          <h2>Your emotes, in your chat.</h2>
-          <p>
-            7TV, BTTV and FFZ next to Twitch's own, badges and replies drawn the
-            way you expect. Right-click any emote to see what it is and where it
-            came from.
-          </p>
-        </div>
-        <div class="moment">
-          <Icon name="browser" class="moment__icon" />
-          <h2>Watching in the browser anyway?</h2>
-          <p>
-            Turn on follow mode and prismoid switches to whatever Twitch channel
-            is in your front browser window. Pin it on top of the stream and
-            forget the site's chat exists.
-          </p>
-        </div>
-      </section>
-
-      <section class="manager">
-        <h2>Run your stream without leaving chat.</h2>
-        <p class="manager__lede">
-          The stream manager drops down over chat like a curtain from a button
-          in the header. Chat keeps running underneath, and it rolls back up
-          when you are done.
+        <ManagerShot />
+        <p class="feature__note">
+          Ads, polls and predictions are for Affiliates and Partners.
         </p>
-        <ul class="manager__list">
-          <li>
-            <Icon name="sliders" class="manager__icon" />
-            <p>
-              <strong>Your stream info, right there.</strong> Change the title,
-              category, tags, language, content labels and branded content while
-              chat keeps moving below.
-            </p>
-          </li>
-          <li>
-            <Icon name="history" class="manager__icon" />
-            <p>
-              <strong>The stream so far.</strong> Uptime and viewers at a
-              glance, and a timeline that shows where every ad break, marker and
-              poll landed.
-            </p>
-          </li>
-          <li>
-            <Icon name="bolt" class="manager__icon" />
-            <p>
-              <strong>The buttons you reach for live.</strong> Drop a marker,
-              clip what just happened, shout out a friend, post an announcement
-              or turn on Shield Mode.
-            </p>
-          </li>
-          <li>
-            <Icon name="poll" class="manager__icon" />
-            <p>
-              <strong>Ads, polls and predictions.</strong> See when the next ad
-              is coming, snooze it or run one now. Start a poll or a prediction
-              and watch the votes come in. For Twitch Affiliates and Partners.
-            </p>
-          </li>
-          <li>
-            <Icon name="gavel" class="manager__icon" />
-            <p>
-              <strong>Chat manager for you and your mods.</strong> Room modes as
-              tiles you tap, the AutoMod queue and the mod log, all in one
-              panel.
-            </p>
-          </li>
-          <li>
-            <Icon name="key" class="manager__icon" />
-            <p>
-              <strong>Only asks for what you use.</strong> prismoid asks Twitch
-              for stream permissions when you turn a part of the stream manager
-              on, and not before.
-            </p>
-          </li>
-        </ul>
       </section>
 
-      <section class="roadmap">
-        <h2>What is next.</h2>
-        <p class="roadmap__lede">
-          Twitch first, until it is right. Then this, one piece at a time.
-        </p>
-        <ul class="roadmap__list">
+      <section class="later">
+        <h2>What is not there yet</h2>
+        <ul>
+          <li>It only runs on Windows for now. Mac and Linux come later.</li>
           <li>
-            <Icon name="layers" class="roadmap__icon" />
-            <p>
-              <strong>YouTube and Kick in the same window.</strong> Stream to
-              all three, read one chat. Time someone out and it happens where
-              they are.
-            </p>
+            YouTube and Kick chat are not hooked up yet. Twitch comes first.
           </li>
-          <li>
-            <Icon name="cast" class="roadmap__icon" />
-            <p>
-              <strong>Chat on your stream.</strong> Drop it into OBS straight
-              from the app, every platform in one feed, no widget service
-              needed.
-            </p>
-          </li>
-          <li>
-            <Icon name="puzzle" class="roadmap__icon" />
-            <p>
-              <strong>Your own additions.</strong> Plugins for the things we did
-              not think of.
-            </p>
-          </li>
-          <li>
-            <Icon name="laptop" class="roadmap__icon" />
-            <p>
-              <strong>Mac and Linux.</strong> Same app, same download page.
-            </p>
-          </li>
+          <li>There is no OBS dock yet, so chat cannot sit inside OBS.</li>
         </ul>
       </section>
 
       <section class="cta">
-        <div class="cta__beam" aria-hidden="true" />
-        <h2>Try it on tonight's stream.</h2>
-        <p>
-          Install, sign in with Twitch, open a channel. If something is off,{" "}
-          <a
-            href="https://github.com/ImpulseB23/Prismoid/issues"
-            class="inline-link"
-            target="_blank"
-            rel="noopener"
-          >
-            say so
-          </a>
-          .
-        </p>
+        <h2>Try it on your next stream</h2>
         <Download platform={platform()} />
       </section>
     </>

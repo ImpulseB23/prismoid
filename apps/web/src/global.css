@@ -52,6 +52,11 @@
   --band-green: #3ddc84;
   --gold: #ffcf5a;
 
+  /* the app's primary action: only the download buttons wear it */
+  /* Wider than the app's buttons, so the gold gives way to white sooner. */
+  --action-gold: linear-gradient(135deg, #ebc46a, #f8e6b8 30%, #fffcf5 65%);
+  --on-action-gold: #1c1505;
+
   /* semantic - a violet black, not a neutral grey */
   --bg: #0c0a14;
   --bg-raised: #15121f;
@@ -165,6 +170,17 @@ h3 {
 .btn-primary:hover {
   transform: translateY(-1px);
   box-shadow: 0 14px 36px rgba(124, 58, 237, 0.45);
+}
+
+.btn-gold {
+  color: var(--on-action-gold);
+  background: var(--action-gold);
+  border-color: transparent;
+  box-shadow: 0 10px 30px rgba(255, 244, 220, 0.12);
+}
+
+.btn-gold:hover {
+  box-shadow: 0 14px 36px rgba(255, 244, 220, 0.18);
 }
 
 .btn-disabled {
