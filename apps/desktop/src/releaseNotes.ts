@@ -13,6 +13,32 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.8.3",
+    headline: "Quicker to moderate, easier to find",
+    features: [
+      {
+        title: "Warn and pick a timeout",
+        body: "Hover a message for a clock that opens your timeout lengths or a custom one, and a warn button that asks for the reason they will read. Both are in the right-click menu too. Mods reconnect Twitch once to warn.",
+      },
+      {
+        title: "Updates wait for you",
+        body: "New versions download while you chat. A gold download icon shows up next to Settings when one is ready, and a click restarts you into it.",
+      },
+      {
+        title: "Settings, sorted",
+        body: "Appearance is only about looks now. Mentions, highlights and ignored people have their own section, and the stream bar stats moved to Chat.",
+      },
+      {
+        title: "Hear your mentions",
+        body: "Play the mention chime from Settings, set its volume, and have it ring even while Prismoid is in front.",
+      },
+    ],
+    fixes: [
+      "When Settings has a dot, the section and the setting it means are marked too.",
+      "Raids and gift bombs get a gold edge in chat.",
+    ],
+  },
+  {
     version: "0.8.0",
     headline: "Run your stream from your chat",
     features: [
