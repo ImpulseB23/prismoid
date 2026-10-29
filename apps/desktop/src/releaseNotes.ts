@@ -13,6 +13,40 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.9.0",
+    headline: "Chats side by side, the stream right there",
+    features: [
+      {
+        title: "Split view",
+        body: "Put up to four chats next to each other. Drag a tab onto a pane or the right edge, or use the split button. Drag a pane by its header to swap it with another.",
+      },
+      {
+        title: "Watch while you chat",
+        body: "The video button shows the stream small in the corner of the chat, and it keeps playing when you switch tabs. Pop it out into its own window to resize it, pin it on top or go fullscreen.",
+      },
+      {
+        title: "A gear for your chat",
+        body: "Next to the emote button: pick your name color, see how you look in chat, pause chat on hover or while holding Alt, freeze animated emotes, and turn readable colors and timestamps on or off.",
+      },
+      {
+        title: "Keep only what you use",
+        body: "Settings has a Features page. Switch off split view, stream video, the stream manager, mod tools or 7TV and they are gone, background work included. Settings itself now lives under your picture.",
+      },
+      {
+        title: "More at a glance",
+        body: "Hover a badge to see it large with its name, or a name to see who it is and how old the account is. Drag tabs to put them in any order.",
+      },
+    ],
+    fixes: [
+      "Slow mode counts down in every channel, not only where you mod, so messages no longer get turned away for being too early.",
+      "When Twitch briefly refuses a message, Prismoid tries again on its own, and errors read like sentences.",
+      "Right-click menus and emote cards stay open in fast chat.",
+      "Chat you scrolled up in stays perfectly still.",
+      "User cards follow your zoom, keep one size, and show subs and timeouts instead of empty rows.",
+      "The pop-out keeps the stream's shape when you resize it.",
+    ],
+  },
+  {
     version: "0.8.5",
     headline: "Cards in their own windows",
     features: [
