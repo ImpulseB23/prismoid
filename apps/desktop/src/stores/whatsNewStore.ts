@@ -5,7 +5,7 @@
 import { createSignal } from "solid-js";
 import { getVersion } from "@tauri-apps/api/app";
 import type { StorageLike } from "./channelStore";
-import { notesFor, type ReleaseNote } from "../releaseNotes";
+import { notesSince, type ReleaseNote } from "../releaseNotes";
 
 export const LAST_VERSION_KEY = "prismoid.lastVersion";
 export const RELEASES_URL = "https://github.com/ImpulseB23/Prismoid/releases";
@@ -27,7 +27,7 @@ export interface WhatsNewStore {
 export function createWhatsNewStore(
   storage: StorageLike | null = defaultStorage(),
   version: () => Promise<string> = getVersion,
-  lookup: (version: string) => ReleaseNote | undefined = notesFor,
+  lookup: (from: string, to: string) => ReleaseNote | undefined = notesSince,
 ): WhatsNewStore {
   const [updatedTo, setUpdatedTo] = createSignal<string | null>(null);
   const [unseen, setUnseen] = createSignal(false);
@@ -39,7 +39,7 @@ export function createWhatsNewStore(
     // A first install has nothing to announce.
     if (last !== null && last !== current) {
       setUpdatedTo(current);
-      const note = lookup(current);
+      const note = lookup(last, current);
       if (note) setNotes(note);
       else setUnseen(true);
     }

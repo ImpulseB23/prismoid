@@ -2,6 +2,8 @@
 // Settings. Written for the people using Prismoid, in plain words; the
 // GitHub changelog keeps the commit-level list.
 
+import { compareVersions } from "./lib/version";
+
 export interface ReleaseNote {
   version: string;
   headline: string;
@@ -143,6 +145,14 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   },
 ];
 
-export function notesFor(version: string): ReleaseNote | undefined {
-  return RELEASE_NOTES.find((n) => n.version === version);
+/**
+ * The newest notes released after `from`, up to and including `to`, so an
+ * update that skips a release with notes still shows them.
+ */
+export function notesSince(from: string, to: string): ReleaseNote | undefined {
+  return RELEASE_NOTES.filter(
+    (n) =>
+      compareVersions(n.version, from) > 0 &&
+      compareVersions(n.version, to) <= 0,
+  ).sort((a, b) => compareVersions(b.version, a.version))[0];
 }

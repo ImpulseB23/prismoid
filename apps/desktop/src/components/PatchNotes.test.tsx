@@ -7,7 +7,7 @@ vi.mock("@tauri-apps/api/app", () => ({ getVersion: vi.fn() }));
 
 const { showPatchNotes, patchNotes } = await import("../stores/whatsNewStore");
 const { default: PatchNotes } = await import("./PatchNotes");
-const { RELEASE_NOTES, notesFor } = await import("../releaseNotes");
+const { RELEASE_NOTES, notesSince } = await import("../releaseNotes");
 
 describe("PatchNotes", () => {
   afterEach(cleanup);
@@ -34,9 +34,25 @@ describe("PatchNotes", () => {
   });
 });
 
-describe("notesFor", () => {
-  it("finds notes by version", () => {
-    expect(notesFor(RELEASE_NOTES[0]!.version)).toBe(RELEASE_NOTES[0]);
-    expect(notesFor("0.0.0")).toBeUndefined();
+describe("notesSince", () => {
+  const notes = (v: string) => RELEASE_NOTES.find((n) => n.version === v);
+
+  it("finds the notes of the version updated to", () => {
+    expect(notesSince("0.7.0", "0.8.0")).toBe(notes("0.8.0"));
+  });
+
+  it("still shows a skipped release's notes", () => {
+    expect(notesSince("0.7.0", "0.8.1")).toBe(notes("0.8.0"));
+    expect(notesSince("0.5.0", "0.8.1")).toBe(notes("0.8.0"));
+  });
+
+  it("has nothing once those notes were seen", () => {
+    expect(notesSince("0.8.0", "0.8.1")).toBeUndefined();
+    expect(notesSince("0.8.1", "0.8.0")).toBeUndefined();
+  });
+
+  it("finds the newest notes up to a version", () => {
+    expect(notesSince("0.0.0", "0.8.1")).toBe(notes("0.8.0"));
+    expect(notesSince("0.0.0", "")).toBeUndefined();
   });
 });
