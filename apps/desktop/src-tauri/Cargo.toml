@@ -95,3 +95,9 @@ required-features = ["__bench"]
 lto = "thin"
 strip = true
 opt-level = "s"
+
+# Until tauri-apps/plugins-workspace takes the fix: a fullscreen window's
+# size and position are not saved, so a launch after quitting in fullscreen
+# opens at the normal window size.
+[patch.crates-io]
+tauri-plugin-window-state = { git = "https://github.com/ImpulseB23/plugins-workspace", rev = "d6580ce4575e76a37cc16954098ed92c947db9d5" }
