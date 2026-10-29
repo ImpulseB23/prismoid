@@ -80,7 +80,7 @@ const { activeChannel } = await import("../stores/channelStore");
 // The feed draws the session of the pane it sits in.
 const renderFeed = (login: string) =>
   render(() => (
-    <ChatPane channel={activeChannel()}>
+    <ChatPane slotId="pane-0" channel={activeChannel()} focused>
       <ChatFeed login={login} />
     </ChatPane>
   ));

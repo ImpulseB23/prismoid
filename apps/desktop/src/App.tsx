@@ -11,11 +11,8 @@ import {
 } from "solid-js";
 import { listen } from "@tauri-apps/api/event";
 import ChannelTabs from "./components/ChannelTabs";
-import ChatFeed from "./components/ChatFeed";
-import ChatPane from "./components/ChatPane";
+import SplitView from "./components/SplitView";
 import Header from "./components/Header";
-import MessageInput from "./components/MessageInput";
-import CommandCenter from "./components/CommandCenter";
 import StreamBar from "./components/StreamBar";
 import StreamManager from "./components/streamManager/StreamManager";
 import Tour from "./components/Tour";
@@ -284,13 +281,7 @@ const ChatShell: Component<{ login: string; onSignOut: () => void }> = (
       <div class="app__body">
         <ChannelTabs />
         <StreamBar />
-        <ChatPane channel={activeChannel()}>
-          <div class="chat-area">
-            <ChatFeed login={props.login} />
-            <CommandCenter />
-          </div>
-          <MessageInput login={props.login} />
-        </ChatPane>
+        <SplitView login={props.login} />
         <StreamManager />
       </div>
       <Tour />
