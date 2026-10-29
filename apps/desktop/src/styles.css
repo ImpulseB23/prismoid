@@ -4336,6 +4336,41 @@ option::checkmark {
   border: 0;
 }
 
+.stream-video__bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+  padding: 0 4px 0 10px;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.stream-video__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stream-video__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}
+
+.stream-video__btn:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
 /* A pop-out player: the player and nothing else, edge to edge. */
 .video-window {
   height: 100%;

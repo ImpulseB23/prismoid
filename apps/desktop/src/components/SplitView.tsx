@@ -21,6 +21,7 @@ import {
   showInPane,
   splitPane,
   canSplitPane,
+  togglePaneVideo,
   TAB_DRAG_TYPE,
 } from "../stores/layoutStore";
 import ChatPane from "./ChatPane";
@@ -28,6 +29,7 @@ import ChatFeed from "./ChatFeed";
 import CommandCenter from "./CommandCenter";
 import MessageInput from "./MessageInput";
 import StreamVideo from "./StreamVideo";
+import { openVideoWindow } from "../lib/videoWindow";
 
 const report = (what: string) => (err: unknown) => console.error(what, err);
 
@@ -104,7 +106,22 @@ const SplitView: Component<{ login: string }> = (props) => {
                 <ChatFeed login={props.login} />
                 <Show when={slot().video ? channel() : null}>
                   {(c) => (
-                    <StreamVideo login={c().login} name={c().display_name} />
+                    <StreamVideo
+                      login={c().login}
+                      name={c().display_name}
+                      onClose={() => togglePaneVideo(slotId)}
+                      // The window takes over, so the stream never plays
+                      // twice.
+                      onPopOut={() => {
+                        // Read before closing the preview unmounts it.
+                        const { login, display_name } = c();
+                        togglePaneVideo(slotId);
+                        openVideoWindow(
+                          login,
+                          `${display_name}'s stream`,
+                        ).catch(report("open video window"));
+                      }}
+                    />
                   )}
                 </Show>
                 <CommandCenter />

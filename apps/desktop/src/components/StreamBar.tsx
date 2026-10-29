@@ -1,7 +1,7 @@
 // One quiet line under the tabs: live marker, category and stream title on
 // the left, the numbers on the right (viewers, uptime, messages a minute,
-// people chatting), each one switchable in Settings, and the buttons that
-// show the stream in the focused pane's corner or in a window of its own. A channel loading for
+// people chatting), each one switchable in Settings, and the button that
+// shows a preview of the stream in the focused pane's corner. A channel loading for
 // the first time gets a placeholder of the same height so nothing below it
 // jumps.
 
@@ -9,7 +9,6 @@ import { Component, Show, onCleanup, onMount } from "solid-js";
 import { formatUptime, formatViewers } from "../lib/streamInfo";
 import { streamClock, streamInfo, streamLoading } from "../stores/streamStore";
 import { activeChannel } from "../stores/channelStore";
-import { openVideoWindow } from "../lib/videoWindow";
 import { settings } from "../stores/settingsStore";
 import { focusedPaneId, panes, togglePaneVideo } from "../stores/layoutStore";
 import {
@@ -22,16 +21,6 @@ const StreamBar: Component = () => {
   onMount(() => onCleanup(startPulse()));
   const videoOn = () =>
     panes().find((p) => p.id === focusedPaneId())?.video === true;
-  // The window takes over from the corner preview, so the stream never
-  // plays twice.
-  const popOut = () => {
-    const channel = activeChannel();
-    if (!channel) return;
-    if (videoOn()) togglePaneVideo(focusedPaneId());
-    openVideoWindow(channel.login, `${channel.display_name}'s stream`).catch(
-      (err: unknown) => console.error("open video window", err),
-    );
-  };
 
   return (
     <Show
@@ -124,29 +113,6 @@ const StreamBar: Component = () => {
                       stroke-width="1.5"
                     />
                     <path d="M12 4.5l3.25-2v7L12 7.5z" fill="currentColor" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  class="stream-bar__video"
-                  aria-label="Watch in its own window"
-                  title="Watch in its own window"
-                  onClick={popOut}
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 14 14"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M8 1.75h4.25V6M12 2 7 7M5.5 2.75H3a1.25 1.25 0 0 0-1.25 1.25v7A1.25 1.25 0 0 0 3 12.25h7A1.25 1.25 0 0 0 11.25 11V8.5"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.5"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
                   </svg>
                 </button>
               </div>

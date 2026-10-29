@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@solidjs/testing-library";
+import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import StreamVideo, { playerUrl, videoSize } from "./StreamVideo";
 
 describe("videoSize", () => {
@@ -27,6 +27,9 @@ describe("playerUrl", () => {
   });
 });
 
+const onPopOut = vi.fn();
+const onClose = vi.fn();
+
 describe("StreamVideo", () => {
   afterEach(() => {
     cleanup();
@@ -50,7 +53,12 @@ describe("StreamVideo", () => {
     );
     render(() => (
       <div>
-        <StreamVideo login="pgl" name="PGL" />
+        <StreamVideo
+          login="pgl"
+          name="PGL"
+          onPopOut={onPopOut}
+          onClose={onClose}
+        />
       </div>
     ));
   }
@@ -64,6 +72,16 @@ describe("StreamVideo", () => {
     );
     expect(frame.width).toBe("534");
     expect(frame.height).toBe("300");
+  });
+
+  it("pops out and closes from the bar above the player", () => {
+    mountIn(800, 1000);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Watch in its own window" }),
+    );
+    expect(onPopOut).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "Close the preview" }));
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it("says so in a chat too narrow or too short for the player", () => {

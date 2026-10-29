@@ -17,9 +17,10 @@ fn label_for(login: &str) -> Option<String> {
     valid.then(|| format!("{LABEL_PREFIX}{login}"))
 }
 
-/// Opens `login`'s player, or brings its open one forward.
+/// Opens `login`'s player, or brings its open one forward. Async because
+/// building a window in a synchronous command deadlocks on Windows.
 #[tauri::command]
-pub fn video_window_open<R: Runtime>(
+pub async fn video_window_open<R: Runtime>(
     app: AppHandle<R>,
     login: String,
     title: String,
