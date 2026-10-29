@@ -26,6 +26,38 @@ const TABS: Tab[] = [
       </svg>
     ),
   },
+  {
+    id: "ads",
+    label: "Ads",
+    icon: () => (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect
+          x="1.5"
+          y="3"
+          width="13"
+          height="10"
+          rx="2"
+          stroke="currentColor"
+          stroke-width="1.4"
+        />
+        <path d="M6.5 6v4l3.5-2z" fill="currentColor" />
+      </svg>
+    ),
+  },
+  {
+    id: "polls",
+    label: "Polls and predictions",
+    icon: () => (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path
+          d="M3 13V8M8 13V3M13 13v-3"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+        />
+      </svg>
+    ),
+  },
 ];
 
 export const tabId = (id: StreamManagerTab) => `sm-tab-${id}`;
