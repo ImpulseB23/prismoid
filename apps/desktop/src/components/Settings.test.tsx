@@ -20,6 +20,12 @@ vi.mock("@tauri-apps/plugin-autostart", () => ({
   }),
 }));
 
+const markSeen = vi.fn();
+vi.mock("../stores/whatsNewStore", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../stores/whatsNewStore")>()),
+  markWhatsNewSeen: () => markSeen(),
+}));
+
 const { default: Settings } = await import("./Settings");
 const { settings } = await import("../stores/settingsStore");
 const { check } = await import("@tauri-apps/plugin-updater");
@@ -29,7 +35,13 @@ describe("Settings", () => {
 
   it("reads start with Windows from the system and reverts a failed toggle", async () => {
     render(() => (
-      <Settings open login="me" onClose={() => {}} onSignOut={() => {}} />
+      <Settings
+        open
+        login="me"
+        attentions={[]}
+        onClose={() => {}}
+        onSignOut={() => {}}
+      />
     ));
     fireEvent.click(screen.getByRole("button", { name: "Window" }));
     const startup = screen.getByRole("checkbox", {
@@ -54,7 +66,13 @@ describe("Settings", () => {
 
   it("toggles badge highlights and saves highlighted users", async () => {
     render(() => (
-      <Settings open login="me" onClose={() => {}} onSignOut={() => {}} />
+      <Settings
+        open
+        login="me"
+        attentions={[]}
+        onClose={() => {}}
+        onSignOut={() => {}}
+      />
     ));
     fireEvent.click(screen.getByRole("button", { name: "Chat" }));
     const vips = screen.getByRole("button", { name: "VIPs" });
@@ -86,13 +104,59 @@ describe("Settings", () => {
     );
   });
 
+  it("marks the sections and rows that need the user", () => {
+    render(() => (
+      <Settings
+        open
+        login="me"
+        attentions={[
+          { text: "Set up Prismoid", section: "help", row: "setup" },
+          { text: "Updated to 0.8.2", section: "updates", row: "update" },
+        ]}
+        onClose={() => {}}
+        onSignOut={() => {}}
+      />
+    ));
+    const tab = (name: string) => screen.getByRole("button", { name });
+    expect(tab("Help, needs attention")).toBeTruthy();
+    expect(tab("Updates, needs attention")).toBeTruthy();
+    expect(tab("Chat")).toBeTruthy();
+
+    fireEvent.click(tab("Help, needs attention"));
+    const setup = screen.getByText("Setup").closest(".settings__row")!;
+    expect(setup.classList).toContain("settings__row--attention");
+  });
+
+  it("counts the update notes seen once Updates is left", () => {
+    markSeen.mockClear();
+    render(() => (
+      <Settings
+        open
+        login="me"
+        attentions={[]}
+        onClose={() => {}}
+        onSignOut={() => {}}
+      />
+    ));
+    fireEvent.click(screen.getByRole("button", { name: "Updates" }));
+    expect(markSeen).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Chat" }));
+    expect(markSeen).toHaveBeenCalledOnce();
+  });
+
   it("shows versions without a trailing .0", async () => {
     vi.mocked(check).mockResolvedValueOnce({
       version: "0.7.0",
       downloadAndInstall: vi.fn(),
     } as unknown as Update);
     render(() => (
-      <Settings open login="me" onClose={() => {}} onSignOut={() => {}} />
+      <Settings
+        open
+        login="me"
+        attentions={[]}
+        onClose={() => {}}
+        onSignOut={() => {}}
+      />
     ));
     fireEvent.click(screen.getByRole("button", { name: "Updates" }));
     await vi.waitFor(() =>

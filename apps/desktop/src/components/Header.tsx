@@ -7,6 +7,7 @@ import {
   Component,
   Show,
   createEffect,
+  createMemo,
   createSignal,
   onCleanup,
   onMount,
@@ -32,7 +33,6 @@ import {
   openSettings,
   settingsOpen,
   setSettingsOpen,
-  type SettingsSection,
 } from "../stores/settingsPanelStore";
 import { closePicker, openPicker, pickerOpen } from "../stores/pickerStore";
 import { searchOpen, setSearchOpen } from "../stores/searchStore";
@@ -59,13 +59,9 @@ import Mentions from "./Mentions";
 import AccountAvatar from "./AccountAvatar";
 import ChatSearch from "./ChatSearch";
 import { updateState } from "../stores/updateStore";
-import {
-  markWhatsNewSeen,
-  updatedTo,
-  whatsNewUnseen,
-} from "../stores/whatsNewStore";
+import { updatedTo, whatsNewUnseen } from "../stores/whatsNewStore";
 import Settings from "./Settings";
-import { displayVersion } from "../lib/version";
+import { settingsAttention } from "../lib/settingsAttention";
 import { logo } from "../stores/themeStore";
 import {
   streamManagerOpen,
@@ -264,34 +260,18 @@ const Header: Component<HeaderProps> = (props) => {
     unlisten = undefined;
   });
 
-  // Something in Settings needs the user: a reconnect for new scopes, or a
-  // chat connection that is not coming back on its own.
-  // What the Settings dot is about, and the section that deals with it, so
-  // clicking the icon lands right there.
-  const attention = (): { text: string; section?: SettingsSection } | null => {
-    if (missingScopes().length > 0)
-      return { text: "Twitch needs new permissions", section: "account" };
-    const u = updateState();
-    if (u.kind === "available")
-      return {
-        text: `Update to ${displayVersion(u.version)} is ready`,
-        section: "updates",
-      };
-    const s = state();
-    if (s === "terminated" || s === "unhealthy")
-      return { text: "Chat is disconnected" };
-    if (s === "waiting_for_auth")
-      return { text: "Waiting for sign-in", section: "account" };
-    const updated = updatedTo();
-    if (whatsNewUnseen() && updated)
-      return {
-        text: `Updated to ${displayVersion(updated)}`,
-        section: "updates",
-      };
-    if (!settings().setupDone && tourStep() === null)
-      return { text: "Set up Prismoid", section: "help" };
-    return null;
-  };
+  const attentions = createMemo(() =>
+    settingsAttention({
+      missingScopes: missingScopes(),
+      update: updateState(),
+      sidecar: state(),
+      unseenUpdate: whatsNewUnseen() ? updatedTo() : null,
+      setupPending: !settings().setupDone && tourStep() === null,
+    }),
+  );
+  // The gear's dot speaks for the most urgent one, and clicking it lands on
+  // the section that deals with it.
+  const attention = () => attentions()[0] ?? null;
 
   return (
     <>
@@ -501,9 +481,7 @@ const Header: Component<HeaderProps> = (props) => {
               [{ transform: "rotate(0)" }, { transform: "rotate(180deg)" }],
               600,
             );
-            const section = attention()?.section;
-            markWhatsNewSeen();
-            openSettings(section);
+            openSettings(attention()?.section);
           }}
         >
           <svg
@@ -548,6 +526,7 @@ const Header: Component<HeaderProps> = (props) => {
       <Settings
         open={settingsOpen()}
         login={props.login}
+        attentions={attentions()}
         onClose={() => setSettingsOpen(false)}
         onSignOut={() => {
           setSettingsOpen(false);

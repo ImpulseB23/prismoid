@@ -8,6 +8,7 @@ import {
   Show,
   createEffect,
   createSignal,
+  on,
   onMount,
 } from "solid-js";
 import { missingScopes } from "../stores/authStore";
@@ -44,7 +45,8 @@ import {
   updateState,
 } from "../stores/updateStore";
 import TwitchReconnect from "./TwitchReconnect";
-import { showPatchNotes } from "../stores/whatsNewStore";
+import { markWhatsNewSeen, showPatchNotes } from "../stores/whatsNewStore";
+import type { Attention, AttentionRow } from "../lib/settingsAttention";
 import { notesSince } from "../releaseNotes";
 import { FOLLOWER_CHOICES, SLOW_CHOICES } from "../lib/chatModes";
 import { startTour, tourStep } from "../stores/tourStore";
@@ -59,6 +61,8 @@ import {
 export interface SettingsProps {
   open: boolean;
   login: string;
+  /** What needs the user, from the header's gear dot. */
+  attentions: Attention[];
   onClose: () => void;
   onSignOut: () => void;
 }
@@ -107,7 +111,7 @@ const PRIVACY_URL = "https://prismoid.org/privacy";
 
 // Current version, the result of the last check, and the one button that
 // does whatever comes next: check, install, or try again.
-const UpdateRow: Component = () => {
+const UpdateRow: Component<{ marked: boolean }> = (props) => {
   const [version, setVersion] = createSignal("");
   onMount(() => {
     getVersion()
@@ -146,7 +150,10 @@ const UpdateRow: Component = () => {
   };
 
   return (
-    <div class="settings__row">
+    <div
+      class="settings__row"
+      classList={{ "settings__row--attention": props.marked }}
+    >
       <div class="settings__text">
         <span class="settings__name">
           Prismoid {version() ? `v${displayVersion(version())}` : ""}
@@ -239,6 +246,22 @@ const Settings: Component<SettingsProps> = (props) => {
     if (tourStep() === null) props.onClose();
   };
 
+  const sectionMarked = (s: SettingsSection) =>
+    props.attentions.some((a) => a.section === s);
+  const rowMarked = (r: AttentionRow) =>
+    props.attentions.some((a) => a.row === r);
+
+  // The update's notes count as seen once the user has been to Updates and
+  // moved on, so the marker stays while they are looking at it.
+  createEffect(
+    on(
+      () => props.open && settingsSection() === "updates",
+      (onUpdates, wasOnUpdates) => {
+        if (wasOnUpdates && !onUpdates) markWhatsNewSeen();
+      },
+    ),
+  );
+
   const run = (p: Promise<void>) => {
     setError(null);
     p.catch((e: unknown) =>
@@ -292,9 +315,17 @@ const Settings: Component<SettingsProps> = (props) => {
                   "settings-page__tab--on": settingsSection() === s,
                 }}
                 aria-current={settingsSection() === s ? "page" : undefined}
+                aria-label={
+                  sectionMarked(s)
+                    ? `${SECTION_LABELS[s]}, needs attention`
+                    : undefined
+                }
                 onClick={() => setSettingsSection(s)}
               >
                 {SECTION_LABELS[s]}
+                <Show when={sectionMarked(s)}>
+                  <span class="settings-page__tab-dot" aria-hidden="true" />
+                </Show>
               </button>
             )}
           </For>
@@ -319,6 +350,7 @@ const Settings: Component<SettingsProps> = (props) => {
             </div>
             <Show when={missingScopes().length > 0}>
               <TwitchReconnect
+                marked={rowMarked("reconnect")}
                 title="Twitch needs new permissions"
                 hint="Features added since you signed in (moderation, your follow list) need extra access. Reconnect once to grant it."
               />
@@ -902,10 +934,13 @@ const Settings: Component<SettingsProps> = (props) => {
             <StartupRow run={run} />
           </Show>
           <Show when={settingsSection() === "updates"}>
-            <UpdateRow />
+            <UpdateRow marked={rowMarked("update")} />
           </Show>
           <Show when={settingsSection() === "help"}>
-            <div class="settings__row">
+            <div
+              class="settings__row"
+              classList={{ "settings__row--attention": rowMarked("setup") }}
+            >
               <div class="settings__text">
                 <span class="settings__name">Setup</span>
                 <span class="settings__hint">
