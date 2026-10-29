@@ -29,11 +29,7 @@ import {
   textSmaller,
 } from "../stores/settingsStore";
 import ChannelPicker from "./ChannelPicker";
-import {
-  openSettings,
-  settingsOpen,
-  setSettingsOpen,
-} from "../stores/settingsPanelStore";
+import { settingsOpen, setSettingsOpen } from "../stores/settingsPanelStore";
 import { closePicker, openPicker, pickerOpen } from "../stores/pickerStore";
 import { searchOpen, setSearchOpen } from "../stores/searchStore";
 import {
@@ -58,7 +54,6 @@ import WindowControls from "./WindowControls";
 import Mentions from "./Mentions";
 import AccountAvatar from "./AccountAvatar";
 import ChatSearch from "./ChatSearch";
-import GearIcon from "./GearIcon";
 import { installUpdate, updateState } from "../stores/updateStore";
 import { updatedTo, whatsNewUnseen } from "../stores/whatsNewStore";
 import Settings from "./Settings";
@@ -253,8 +248,8 @@ const Header: Component<HeaderProps> = (props) => {
       setupPending: !settings().setupDone && tourStep() === null,
     }),
   );
-  // The gear's dot speaks for the most urgent one, and clicking it lands on
-  // the section that deals with it.
+  // The avatar's dot speaks for the most urgent one, and Settings from its
+  // panel lands on the section that deals with it.
   const attention = () => attentions()[0] ?? null;
 
   return (
@@ -450,7 +445,11 @@ const Header: Component<HeaderProps> = (props) => {
           </svg>
         </button>
 
-        <AccountAvatar login={props.login} onSignOut={props.onSignOut} />
+        <AccountAvatar
+          login={props.login}
+          attention={attention()}
+          onSignOut={props.onSignOut}
+        />
 
         {/* Shows once an update has downloaded in the background, so the
             click is just the restart. */}
@@ -472,28 +471,6 @@ const Header: Component<HeaderProps> = (props) => {
             </button>
           )}
         </Show>
-
-        <button
-          type="button"
-          class="icon-btn"
-          aria-haspopup="dialog"
-          aria-expanded={settingsOpen()}
-          data-tour="settings"
-          title={attention() ? `Settings: ${attention()?.text}` : "Settings"}
-          onClick={(e) => {
-            animateIcon(
-              e,
-              [{ transform: "rotate(0)" }, { transform: "rotate(180deg)" }],
-              600,
-            );
-            openSettings(attention()?.section);
-          }}
-        >
-          <GearIcon />
-          <Show when={attention()}>
-            <span class="icon-btn__badge" aria-hidden="true" />
-          </Show>
-        </button>
 
         <WindowControls />
       </header>

@@ -11,15 +11,19 @@ import { ownBadges } from "../stores/ownIdentityStore";
 import { canModerate } from "../stores/roleStore";
 import { accountOpen, setAccountOpen } from "../stores/accountPanelStore";
 import AccountPanel from "./AccountPanel";
+import type { Attention } from "../lib/settingsAttention";
 import {
   ensureUserInfo,
   userInfo,
   userInfoRevision,
 } from "../stores/userInfoStore";
 
-const AccountAvatar: Component<{ login: string; onSignOut: () => void }> = (
-  props,
-) => {
+const AccountAvatar: Component<{
+  login: string;
+  /** Shown as a dot on the avatar; the panel leads to it. */
+  attention: Attention | null;
+  onSignOut: () => void;
+}> = (props) => {
   // The newest message the user sent here carries their exact badges and
   // color. When none is loaded, the badges remembered from their last
   // message in the channel stand in, then their role. With no channel open
@@ -87,8 +91,16 @@ const AccountAvatar: Component<{ login: string; onSignOut: () => void }> = (
             class="avatar"
             aria-haspopup="dialog"
             aria-expanded={accountOpen()}
-            title={`Chatting as ${s().display_name}`}
-            aria-label={`Your account, chatting as ${s().display_name}`}
+            title={
+              props.attention
+                ? `Chatting as ${s().display_name}. Settings: ${props.attention.text}`
+                : `Chatting as ${s().display_name}`
+            }
+            aria-label={
+              props.attention
+                ? `Your account, chatting as ${s().display_name}. Settings needs you`
+                : `Your account, chatting as ${s().display_name}`
+            }
             onClick={() => setAccountOpen(true)}
           >
             <Show
@@ -115,6 +127,9 @@ const AccountAvatar: Component<{ login: string; onSignOut: () => void }> = (
                 />
               )}
             </Show>
+            <Show when={props.attention}>
+              <span class="avatar__dot" aria-hidden="true" />
+            </Show>
           </button>
           <AccountPanel
             open={accountOpen()}
@@ -122,6 +137,7 @@ const AccountAvatar: Component<{ login: string; onSignOut: () => void }> = (
             displayName={s().display_name}
             picture={picture()}
             badges={s().badges}
+            attention={props.attention}
             onClose={() => setAccountOpen(false)}
             onSignOut={props.onSignOut}
           />

@@ -948,6 +948,31 @@ option::checkmark {
   font-size: 13px;
 }
 
+.account__settings {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.account__attention {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 16px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.account__attention-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-amber);
+}
+
 .palette__head {
   display: flex;
   align-items: center;
@@ -1922,6 +1947,18 @@ option::checkmark {
   padding: 0;
   border-radius: 50%;
   cursor: pointer;
+}
+
+.avatar__dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-amber);
+  box-shadow: 0 0 0 2px var(--bg);
+  animation: count-pop 0.28s ease-out;
 }
 
 /* A thin ring spins around the avatar while your card loads. */
