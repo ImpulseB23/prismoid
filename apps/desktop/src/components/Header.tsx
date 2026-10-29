@@ -326,6 +326,7 @@ const Header: Component<HeaderProps> = (props) => {
           class="icon-btn"
           classList={{ "icon-btn--active": streamManagerOpen() }}
           aria-label="Stream manager"
+          data-stream-manager-toggle
           aria-expanded={streamManagerOpen()}
           title="Stream manager"
           onClick={(e) => {
