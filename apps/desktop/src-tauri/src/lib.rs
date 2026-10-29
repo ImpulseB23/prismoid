@@ -15,12 +15,14 @@ mod sidecar_commands;
 mod sidecar_job;
 mod sidecar_supervisor;
 mod tray;
+pub mod twitch_ads;
 pub mod twitch_auth;
 pub mod twitch_channel;
 pub mod twitch_channel_info;
 pub mod twitch_chat_settings;
 pub mod twitch_irc;
 pub mod twitch_polls;
+pub mod twitch_quick_actions;
 mod uninstall;
 pub mod youtube_auth;
 
@@ -94,6 +96,8 @@ pub fn run() {
             twitch_auth::commands::twitch_complete_login,
             twitch_auth::commands::twitch_cancel_login,
             twitch_auth::commands::twitch_logout,
+            twitch_auth::commands::twitch_enable_scope_group,
+            twitch_auth::commands::twitch_disable_scope_group,
             youtube_auth::commands::youtube_auth_status,
             youtube_auth::commands::youtube_start_login,
             youtube_auth::commands::youtube_complete_login,
@@ -133,6 +137,7 @@ pub fn run() {
             twitch_channel_info::twitch_get_channel_info,
             twitch_channel_info::twitch_update_channel_info,
             twitch_channel_info::twitch_search_categories,
+            twitch_channel_info::twitch_get_content_labels,
             twitch_polls::twitch_get_poll,
             twitch_polls::twitch_create_poll,
             twitch_polls::twitch_end_poll,
@@ -141,6 +146,19 @@ pub fn run() {
             twitch_polls::twitch_lock_prediction,
             twitch_polls::twitch_resolve_prediction,
             twitch_polls::twitch_cancel_prediction,
+            twitch_quick_actions::twitch_create_marker,
+            twitch_quick_actions::twitch_create_clip,
+            twitch_quick_actions::twitch_get_clip,
+            twitch_quick_actions::twitch_send_shoutout,
+            twitch_quick_actions::twitch_send_announcement,
+            twitch_quick_actions::twitch_get_shield_mode,
+            twitch_quick_actions::twitch_set_shield_mode,
+            twitch_quick_actions::twitch_get_pinned_message,
+            twitch_quick_actions::twitch_pin_message,
+            twitch_quick_actions::twitch_unpin_message,
+            twitch_ads::twitch_get_ad_schedule,
+            twitch_ads::twitch_snooze_next_ad,
+            twitch_ads::twitch_start_commercial,
         ])
         .setup(setup)
         .run(tauri::generate_context!())
@@ -177,7 +195,7 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
         tray::show_main(app.handle());
     }
     use tokio::sync::Notify;
-    use twitch_auth::{AuthManager, AuthState, KeychainStore, TWITCH_CLIENT_ID};
+    use twitch_auth::{AuthManager, AuthState, KeychainStore, ScopeGroups, TWITCH_CLIENT_ID};
     use twitch_oauth2::Scope;
 
     let http_client = match reqwest::Client::builder()
@@ -194,6 +212,13 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
         }
     };
     app.manage(seventv_users::SevenTvUsers::new(http_client.clone()));
+    let scope_groups = match app.path().app_data_dir() {
+        Ok(dir) => ScopeGroups::open(&dir),
+        Err(err) => {
+            tracing::error!(error = %err, "no app data dir; scope groups last until exit");
+            ScopeGroups::default()
+        }
+    };
     let auth = Arc::new(
         AuthManager::builder(TWITCH_CLIENT_ID)
             .scope(Scope::UserReadChat)
@@ -221,6 +246,7 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
             .scope(Scope::ChannelManageBroadcast)
             .scope(Scope::ChannelManagePolls)
             .scope(Scope::ChannelManagePredictions)
+            .scope_groups(scope_groups)
             .build(KeychainStore, http_client),
     );
     let wakeup = Arc::new(Notify::new());

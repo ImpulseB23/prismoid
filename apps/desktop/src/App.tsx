@@ -16,6 +16,7 @@ import Header from "./components/Header";
 import MessageInput from "./components/MessageInput";
 import CommandCenter from "./components/CommandCenter";
 import StreamBar from "./components/StreamBar";
+import StreamManager from "./components/streamManager/StreamManager";
 import Tour from "./components/Tour";
 import PatchNotes from "./components/PatchNotes";
 import { offerTour } from "./stores/tourStore";
@@ -37,6 +38,9 @@ import {
 } from "./stores/channelStore";
 import { clearHeldMessages } from "./stores/automodStore";
 import { clearStreamManager } from "./stores/streamManagerStore";
+import { clearAds } from "./stores/adStore";
+import { clearStreamLog } from "./stores/streamLogStore";
+import { setStreamManagerOpen } from "./stores/streamManagerPanelStore";
 import { clearMessages } from "./stores/chatStore";
 import {
   isMentionFor,
@@ -121,6 +125,9 @@ const App: Component = () => {
     resetMentions();
     clearHeldMessages();
     clearStreamManager();
+    clearAds();
+    clearStreamLog();
+    setStreamManagerOpen(false);
     setAuthStatus({ state: "logged_out" });
   };
 
@@ -221,13 +228,16 @@ const ChatShell: Component<{ login: string; onSignOut: () => void }> = (
   return (
     <>
       <Header login={props.login} onSignOut={props.onSignOut} />
-      <ChannelTabs />
-      <StreamBar />
-      <div class="chat-area">
-        <ChatFeed login={props.login} />
-        <CommandCenter />
+      <div class="app__body">
+        <ChannelTabs />
+        <StreamBar />
+        <div class="chat-area">
+          <ChatFeed login={props.login} />
+          <CommandCenter />
+        </div>
+        <MessageInput login={props.login} />
+        <StreamManager />
       </div>
-      <MessageInput login={props.login} />
       <Tour />
       <PatchNotes />
     </>

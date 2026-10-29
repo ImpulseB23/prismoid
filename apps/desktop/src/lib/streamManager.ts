@@ -7,6 +7,8 @@ import { invoke } from "@tauri-apps/api/core";
 /** Twitch limits the host enforces, for counters and form bounds. */
 export const LIMITS = {
   titleChars: 140,
+  tags: 10,
+  tagChars: 25,
   pollTitleChars: 60,
   pollChoiceChars: 25,
   pollChoices: [2, 5],
@@ -24,18 +26,132 @@ export interface ChannelInfo {
   /** Empty when no category is set. */
   game_id: string;
   game_name: string;
+  /** ISO 639-1 code, or "other". */
+  broadcaster_language: string;
+  tags: string[];
+  /** Label ids in effect, the ones the category implies included. */
+  content_classification_labels: string[];
+  is_branded_content: boolean;
 }
 
-/** Send only what changes; an empty game_id clears the category. */
+export interface LabelSetting {
+  id: string;
+  is_enabled: boolean;
+}
+
+/**
+ * Send only what changes. An empty game_id clears the category, an empty
+ * tags list clears the tags, and labels left out keep their state.
+ */
 export interface ChannelInfoUpdate {
   title?: string;
   game_id?: string;
+  broadcaster_language?: string;
+  /** Letters and numbers only, see LIMITS for the counts. */
+  tags?: string[];
+  content_classification_labels?: LabelSetting[];
+  is_branded_content?: boolean;
 }
 
 export interface Category {
   id: string;
   name: string;
   box_art_url: string;
+}
+
+export interface ContentLabel {
+  id: string;
+  name: string;
+  description: string;
+}
+
+/**
+ * Stream language choices: every ISO 639-1 code (Library of Congress
+ * registry) plus "other". Twitch documents the codes but not which ones it
+ * supports, and skips an unsupported one, which the host reports as
+ * language_not_supported. Show names with Intl.DisplayNames.
+ */
+// spellchecker:off
+export const STREAM_LANGUAGES = (
+  "aa ab ae af ak am an ar as av ay az ba be bg bi bm bn bo br bs ca ce ch " +
+  "co cr cs cu cv cy da de dv dz ee el en eo es et eu fa ff fi fj fo fr fy " +
+  "ga gd gl gn gu gv ha he hi ho hr ht hu hy hz ia id ie ig ii ik io is it " +
+  "iu ja jv ka kg ki kj kk kl km kn ko kr ks ku kv kw ky la lb lg li ln lo " +
+  "lt lu lv mg mh mi mk ml mn mr ms mt my na nb nd ne ng nl nn no nr nv ny " +
+  "oc oj om or os pa pi pl ps pt qu rm rn ro ru rw sa sc sd se sg si sk sl " +
+  "sm sn so sq sr ss st su sv sw ta te tg th ti tk tl tn to tr ts tt tw ty " +
+  "ug uk ur uz ve vi vo wa wo xh yi yo za zh zu other"
+).split(" ");
+// spellchecker:on
+
+// The locales the Get Content Classification Labels reference lists. It
+// also lists "pt-BT", which matches no real locale, so Brazilian
+// Portuguese falls back to pt-PT.
+const LABEL_LOCALES = [
+  "bg-BG",
+  "cs-CZ",
+  "da-DK",
+  "de-DE",
+  "el-GR",
+  "en-GB",
+  "en-US",
+  "es-ES",
+  "es-MX",
+  "fi-FI",
+  "fr-FR",
+  "hu-HU",
+  "it-IT",
+  "ja-JP",
+  "ko-KR",
+  "nl-NL",
+  "no-NO",
+  "pl-PL",
+  "pt-PT",
+  "ro-RO",
+  "ru-RU",
+  "sk-SK",
+  "sv-SE",
+  "th-TH",
+  "tr-TR",
+  "vi-VN",
+  "zh-CN",
+  "zh-TW",
+];
+
+/**
+ * The label locale closest to the user's languages (navigator.languages):
+ * an exact match, else the first one sharing the language, else en-US.
+ */
+export function labelLocale(preferred: readonly string[]): string {
+  for (const tag of preferred) {
+    const exact = LABEL_LOCALES.find(
+      (l) => l.toLowerCase() === tag.toLowerCase(),
+    );
+    if (exact) return exact;
+    const lang = tag.split("-")[0].toLowerCase();
+    const same = LABEL_LOCALES.find((l) => l.startsWith(`${lang}-`));
+    if (same) return same;
+  }
+  return "en-US";
+}
+
+/**
+ * The label changes that turn `current` (ids from ChannelInfo) into
+ * `enabled`; null when nothing changes.
+ */
+export function labelChanges(
+  current: readonly string[],
+  enabled: readonly string[],
+): LabelSetting[] | null {
+  const changes = [
+    ...enabled
+      .filter((id) => !current.includes(id))
+      .map((id) => ({ id, is_enabled: true })),
+    ...current
+      .filter((id) => !enabled.includes(id))
+      .map((id) => ({ id, is_enabled: false })),
+  ];
+  return changes.length > 0 ? changes : null;
 }
 
 export interface PollChoice {
@@ -121,6 +237,11 @@ export function updateChannelInfo(
 /** Categories whose name contains every word of the query. */
 export function searchCategories(query: string): Promise<Category[]> {
   return invoke("twitch_search_categories", { query });
+}
+
+/** Every content label, named and described for `locale` (see labelLocale). */
+export function getContentLabels(locale: string): Promise<ContentLabel[]> {
+  return invoke("twitch_get_content_labels", { locale });
 }
 
 /** The latest poll, running or not; null if there never was one. */

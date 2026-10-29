@@ -67,7 +67,12 @@ export interface Settings {
   /** Chime and flash the taskbar when mentioned in the background. */
   mentionAlerts: boolean;
   theme: Theme;
+  /** Share of the space under the header the stream manager covers. */
+  streamManagerHeight: number;
 }
+
+/** Bounds for streamManagerHeight. */
+export const STREAM_MANAGER_HEIGHT = { min: 0.35, max: 0.85 } as const;
 
 export type Theme = "system" | "dark" | "midnight" | "light" | "prismoid";
 export const THEMES: Theme[] = [
@@ -117,6 +122,7 @@ export const DEFAULT_SETTINGS: Settings = {
   setupDone: false,
   mentionAlerts: true,
   theme: "dark",
+  streamManagerHeight: 0.58,
 };
 
 /** Same ladder browsers use between 75% and 200%. */
@@ -342,6 +348,12 @@ function readSettings(storage: StorageLike | null): Settings {
         typeof p.theme === "string" && THEMES.includes(p.theme as Theme)
           ? (p.theme as Theme)
           : DEFAULT_SETTINGS.theme,
+      streamManagerHeight:
+        typeof p.streamManagerHeight === "number" &&
+        p.streamManagerHeight >= STREAM_MANAGER_HEIGHT.min &&
+        p.streamManagerHeight <= STREAM_MANAGER_HEIGHT.max
+          ? p.streamManagerHeight
+          : DEFAULT_SETTINGS.streamManagerHeight,
     };
   } catch {
     return DEFAULT_SETTINGS;

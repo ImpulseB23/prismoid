@@ -4069,6 +4069,808 @@ option::checkmark {
   line-height: 1.4;
 }
 
+/* Everything under the header. The stream manager curtain hangs from its
+   top edge. */
+.app__body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* The frame sets the curtain's height and clips it while it slides, so it
+   never passes over the header. Chat under the frame stays clickable
+   wherever the curtain is not. */
+.sm-curtain-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 12;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.sm-curtain {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-bottom: 1px solid var(--border-strong);
+  background: var(--bg);
+  font-variant-numeric: tabular-nums;
+  pointer-events: auto;
+  animation: sm-curtain-down 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.sm-curtain--closing {
+  animation: sm-curtain-up 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes sm-curtain-down {
+  from {
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes sm-curtain-up {
+  to {
+    transform: translateY(-100%);
+  }
+}
+
+.sm-curtain__body {
+  flex: 1;
+  min-height: 0;
+  padding: 18px 16px 24px;
+  overflow-y: auto;
+}
+
+.sm-curtain__handle {
+  flex-shrink: 0;
+  position: relative;
+  height: 12px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.sm-curtain__handle::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: 40px;
+  height: 4px;
+  margin-left: -20px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background-color 0.15s;
+}
+
+.sm-curtain__handle:hover::after,
+.sm-curtain__handle:focus-visible::after {
+  background: var(--text-faint);
+}
+
+.sm-curtain__handle:focus-visible {
+  outline-offset: -2px;
+}
+
+.sm-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.sm-tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 10px;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  white-space: nowrap;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.sm-tabs__tab:hover {
+  color: var(--text);
+}
+
+.sm-tabs__tab--on {
+  border-bottom-color: var(--select);
+  color: var(--text);
+}
+
+.sm-tabs__icon {
+  display: inline-flex;
+}
+
+/* Stream manager: the now strip and timeline, sections and their parts. */
+/* Hidden on screen, read by screen readers. */
+.sm-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.sm-now {
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.sm-now__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px 28px;
+}
+
+.sm-now__ad {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.sm-now__error {
+  padding: 8px 0 0;
+  text-align: right;
+}
+
+.sm-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sm-stat--end {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.sm-stat__label {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.sm-stat__value {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.sm-stat__value--big {
+  font-size: 34px;
+  letter-spacing: -0.01em;
+}
+
+.sm-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sm-status__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.sm-status--live {
+  color: var(--color-red-light);
+}
+
+.sm-status--live .sm-status__dot {
+  background: var(--color-red);
+}
+
+/* The timeline rail. Everything on it is placed by a percentage the
+   component computes; labels shift left by their own position so the
+   first and last stay inside the rail. */
+.sm-rail {
+  margin-top: 18px;
+}
+
+.sm-rail__bar {
+  position: relative;
+  height: 34px;
+}
+
+.sm-rail__track,
+.sm-rail__elapsed {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.sm-rail__track {
+  right: 0;
+  background: var(--bg-surface);
+}
+
+.sm-rail__elapsed {
+  background: var(--prism);
+}
+
+.sm-rail__ad,
+.sm-rail__next {
+  position: absolute;
+  top: 8px;
+  min-width: 4px;
+  height: 18px;
+  border-radius: 4px;
+}
+
+.sm-rail__ad {
+  background: var(--color-amber);
+}
+
+.sm-rail__next {
+  border: 1px dashed var(--color-amber);
+}
+
+.sm-rail__tick,
+.sm-rail__now {
+  position: absolute;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--text);
+}
+
+.sm-rail__tick {
+  top: 6px;
+  height: 22px;
+}
+
+.sm-rail__now {
+  top: 2px;
+  height: 30px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+.sm-rail__labels {
+  position: relative;
+  height: 18px;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.sm-rail__label {
+  position: absolute;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sm-rail__label--now {
+  color: var(--text);
+}
+
+.sm-rail__label--ad {
+  color: var(--color-amber);
+}
+
+.sm-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-raised);
+}
+
+.sm-card__title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Stream manager sections: two columns that stack when the window is
+   narrow, form fields, chips, quick action tiles and live bars. */
+.sm-cols {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 28px;
+  max-width: 1080px;
+}
+
+.sm-col {
+  flex: 2 1 300px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.sm-col--main {
+  flex: 3 1 420px;
+}
+
+.sm-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.sm-heading h2 {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.sm-setup,
+.sm-quick {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.sm-hint {
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.sm-hint--error {
+  color: var(--color-red-light);
+}
+
+.sm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sm-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.sm-field--narrow {
+  flex: 1 1 180px;
+}
+
+.sm-field--wide {
+  flex: 2 1 260px;
+}
+
+.sm-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sm-label__aside {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+.sm-label__aside--full {
+  color: var(--color-red-light);
+}
+
+.sm-input {
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  outline: 0;
+}
+
+.sm-input:focus {
+  border-color: var(--border-strong);
+}
+
+.sm-input:focus-visible {
+  outline: 2px solid var(--select-text);
+  outline-offset: 2px;
+}
+
+.sm-input::placeholder {
+  color: var(--text-faint);
+}
+
+.sm-input--area {
+  line-height: 1.45;
+  resize: none;
+}
+
+.sm-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sm-inline .sm-input {
+  flex: 1 1 180px;
+}
+
+.sm-category,
+.sm-tags,
+.sm-labels {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.sm-category {
+  padding: 8px;
+  border-radius: 10px;
+}
+
+.sm-category__art {
+  flex-shrink: 0;
+  width: 39px;
+  height: 52px;
+  border-radius: 4px;
+  background: var(--bg-surface);
+  object-fit: cover;
+}
+
+.sm-category__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.sm-category__name--none {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+.sm-results {
+  display: flex;
+  flex-direction: column;
+  max-height: 240px;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+
+.sm-results > .sm-hint {
+  padding: 6px 8px;
+}
+
+.sm-results__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  text-align: left;
+}
+
+.sm-results__item:hover,
+.sm-results__item:focus-visible {
+  background: var(--hover);
+}
+
+.sm-results__item img {
+  flex-shrink: 0;
+  border-radius: 3px;
+  background: var(--hover);
+}
+
+.sm-tags {
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 10px;
+}
+
+.sm-tags:focus-within {
+  border-color: var(--border-strong);
+}
+
+.sm-tags__input {
+  flex: 1;
+  min-width: 120px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  outline: 0;
+}
+
+.sm-tags__input::placeholder {
+  color: var(--text-faint);
+}
+
+.sm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px 0 10px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  font-size: 13px;
+}
+
+.sm-chip__remove {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 50%;
+  color: var(--text-faint);
+}
+
+.sm-chip__remove:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.sm-labels {
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+}
+
+.sm-labels__list {
+  flex: 1;
+  min-width: 0;
+}
+
+.sm-link {
+  color: var(--select-text);
+  font-size: 13px;
+}
+
+.sm-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sm-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+
+.sm-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sm-check:hover {
+  background: var(--hover);
+}
+
+.sm-check input {
+  margin-top: 3px;
+  accent-color: var(--select);
+}
+
+.sm-check:has(input:disabled) {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.sm-check__text,
+.sm-toggle__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sm-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.sm-saved,
+.sm-note {
+  color: var(--select-text);
+  font-size: 13px;
+}
+
+.sm-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.sm-qa-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sm-qa {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 84px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  text-align: left;
+  font-size: 13px;
+  transition:
+    border-color 0.15s,
+    background-color 0.15s;
+}
+
+.sm-qa:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--bg-surface);
+}
+
+.sm-qa:disabled {
+  opacity: 0.55;
+}
+
+.sm-qa--on {
+  border-color: var(--select-border);
+  background: var(--select-tint);
+}
+
+.sm-qa strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sm-qa span {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.sm-qa-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sm-opt-in {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sm-opt-in__text {
+  flex: 1 1 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sm-opt-in .settings__reconnect {
+  flex: 1 1 100%;
+  padding: 0;
+  background: none;
+}
+
+.sm-running {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--select-border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-raised);
+}
+
+.sm-running__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sm-running__kind {
+  color: var(--select-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sm-running__title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.sm-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.sm-bar__text {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.sm-bar__track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.sm-bar__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--select);
+  transition: width 0.4s ease;
+}
+
+.sm-bar__fill--blue {
+  background: #387aff;
+}
+
+.sm-bar__fill--pink {
+  background: #f5009b;
+}
+
 .cc__item--danger .cc__title {
   color: var(--color-red-light);
 }

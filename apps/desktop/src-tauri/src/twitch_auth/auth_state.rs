@@ -13,6 +13,7 @@ use twitch_oauth2::Scope;
 use super::errors::AuthError;
 use super::implicit::{CallbackParams, PendingLogin};
 use super::manager::AuthManager;
+use super::scope_groups::ScopeGroup;
 use super::tokens::TwitchTokens;
 
 /// Shared auth state held in Tauri's managed-state map. The supervisor
@@ -65,6 +66,7 @@ impl AuthState {
                 login: None,
                 user_id: None,
                 missing_scopes: Vec::new(),
+                enabled_scope_groups: self.manager.enabled_scope_groups(),
             },
         })
     }
@@ -74,8 +76,16 @@ impl AuthState {
             state: AuthStatusState::LoggedIn,
             login: Some(tokens.login.clone()),
             user_id: Some(tokens.user_id.clone()),
-            missing_scopes: missing_scopes(self.manager.scopes(), &tokens.scopes),
+            missing_scopes: missing_scopes(&self.manager.scopes(), &tokens.scopes),
+            enabled_scope_groups: self.manager.enabled_scope_groups(),
         }
+    }
+
+    /// Turns the named group on or off. Takes effect at the next sign-in;
+    /// until then the returned status lists the scopes it still misses.
+    pub fn set_scope_group(&self, name: &str, on: bool) -> Result<AuthStatus, AuthCommandError> {
+        self.manager.set_scope_group(name.parse()?, on)?;
+        self.status()
     }
 
     pub async fn start_login(&self) -> Result<LoginView, AuthCommandError> {
@@ -134,6 +144,7 @@ impl AuthState {
 /// in the header bar when logged in. `missing_scopes` lists what the
 /// app now asks for that the stored grant lacks, so the UI can offer a
 /// reconnect instead of letting moderation fail with a 401.
+/// `enabled_scope_groups` names the optional sections the user turned on.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct AuthStatus {
     pub state: AuthStatusState,
@@ -142,6 +153,7 @@ pub struct AuthStatus {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_id: Option<String>,
     pub missing_scopes: Vec<String>,
+    pub enabled_scope_groups: Vec<ScopeGroup>,
 }
 
 /// Requested scopes absent from the granted set, in request order.
@@ -188,6 +200,8 @@ impl From<AuthError> for AuthCommandError {
             AuthError::OAuth(_) => "oauth",
             AuthError::Json(_) => "json",
             AuthError::Config(_) => "config",
+            AuthError::UnknownScopeGroup(_) => "unknown_scope_group",
+            AuthError::Io(_) => "io",
         };
         Self {
             kind,
@@ -285,6 +299,7 @@ mod tests {
             login: None,
             user_id: None,
             missing_scopes: Vec::new(),
+            enabled_scope_groups: Vec::new(),
         };
         let v: serde_json::Value = serde_json::to_value(&s).unwrap();
         assert_eq!(v["state"], "logged_out");
@@ -301,12 +316,70 @@ mod tests {
             login: Some("tester".into()),
             user_id: Some("12345".into()),
             missing_scopes: vec!["moderator:manage:banned_users".into()],
+            enabled_scope_groups: vec![ScopeGroup::Ads, ScopeGroup::LiveActions],
         };
         let v: serde_json::Value = serde_json::to_value(&s).unwrap();
         assert_eq!(v["state"], "logged_in");
         assert_eq!(v["login"], "tester");
         assert_eq!(v["user_id"], "12345");
         assert_eq!(v["missing_scopes"][0], "moderator:manage:banned_users");
+        assert_eq!(
+            v["enabled_scope_groups"],
+            serde_json::json!(["ads", "live_actions"])
+        );
+    }
+
+    #[test]
+    fn auth_command_error_maps_scope_group_errors() {
+        let mapped: AuthCommandError = AuthError::UnknownScopeGroup("nope".into()).into();
+        assert_eq!(mapped.kind, "unknown_scope_group");
+        assert!(mapped.message.contains("nope"));
+        let mapped: AuthCommandError =
+            AuthError::Io(std::io::Error::from(std::io::ErrorKind::PermissionDenied)).into();
+        assert_eq!(mapped.kind, "io");
+    }
+
+    #[tokio::test]
+    async fn enabled_group_scopes_count_as_missing_until_granted() {
+        let store = MemoryStore::default();
+        let mut tokens = fixture_tokens();
+        tokens.scopes.push("channel:read:ads".into());
+        store.save(&tokens).unwrap();
+        let manager = Arc::new(
+            AuthManagerBuilder::new("test_client_id")
+                .scope(Scope::UserReadChat)
+                .build(store, http_client()),
+        );
+        let state = AuthState::new(manager, Arc::new(Notify::new()));
+        assert!(state.status().unwrap().missing_scopes.is_empty());
+
+        let status = state.set_scope_group("ads", true).unwrap();
+        assert_eq!(status.enabled_scope_groups, [ScopeGroup::Ads]);
+        assert_eq!(
+            status.missing_scopes,
+            ["channel:manage:ads", "channel:edit:commercial"]
+        );
+
+        let status = state.set_scope_group("ads", false).unwrap();
+        assert!(status.enabled_scope_groups.is_empty());
+        assert!(status.missing_scopes.is_empty());
+    }
+
+    #[tokio::test]
+    async fn groups_show_while_logged_out() {
+        let state = build_state_with_store(MemoryStore::default());
+        let status = state.set_scope_group("live_actions", true).unwrap();
+        assert_eq!(status.state, AuthStatusState::LoggedOut);
+        assert_eq!(status.enabled_scope_groups, [ScopeGroup::LiveActions]);
+        assert!(status.missing_scopes.is_empty());
+    }
+
+    #[tokio::test]
+    async fn unknown_group_is_rejected_without_changes() {
+        let state = build_state_with_store(MemoryStore::default());
+        let err = state.set_scope_group("channel_points", true).unwrap_err();
+        assert_eq!(err.kind, "unknown_scope_group");
+        assert!(state.status().unwrap().enabled_scope_groups.is_empty());
     }
 
     #[test]

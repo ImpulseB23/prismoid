@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::emote_index::EmoteSpan;
+use crate::twitch_ads::{ad_break_from_event, AdBreak};
 use crate::twitch_polls::{poll_from_event, prediction_from_event, Poll, Prediction};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -278,6 +279,9 @@ pub enum ChatEvent {
     /// A prediction on the user's own channel began, got predictions, was
     /// locked or ended, from `channel.prediction.*` v1.
     PredictionUpdate(Box<Prediction>),
+    /// An ad break began on the user's own channel, from
+    /// `channel.ad_break.begin` v1.
+    AdBreak(Box<AdBreak>),
 }
 
 /// A message AutoMod is holding. `reason` is `automod`, `blocked_term` or
@@ -745,6 +749,9 @@ pub fn parse_twitch_envelope(bytes: &[u8]) -> Result<Option<TwitchItem>, ParseEr
         | "channel.prediction.lock"
         | "channel.prediction.end") => TwitchItem::Event(ChatEvent::PredictionUpdate(Box::new(
             prediction_from_event(t, event_value)?,
+        ))),
+        "channel.ad_break.begin" => TwitchItem::Event(ChatEvent::AdBreak(Box::new(
+            ad_break_from_event(event_value)?,
         ))),
         _ => return Ok(None),
     };
@@ -2108,5 +2115,24 @@ mod tests {
             assert_eq!(json["kind"], "prediction_update");
             assert_eq!(json["outcomes"][0]["color"], "blue");
         }
+    }
+
+    #[test]
+    fn ad_break_notification_becomes_an_ad_break() {
+        let e = broadcaster_feed(
+            "channel.ad_break.begin",
+            r#""duration_seconds": 60, "is_automatic": true,
+               "requester_user_id": "1337", "requester_user_login": "cool_user", "requester_user_name": "Cool_User""#,
+        );
+        let ChatEvent::AdBreak(ad) = &e else {
+            panic!("expected an ad break, got {e:?}");
+        };
+        assert!(ad.is_automatic);
+        let json = serde_json::to_value(&e).unwrap();
+        assert_eq!(json["kind"], "ad_break");
+        assert_eq!(json["channel_id"], "1337");
+        assert_eq!(json["duration_seconds"], 60);
+        assert_eq!(json["started_at"], 1_594_833_363_171_i64);
+        assert_eq!(json["requester_login"], "cool_user");
     }
 }

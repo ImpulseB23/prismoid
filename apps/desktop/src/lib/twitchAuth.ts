@@ -6,6 +6,9 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 
 export type AuthStatusState = "logged_out" | "logged_in";
 
+/** Optional stream manager sections whose scopes are asked for only once on. */
+export type ScopeGroup = "ads" | "live_actions";
+
 // Discriminated union: when state is logged_in, login is guaranteed by
 // the backend (twitch_auth::commands::twitch_auth_status). Modeling it
 // this way prevents the UI from silently rendering an empty username if
@@ -18,6 +21,7 @@ export type AuthStatus =
       user_id: string;
       /** Scopes the app asks for that the stored grant lacks. */
       missing_scopes: string[];
+      enabled_scope_groups: ScopeGroup[];
     };
 
 export interface LoginView {
@@ -36,6 +40,8 @@ export interface AuthCommandError {
     | "oauth"
     | "json"
     | "config"
+    | "unknown_scope_group"
+    | "io"
     | "no_pending_flow";
   message: string;
 }
@@ -58,6 +64,15 @@ export function cancelLogin(): Promise<void> {
 
 export function logout(): Promise<void> {
   return invoke("twitch_logout");
+}
+
+/** Asks for the group's scopes at the next sign-in; every window hears it. */
+export function enableScopeGroup(group: ScopeGroup): Promise<AuthStatus> {
+  return invoke("twitch_enable_scope_group", { group });
+}
+
+export function disableScopeGroup(group: ScopeGroup): Promise<AuthStatus> {
+  return invoke("twitch_disable_scope_group", { group });
 }
 
 const ALLOWED_HOSTS = ["www.twitch.tv", "id.twitch.tv"];

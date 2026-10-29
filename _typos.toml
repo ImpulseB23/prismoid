@@ -9,5 +9,12 @@ extend-exclude = [
   "apps/desktop/src-tauri/target/",
 ]
 
+[default]
+# Two-letter language codes and similar data lists sit between
+# `// spellchecker:off` and `// spellchecker:on`.
+extend-ignore-re = [
+  "(?s)(#|//)\\s*spellchecker:off.*?\\n\\s*(#|//)\\s*spellchecker:on",
+]
+
 [default.extend-words]
 ot = "ot"

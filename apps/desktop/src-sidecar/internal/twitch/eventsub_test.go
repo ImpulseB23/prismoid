@@ -556,15 +556,16 @@ func TestSession_wsURL(t *testing.T) {
 }
 
 // grantHelix accepts chat subscriptions and refuses channel.moderate until
-// granted is set, the automod ones until automod is set and the poll ones
-// until polls is set, the way Twitch answers a token missing those
-// scopes. block, when set, holds the first channel.moderate request until
-// it is closed.
+// granted is set, the automod ones until automod is set, the poll ones
+// until polls is set and the ad break one until ads is set, the way Twitch
+// answers a token missing those scopes. block, when set, holds the first
+// channel.moderate request until it is closed.
 type grantHelix struct {
 	helixRecorder
 	granted atomic.Bool
 	automod atomic.Bool
 	polls   atomic.Bool
+	ads     atomic.Bool
 	block   chan struct{}
 	blocked atomic.Bool
 	tries   atomic.Int32
@@ -587,6 +588,8 @@ func (g *grantHelix) handler(w http.ResponseWriter, r *http.Request) {
 			refused = !g.automod.Load()
 		case strings.HasPrefix(req.Type, "channel.poll."):
 			refused = !g.polls.Load()
+		case req.Type == "channel.ad_break.begin":
+			refused = !g.ads.Load()
 		}
 		if refused {
 			w.WriteHeader(http.StatusForbidden)
@@ -682,21 +685,22 @@ func TestSessionResubscribeAddsAutoModWhenTheGrantGainsIt(t *testing.T) {
 	waitFor(t, "every subscription deleted", func() bool { return len(g.deleted()) == 8 })
 }
 
-func TestSessionSubscribesPollsAndPredictionsOnlyOnTheOwnChannel(t *testing.T) {
+func TestSessionSubscribesBroadcasterFeedsOnlyOnTheOwnChannel(t *testing.T) {
 	helix, rec := acceptingHelix(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	s := newTestSession(ctx, idleSocket(t, "sess-own"), helix.URL, make(chan []byte, 16), nil)
 	s.Join("a", nil)
 	s.Join("user-1", nil)
-	// eight per channel, plus three poll and four prediction feeds at home
-	waitFor(t, "both channels subscribed", func() bool { return rec.postCount() == 23 })
+	// eight per channel, plus three poll, four prediction and one ad break
+	// feed at home
+	waitFor(t, "both channels subscribed", func() bool { return rec.postCount() == 24 })
 	time.Sleep(100 * time.Millisecond)
 
 	rec.mu.Lock()
 	feeds := map[string]SubscriptionRequest{}
 	for _, p := range rec.posts {
-		if strings.HasPrefix(p.Type, "channel.poll.") || strings.HasPrefix(p.Type, "channel.prediction.") {
+		if strings.HasPrefix(p.Type, "channel.poll.") || strings.HasPrefix(p.Type, "channel.prediction.") || p.Type == "channel.ad_break.begin" {
 			feeds[p.Type] = p
 		}
 	}
@@ -712,25 +716,26 @@ func TestSessionSubscribesPollsAndPredictionsOnlyOnTheOwnChannel(t *testing.T) {
 			}
 		}
 	}
-	if len(feeds) != 7 {
-		t.Fatalf("expected seven broadcaster feeds, got %d", len(feeds))
+	if len(feeds) != 8 {
+		t.Fatalf("expected eight broadcaster feeds, got %d", len(feeds))
 	}
 
 	s.Leave("user-1")
-	waitFor(t, "every feed of the own channel deleted", func() bool { return len(rec.deleted()) == 15 })
+	waitFor(t, "every feed of the own channel deleted", func() bool { return len(rec.deleted()) == 16 })
 }
 
 func TestSessionResubscribeAddsPollsWhenTheGrantGainsThem(t *testing.T) {
 	helix, g := grantingHelix(t, nil)
 	g.granted.Store(true)
 	g.automod.Store(true)
+	g.ads.Store(true)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var notified atomic.Int32
 	s := newTestSession(ctx, idleSocket(t, "sess-polls"), helix.URL, make(chan []byte, 16), func(string, any) { notified.Add(1) })
 	s.Join("user-1", nil)
 	// the refused poll.begin is not recorded, so predictions still land
-	waitFor(t, "predictions subscribed, polls refused", func() bool { return g.postCount() == 12 })
+	waitFor(t, "predictions subscribed, polls refused", func() bool { return g.postCount() == 13 })
 	time.Sleep(100 * time.Millisecond)
 	if g.typeCount("channel.poll.progress") != 0 || g.typeCount("channel.poll.end") != 0 {
 		t.Fatal("the poll group must stop at its first refusal")
@@ -744,9 +749,41 @@ func TestSessionResubscribeAddsPollsWhenTheGrantGainsThem(t *testing.T) {
 	s.Resubscribe()
 	waitFor(t, "polls added", func() bool { return g.typeCount("channel.poll.end") == 1 })
 	time.Sleep(100 * time.Millisecond)
-	if g.postCount() != 15 || g.typeCount("channel.prediction.begin") != 1 {
+	if g.postCount() != 16 || g.typeCount("channel.prediction.begin") != 1 {
 		t.Fatalf("only the poll feeds should be new, got %d subscriptions", g.postCount())
 	}
+}
+
+func TestSessionResubscribeAddsAdBreaksWhenTheGrantGainsThem(t *testing.T) {
+	helix, g := grantingHelix(t, nil)
+	g.granted.Store(true)
+	g.automod.Store(true)
+	g.polls.Store(true)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var notified atomic.Int32
+	s := newTestSession(ctx, idleSocket(t, "sess-ads"), helix.URL, make(chan []byte, 16), func(string, any) { notified.Add(1) })
+	s.Join("user-1", nil)
+	waitFor(t, "polls and predictions subscribed, ad breaks refused", func() bool { return g.postCount() == 15 })
+	time.Sleep(100 * time.Millisecond)
+	if g.typeCount("channel.ad_break.begin") != 0 {
+		t.Fatal("the ad break feed must wait for channel:read:ads")
+	}
+	if notified.Load() != 0 || len(s.Joined()) != 1 {
+		t.Fatalf("a missing ads scope must stay quiet, got %d notifications", notified.Load())
+	}
+
+	g.ads.Store(true)
+	s.SetAccessToken("with-ads")
+	s.Resubscribe()
+	waitFor(t, "ad breaks added", func() bool { return g.typeCount("channel.ad_break.begin") == 1 })
+	time.Sleep(100 * time.Millisecond)
+	if g.postCount() != 16 {
+		t.Fatalf("only the ad break feed should be new, got %d subscriptions", g.postCount())
+	}
+
+	s.Leave("user-1")
+	waitFor(t, "every subscription deleted", func() bool { return len(g.deleted()) == 16 })
 }
 
 func TestSessionResubscribeWhileSubscribingRunsAgain(t *testing.T) {

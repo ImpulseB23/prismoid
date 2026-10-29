@@ -10,7 +10,7 @@
 //! The user_id and login land on the returned `TwitchTokens`, sourced from
 //! Twitch's token validation.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use chrono::Utc;
@@ -25,6 +25,7 @@ use twitch_oauth2::{RequestParseError, Scope, TwitchToken};
 
 use super::errors::{error_chain, AuthError};
 use super::implicit::{CallbackParams, PendingLogin};
+use super::scope_groups::{requested_scopes, ScopeGroup, ScopeGroups};
 use super::storage::TokenStore;
 use super::tokens::TwitchTokens;
 
@@ -38,6 +39,7 @@ pub const REFRESH_THRESHOLD_MS: i64 = 5 * 60 * 1000;
 pub struct AuthManagerBuilder {
     client_id: String,
     scopes: Vec<Scope>,
+    groups: ScopeGroups,
 }
 
 impl AuthManagerBuilder {
@@ -45,6 +47,7 @@ impl AuthManagerBuilder {
         Self {
             client_id: client_id.into(),
             scopes: Vec::new(),
+            groups: ScopeGroups::default(),
         }
     }
 
@@ -57,6 +60,14 @@ impl AuthManagerBuilder {
         self
     }
 
+    /// Optional groups whose scopes are requested on top of the base list
+    /// while the user has them on.
+    #[must_use]
+    pub fn scope_groups(mut self, groups: ScopeGroups) -> Self {
+        self.groups = groups;
+        self
+    }
+
     pub fn build<S: TokenStore + 'static>(
         self,
         store: S,
@@ -65,6 +76,7 @@ impl AuthManagerBuilder {
         AuthManager {
             client_id: ClientId::new(self.client_id),
             scopes: self.scopes,
+            groups: Mutex::new(self.groups),
             http_client,
             store: Arc::new(store),
         }
@@ -76,6 +88,7 @@ impl AuthManagerBuilder {
 pub struct AuthManager {
     client_id: ClientId,
     scopes: Vec<Scope>,
+    groups: Mutex<ScopeGroups>,
     http_client: reqwest::Client,
     store: Arc<dyn TokenStore>,
 }
@@ -125,17 +138,34 @@ impl AuthManager {
         handle_refresh_result(self.refresh_tokens(&stored).await, self.store.as_ref())
     }
 
-    /// Scopes the sign-in asks for. Stored tokens granted before a scope
-    /// was added lack it until the user signs in again.
+    /// Scopes the sign-in asks for: the base list plus every enabled
+    /// group. Stored tokens granted before a scope was added lack it until
+    /// the user signs in again.
     #[must_use]
-    pub fn scopes(&self) -> &[Scope] {
-        &self.scopes
+    pub fn scopes(&self) -> Vec<Scope> {
+        requested_scopes(&self.scopes, self.lock_groups().enabled())
+    }
+
+    #[must_use]
+    pub fn enabled_scope_groups(&self) -> Vec<ScopeGroup> {
+        self.lock_groups().enabled().iter().copied().collect()
+    }
+
+    /// Turns a group on or off for the next sign-in and saves the choice.
+    pub fn set_scope_group(&self, group: ScopeGroup, on: bool) -> Result<(), AuthError> {
+        self.lock_groups().set(group, on)
+    }
+
+    fn lock_groups(&self) -> MutexGuard<'_, ScopeGroups> {
+        // set() only commits after a successful save, so the value behind
+        // a poisoned lock is still consistent.
+        self.groups.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// Returns the login to wait on and the Twitch authorize URL the
     /// browser should open.
     pub fn start_login(&self) -> (PendingLogin, Url) {
-        PendingLogin::start(self.client_id.clone(), self.scopes.clone())
+        PendingLogin::start(self.client_id.clone(), self.scopes())
     }
 
     pub async fn complete_login(
@@ -523,6 +553,32 @@ mod tests {
             store.load().unwrap().is_some(),
             "transient errors must not evict tokens — refresh might succeed next tick"
         );
+    }
+
+    #[test]
+    fn login_asks_for_enabled_groups_on_top_of_the_base_list() {
+        let mgr = AuthManager::builder("test-client-id")
+            .scope(Scope::UserReadChat)
+            .build(MemoryStore::default(), test_http_client());
+        let requested = |mgr: &AuthManager| {
+            let (_, url) = mgr.start_login();
+            url.query_pairs()
+                .find(|(k, _)| k == "scope")
+                .map(|(_, v)| v.into_owned())
+                .unwrap()
+        };
+        assert_eq!(requested(&mgr), "user:read:chat");
+
+        mgr.set_scope_group(ScopeGroup::Ads, true).unwrap();
+        assert_eq!(mgr.enabled_scope_groups(), [ScopeGroup::Ads]);
+        assert_eq!(
+            requested(&mgr),
+            "user:read:chat channel:read:ads channel:manage:ads channel:edit:commercial"
+        );
+
+        mgr.set_scope_group(ScopeGroup::Ads, false).unwrap();
+        assert!(mgr.enabled_scope_groups().is_empty());
+        assert_eq!(mgr.scopes(), [Scope::UserReadChat]);
     }
 
     #[tokio::test]

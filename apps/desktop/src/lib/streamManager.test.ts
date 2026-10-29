@@ -12,10 +12,14 @@ import {
   createPrediction,
   endPoll,
   getChannelInfo,
+  getContentLabels,
   getPoll,
   getPrediction,
+  labelChanges,
+  labelLocale,
   lockPrediction,
   resolvePrediction,
+  STREAM_LANGUAGES,
   searchCategories,
   updateChannelInfo,
 } from "./streamManager";
@@ -30,6 +34,7 @@ describe("stream manager commands", () => {
     await getChannelInfo();
     await updateChannelInfo({ game_id: "" });
     await searchCategories("fort");
+    await getContentLabels("de-DE");
     await getPoll();
     await createPoll({
       title: "Heads or Tails?",
@@ -52,6 +57,7 @@ describe("stream manager commands", () => {
       ["twitch_get_channel_info"],
       ["twitch_update_channel_info", { update: { game_id: "" } }],
       ["twitch_search_categories", { query: "fort" }],
+      ["twitch_get_content_labels", { locale: "de-DE" }],
       ["twitch_get_poll"],
       [
         "twitch_create_poll",
@@ -83,5 +89,47 @@ describe("stream manager commands", () => {
       ],
       ["twitch_cancel_prediction", { predictionId: "d1" }],
     ]);
+  });
+});
+
+describe("labelLocale", () => {
+  it("prefers an exact match, then the same language", () => {
+    expect(labelLocale(["de-DE"])).toBe("de-DE");
+    expect(labelLocale(["en-gb"])).toBe("en-GB");
+    expect(labelLocale(["de-AT", "en-US"])).toBe("de-DE");
+    expect(labelLocale(["pt-BR"])).toBe("pt-PT");
+    expect(labelLocale(["ja"])).toBe("ja-JP");
+  });
+
+  it("falls back to en-US", () => {
+    expect(labelLocale(["ar-EG"])).toBe("en-US");
+    expect(labelLocale([])).toBe("en-US");
+  });
+});
+
+describe("labelChanges", () => {
+  it("enables new labels and disables dropped ones", () => {
+    expect(
+      labelChanges(["Gambling", "MatureGame"], ["MatureGame", "SexualThemes"]),
+    ).toEqual([
+      { id: "SexualThemes", is_enabled: true },
+      { id: "Gambling", is_enabled: false },
+    ]);
+  });
+
+  it("is null when nothing changes", () => {
+    expect(labelChanges(["Gambling"], ["Gambling"])).toBeNull();
+    expect(labelChanges([], [])).toBeNull();
+  });
+});
+
+describe("STREAM_LANGUAGES", () => {
+  it("is every ISO 639-1 code plus other", () => {
+    expect(STREAM_LANGUAGES).toHaveLength(184);
+    expect(new Set(STREAM_LANGUAGES).size).toBe(184);
+    expect(STREAM_LANGUAGES.at(-1)).toBe("other");
+    expect(
+      STREAM_LANGUAGES.slice(0, -1).every((c) => /^[a-z]{2}$/.test(c)),
+    ).toBe(true);
   });
 });

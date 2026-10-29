@@ -1,6 +1,7 @@
 // Channel selection client. Mirrors apps/desktop/src-tauri/src/twitch_channel.rs.
 
 import { invoke } from "@tauri-apps/api/core";
+import type { ChannelInfo } from "./streamManager";
 
 export interface Channel {
   id: string;
@@ -16,7 +17,20 @@ export type ChannelError =
   | { kind: "auth"; message: string }
   | { kind: "http"; message: string }
   | { kind: "helix"; status: number; message: string }
-  | { kind: "invalid_setting"; message: string };
+  | { kind: "invalid_setting"; message: string }
+  | { kind: "not_live"; message: string }
+  | { kind: "marker_unavailable"; message: string }
+  | { kind: "shoutout_cooldown"; message: string }
+  | { kind: "shoutout_needs_viewers"; message: string }
+  | { kind: "already_pinned"; message: string }
+  | { kind: "labels_not_allowed"; message: string }
+  | { kind: "branded_content_cooldown"; message: string }
+  /** The rest of the update applied; `channel` is the result. */
+  | { kind: "language_not_supported"; language: string; channel: ChannelInfo }
+  | { kind: "no_snoozes_left"; message: string }
+  | { kind: "no_ad_to_snooze"; message: string }
+  /** retry_at: Unix ms when the next commercial may run, if known. */
+  | { kind: "commercial_cooldown"; message: string; retry_at: number | null };
 
 /** Opens a channel as a tab and shows it. */
 export function joinChannel(login: string): Promise<Channel> {
@@ -70,6 +84,32 @@ export function formatChannelError(e: unknown): string {
     case "auth":
     case "invalid_setting":
       return e.message;
+    case "not_live":
+      return "You need to be live for that.";
+    case "marker_unavailable":
+      return "Markers need a live stream with VODs on, and not a rerun.";
+    case "shoutout_cooldown":
+      return "Shoutouts are on cooldown: one every 2 minutes, and the same channel once an hour.";
+    case "shoutout_needs_viewers":
+      return "Shoutouts need you live with at least one viewer.";
+    case "already_pinned":
+      return "That message is already pinned.";
+    case "labels_not_allowed":
+      return "Twitch would not set those labels. Game labels come from the category, and some are not allowed for your age and region.";
+    case "branded_content_cooldown":
+      return "Branded content was switched too often. Wait a bit and try again.";
+    case "language_not_supported":
+      return "Twitch does not support that stream language. Everything else was saved; pick another language or Other.";
+    case "no_snoozes_left":
+      return "No snoozes left. Twitch gives you another one later.";
+    case "no_ad_to_snooze":
+      return "There is no ad to snooze. Snoozing needs a live stream with an ad coming up.";
+    case "commercial_cooldown": {
+      if (e.retry_at === null)
+        return "Twitch needs 8 minutes between ads. Try again later.";
+      const mins = Math.max(1, Math.ceil((e.retry_at - Date.now()) / 60_000));
+      return `Twitch needs 8 minutes between ads. Try again in ${mins} min.`;
+    }
   }
 }
 

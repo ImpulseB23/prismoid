@@ -22,7 +22,7 @@ use tokio::sync::watch;
 
 use crate::chat_history::History;
 use crate::twitch_auth::{AuthError, AuthState, TWITCH_CLIENT_ID};
-use crate::twitch_channel_info::fetch_channel_info;
+use crate::twitch_channel_info::{fetch_channel_info, ChannelInfo};
 
 pub const HELIX_BASE: &str = "https://api.twitch.tv/helix";
 
@@ -187,9 +187,60 @@ pub enum ChannelError {
         message: String,
     },
     /// A value outside what Twitch accepts: a chat setting, a stream
-    /// title, a poll or a prediction.
+    /// title, a poll, a prediction or a commercial length.
     InvalidSetting {
         message: String,
+    },
+    /// Clips need the channel to be live.
+    NotLive {
+        message: String,
+    },
+    /// Markers need a live stream with VODs on that is not a rerun.
+    MarkerUnavailable {
+        message: String,
+    },
+    /// Shoutouts are limited to one every 2 minutes and one per target
+    /// every 60 minutes.
+    ShoutoutCooldown {
+        message: String,
+    },
+    /// Shoutouts need the channel to be live with at least one viewer.
+    ShoutoutNeedsViewers {
+        message: String,
+    },
+    AlreadyPinned {
+        message: String,
+    },
+    /// Twitch refused the content labels (403): the category sets gaming
+    /// labels itself, and some are not allowed for an underage user in a
+    /// restricted country.
+    LabelsNotAllowed {
+        message: String,
+    },
+    /// Branded content was switched too often (409).
+    BrandedContentCooldown {
+        message: String,
+    },
+    /// Twitch skips a language it does not support without an error; the
+    /// rest of the update still applied and `channel` is the result.
+    LanguageNotSupported {
+        language: String,
+        channel: Box<ChannelInfo>,
+    },
+    /// Snooze Next Ad answered 429: every snooze is used up.
+    NoSnoozesLeft {
+        message: String,
+    },
+    /// Snooze Next Ad answered 400: the channel is offline or has no ad
+    /// scheduled.
+    NoAdToSnooze {
+        message: String,
+    },
+    /// Start Commercial answered 429: the last ad is too recent.
+    /// `retry_at` (Unix ms) is when the next one is allowed, if known.
+    CommercialCooldown {
+        message: String,
+        retry_at: Option<i64>,
     },
 }
 
@@ -843,14 +894,35 @@ pub(crate) async fn helix_write<B: Serialize + ?Sized>(
     access_token: &str,
     body: &B,
 ) -> Result<reqwest::Response, ChannelError> {
-    let resp = http
-        .request(method, url)
+    helix_checked(helix_request(http, method, url, query, access_token).json(body)).await
+}
+
+/// [`helix_write`] for endpoints that take only query parameters.
+pub(crate) async fn helix_send(
+    http: &reqwest::Client,
+    method: reqwest::Method,
+    url: String,
+    query: &[(&str, &str)],
+    access_token: &str,
+) -> Result<reqwest::Response, ChannelError> {
+    helix_checked(helix_request(http, method, url, query, access_token)).await
+}
+
+fn helix_request(
+    http: &reqwest::Client,
+    method: reqwest::Method,
+    url: String,
+    query: &[(&str, &str)],
+    access_token: &str,
+) -> reqwest::RequestBuilder {
+    http.request(method, url)
         .query(query)
         .header("Client-Id", TWITCH_CLIENT_ID)
         .bearer_auth(access_token)
-        .json(body)
-        .send()
-        .await?;
+}
+
+async fn helix_checked(req: reqwest::RequestBuilder) -> Result<reqwest::Response, ChannelError> {
+    let resp = req.send().await?;
     let status = resp.status();
     if !status.is_success() {
         let message = resp.text().await.unwrap_or_default();

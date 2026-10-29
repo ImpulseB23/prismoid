@@ -1,6 +1,7 @@
 // Moderation events from the Rust host (`chat_events`). Mirrors
 // `message::ChatEvent` in src-tauri.
 
+import type { AdBreak } from "./ads";
 import type { Poll, Prediction } from "./streamManager";
 
 export interface ModAction {
@@ -73,10 +74,14 @@ export type PollUpdate = Poll & { kind: "poll_update" };
 /** A prediction on the user's own channel changed. */
 export type PredictionUpdate = Prediction & { kind: "prediction_update" };
 
+/** An ad break began on the user's own channel. */
+export type AdBreakEvent = AdBreak & { kind: "ad_break" };
+
 export type ChatEvent =
   | PublicModerationEvent
   | ModAction
   | HeldMessage
   | HeldMessageResolved
   | PollUpdate
-  | PredictionUpdate;
+  | PredictionUpdate
+  | AdBreakEvent;
