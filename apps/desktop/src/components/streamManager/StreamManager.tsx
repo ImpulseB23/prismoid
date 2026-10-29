@@ -11,11 +11,7 @@ import {
   on,
   onCleanup,
 } from "solid-js";
-import {
-  currentUserId,
-  scopeGroupReady,
-  streamManagerNeedsReconnect,
-} from "../../stores/authStore";
+import { currentUserId, scopeGroupReady } from "../../stores/authStore";
 import { currentAdBreak, trackAdSchedule } from "../../stores/adStore";
 import {
   clearStreamManager,
@@ -58,8 +54,7 @@ const StreamManager: Component = () => {
   // drops the old account's data on a switch.
   createEffect(
     on(
-      () =>
-        opened() && !streamManagerNeedsReconnect() ? currentUserId() : null,
+      () => (opened() && scopeGroupReady("stream") ? currentUserId() : null),
       (owner) => {
         if (owner === null) return;
         clearStreamManager();
