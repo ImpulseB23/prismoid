@@ -63,6 +63,8 @@ vi.mock("../lib/messageLayout", async (importOriginal) => ({
 
 const { clearMessages } = await import("../stores/chatStore");
 const { invoke } = await import("@tauri-apps/api/core");
+const { setAuthStatus } = await import("../stores/authStore");
+const { ownBadges } = await import("../stores/ownBadgeStore");
 const { closeContextMenu, contextMenu } =
   await import("../stores/contextMenuStore");
 const { closeModPopover, modPopover } =
@@ -180,6 +182,24 @@ describe("ChatFeed", () => {
     expect(modPopover()).toMatchObject({ kind: "timeout", x: 40, y: 50 });
     pick("Warn…");
     expect(modPopover()).toMatchObject({ kind: "warn", x: 40, y: 50 });
+  });
+
+  it("remembers the user's own badges from live chat", async () => {
+    setAuthStatus({
+      state: "logged_in",
+      login: "viewer",
+      user_id: "7",
+      missing_scopes: [],
+      enabled_scope_groups: [],
+    });
+    render(() => <ChatFeed login="viewer" />);
+    await tick();
+    emit("chat_messages", [
+      { ...msg("mine"), badges: [{ set_id: "subscriber", id: "6" }] },
+    ]);
+    await tick();
+    expect(ownBadges("chan")).toEqual([{ set_id: "subscriber", id: "6" }]);
+    setAuthStatus(null);
   });
 
   it("hides the mod buttons from viewers", async () => {
