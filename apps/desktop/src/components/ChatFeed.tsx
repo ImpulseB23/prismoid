@@ -199,6 +199,8 @@ function findByMono(
 export interface ChatFeedProps {
   /** Login of the signed-in user, for mention highlighting. */
   login: string;
+  /** Offered on the user's own card. */
+  onSignOut: () => void;
 }
 
 const ChatFeed: Component<ChatFeedProps> = (props) => {
@@ -1373,7 +1375,12 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
         )}
       </Show>
 
-      <UserCard user={cardUser()} login={props.login} onClose={closeUserCard} />
+      <UserCard
+        user={cardUser()}
+        login={props.login}
+        onClose={closeUserCard}
+        onSignOut={props.onSignOut}
+      />
       <EmoteCard />
       <EmoteTooltip />
       <Thread />

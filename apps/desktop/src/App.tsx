@@ -238,7 +238,7 @@ const ChatShell: Component<{ login: string; onSignOut: () => void }> = (
         <ChannelTabs />
         <StreamBar />
         <div class="chat-area">
-          <ChatFeed login={props.login} />
+          <ChatFeed login={props.login} onSignOut={props.onSignOut} />
           <CommandCenter />
         </div>
         <MessageInput login={props.login} />

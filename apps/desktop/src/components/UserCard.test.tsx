@@ -42,6 +42,9 @@ vi.mock("../stores/paintStore", async (importOriginal) => ({
 
 const { default: UserCard } = await import("./UserCard");
 const { isUserHighlighted } = await import("../stores/settingsStore");
+const { setAuthStatus } = await import("../stores/authStore");
+const { settingsOpen, settingsSection } =
+  await import("../stores/settingsPanelStore");
 
 const viewer = {
   channel_id: "1",
@@ -60,6 +63,7 @@ describe("UserCard", () => {
       <UserCard
         login="me"
         onClose={() => {}}
+        onSignOut={() => {}}
         user={{
           channel_id: "1",
           platform_user_id: "42",
@@ -77,7 +81,14 @@ describe("UserCard", () => {
   });
 
   it("toggles highlighting everything they say", async () => {
-    render(() => <UserCard login="me" onClose={() => {}} user={viewer} />);
+    render(() => (
+      <UserCard
+        login="me"
+        onClose={() => {}}
+        onSignOut={() => {}}
+        user={viewer}
+      />
+    ));
     fireEvent.click(screen.getByRole("button", { name: "Highlight" }));
     await vi.waitFor(() => expect(isUserHighlighted("viewer")).toBe(true));
     fireEvent.click(screen.getByRole("button", { name: "Stop highlighting" }));
@@ -89,6 +100,7 @@ describe("UserCard", () => {
       <UserCard
         login="me"
         onClose={() => {}}
+        onSignOut={() => {}}
         user={{ ...viewer, platform_user_id: "7" }}
       />
     ));
@@ -97,8 +109,51 @@ describe("UserCard", () => {
   });
 
   it("leaves other names plain", () => {
-    render(() => <UserCard login="me" onClose={() => {}} user={viewer} />);
+    render(() => (
+      <UserCard
+        login="me"
+        onClose={() => {}}
+        onSignOut={() => {}}
+        user={viewer}
+      />
+    ));
     const name = screen.getByText("Viewer", { selector: ".user-card__name" });
     expect(name.classList.contains("name--painted")).toBe(false);
+  });
+});
+
+describe("UserCard on your own account", () => {
+  afterEach(() => {
+    cleanup();
+    setAuthStatus(null);
+  });
+
+  it("offers account settings, sign out and a reconnect when needed", () => {
+    setAuthStatus({
+      state: "logged_in",
+      login: "viewer",
+      user_id: "42",
+      missing_scopes: ["user:read:follows"],
+      enabled_scope_groups: [],
+    });
+    const onSignOut = vi.fn();
+    const onClose = vi.fn();
+    render(() => (
+      <UserCard
+        login="viewer"
+        onClose={onClose}
+        onSignOut={onSignOut}
+        user={viewer}
+      />
+    ));
+    expect(screen.queryByRole("button", { name: /Mention/ })).toBeNull();
+    expect(screen.getByText("Twitch needs new permissions")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Account settings/ }));
+    expect(settingsOpen()).toBe(true);
+    expect(settingsSection()).toBe("account");
+
+    fireEvent.click(screen.getByRole("button", { name: /Sign out/ }));
+    expect(onSignOut).toHaveBeenCalledOnce();
   });
 });
