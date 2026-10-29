@@ -6,7 +6,7 @@
 
 import { Component, JSX, Show } from "solid-js";
 import type { ChatMessage } from "../stores/chatStore";
-import { isLight } from "../stores/themeStore";
+import { nameContrast } from "../stores/themeStore";
 import { formatTimestamp, normalizeUserColor } from "../lib/messageStyle";
 import { splitMessage } from "../lib/emoteSpans";
 import { MESSAGE_LINE_HEIGHT } from "../lib/messageLayout";
@@ -65,7 +65,9 @@ const MessageRow: Component<MessageRowProps> = (props) => (
           <Show when={!props.hideName}>
             <span
               class="msg-row__name"
-              style={{ color: normalizeUserColor(props.msg.color, isLight()) }}
+              style={{
+                color: normalizeUserColor(props.msg.color, nameContrast()),
+              }}
             >
               {props.msg.display_name}
             </span>

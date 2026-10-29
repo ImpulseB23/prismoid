@@ -26,7 +26,7 @@ import { formatSendError, toSendError } from "../lib/messageInput";
 import { formatTimestamp } from "../lib/messageStyle";
 import { nameStyle } from "../lib/paint";
 import { shownPaint } from "../stores/paintStore";
-import { isLight } from "../stores/themeStore";
+import { nameContrast } from "../stores/themeStore";
 import type { BadgeStore } from "../stores/badgeStore";
 import type { ChatMessage, ChatStore } from "../stores/chatStore";
 import {
@@ -133,7 +133,7 @@ const UserCard: Component<UserCardProps> = (props) => {
     return nameStyle(
       u?.color,
       u ? shownPaint(u.platform_user_id) : undefined,
-      isLight(),
+      nameContrast(),
     );
   });
 

@@ -2,14 +2,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 
-const [stored, setStored] = createSignal({ showTimestamps: false });
-const updateSettings = vi.fn(async (patch: { showTimestamps?: boolean }) => {
+type Stored = { showTimestamps: boolean; readableColors: boolean };
+const [stored, setStored] = createSignal<Stored>({
+  showTimestamps: false,
+  readableColors: true,
+});
+const updateSettings = vi.fn(async (patch: Partial<Stored>) => {
   setStored((s) => ({ ...s, ...patch }));
 });
 vi.mock("../stores/settingsStore", () => ({
   settings: () => stored(),
-  updateSettings: (patch: { showTimestamps?: boolean }) =>
-    updateSettings(patch),
+  updateSettings: (patch: Partial<Stored>) => updateSettings(patch),
 }));
 
 const { default: ChatSettingsMenu } = await import("./ChatSettingsMenu");
@@ -34,12 +37,14 @@ describe("ChatSettingsMenu", () => {
     document.body.innerHTML = "";
   });
 
-  it("saves the timestamps switch", () => {
+  it("saves each switch", () => {
     mount();
-    const toggle = screen.getByRole("checkbox", { name: /Timestamps/ });
-    fireEvent.click(toggle);
+    const timestamps = screen.getByRole("checkbox", { name: /Timestamps/ });
+    fireEvent.click(timestamps);
     expect(updateSettings).toHaveBeenCalledWith({ showTimestamps: true });
-    expect((toggle as HTMLInputElement).checked).toBe(true);
+    expect((timestamps as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Readable colors/ }));
+    expect(updateSettings).toHaveBeenCalledWith({ readableColors: false });
   });
 
   it("closes on an outside press or Escape, not on its gear", () => {

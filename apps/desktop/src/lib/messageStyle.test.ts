@@ -33,10 +33,16 @@ describe("normalizeUserColor", () => {
   });
 
   it("darkens pale colors on the light palette", () => {
-    const out = normalizeUserColor("#ffff00", true);
+    const out = normalizeUserColor("#ffff00", "light");
     expect(out).not.toBe("#ffff00");
-    expect(normalizeUserColor("#0000ff", true)).toBe("#0000ff");
-    expect(normalizeUserColor("#000000", true)).toBe("#000000");
+    expect(normalizeUserColor("#0000ff", "light")).toBe("#0000ff");
+    expect(normalizeUserColor("#000000", "light")).toBe("#000000");
+  });
+
+  it("keeps the picked color when adjusting is off", () => {
+    expect(normalizeUserColor("#000080", "off")).toBe("#000080");
+    expect(normalizeUserColor("#FFF", "off")).toBe("#ffffff");
+    expect(normalizeUserColor("bogus", "off")).toBe("#9147ff");
   });
 });
 
