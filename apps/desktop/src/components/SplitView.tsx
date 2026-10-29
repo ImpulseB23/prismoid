@@ -34,6 +34,10 @@ import {
   collapsePanes,
   clearPaneVideo,
   TAB_DRAG_TYPE,
+  PANE_DRAG_TYPE,
+  draggedPane,
+  setDraggedPane,
+  swapPanes,
 } from "../stores/layoutStore";
 import ChatPane from "./ChatPane";
 import ChatFeed from "./ChatFeed";
@@ -129,17 +133,31 @@ const SplitView: Component<{ login: string }> = (props) => {
               <div
                 class="split__drop"
                 classList={{
-                  "split__drop--armed": draggedTab() !== null,
+                  "split__drop--armed":
+                    draggedTab() !== null ||
+                    (draggedPane() !== null && draggedPane() !== slotId),
                   "split__drop--over": over(),
                 }}
                 onDragOver={(e) => {
-                  if (!e.dataTransfer?.types.includes(TAB_DRAG_TYPE)) return;
+                  const types = e.dataTransfer?.types ?? [];
+                  if (
+                    !types.includes(TAB_DRAG_TYPE) &&
+                    !types.includes(PANE_DRAG_TYPE)
+                  ) {
+                    return;
+                  }
                   e.preventDefault();
                   setOver(true);
                 }}
                 onDragLeave={() => setOver(false)}
+                // A tab shows here; another pane trades places with this one.
                 onDrop={(e) => {
                   setOver(false);
+                  if (e.dataTransfer?.types.includes(PANE_DRAG_TYPE)) {
+                    e.preventDefault();
+                    swapPanes(e.dataTransfer.getData(PANE_DRAG_TYPE), slotId);
+                    return;
+                  }
                   const id = e.dataTransfer?.getData(TAB_DRAG_TYPE);
                   if (!id) return;
                   e.preventDefault();
@@ -148,6 +166,7 @@ const SplitView: Component<{ login: string }> = (props) => {
               />
               <Show when={many()}>
                 <PaneHeader
+                  slotId={slotId}
                   name={channel()?.display_name ?? "No channel"}
                   picture={channel()?.profile_image_url}
                   onClose={() => closePane(slotId)}
@@ -220,11 +239,21 @@ const EdgeDrop: Component = () => {
 };
 
 const PaneHeader: Component<{
+  slotId: string;
   name: string;
   picture: string | undefined;
   onClose: () => void;
 }> = (props) => (
-  <div class="pane-head">
+  <div
+    class="pane-head"
+    title="Drag onto another pane to swap them"
+    draggable={true}
+    onDragStart={(e) => {
+      e.dataTransfer?.setData(PANE_DRAG_TYPE, props.slotId);
+      setDraggedPane(props.slotId);
+    }}
+    onDragEnd={() => setDraggedPane(null)}
+  >
     <Show when={props.picture} fallback={<span class="pane-head__avatar" />}>
       {(url) => <img class="pane-head__avatar" src={url()} alt="" />}
     </Show>

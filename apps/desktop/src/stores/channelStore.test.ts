@@ -335,4 +335,22 @@ describe("pushRecent", () => {
     expect(added).toHaveLength(MAX_RECENTS);
     expect(added.some((r) => r.login === `u${MAX_RECENTS - 1}`)).toBe(false);
   });
+
+  it("moves a tab and keeps the new order", async () => {
+    const storage = memStorage();
+    const store = createChannelStore(fakeCommands(), storage);
+    await store.select("a");
+    await store.open("b");
+    await store.open("c");
+    store.move("id-a", 2);
+    expect(store.tabs().map((c) => c.login)).toEqual(["b", "c", "a"]);
+    expect(JSON.parse(storage.data["prismoid.channels.tabs"]!)).toEqual([
+      "b",
+      "c",
+      "a",
+    ]);
+    store.move("id-a", 99);
+    store.move("missing", 0);
+    expect(store.tabs().map((c) => c.login)).toEqual(["b", "c", "a"]);
+  });
 });
