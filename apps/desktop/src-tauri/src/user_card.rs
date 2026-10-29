@@ -425,6 +425,7 @@ impl<R: Runtime> Host for App<R> {
                 .title(&user.display_name)
                 .inner_size(width, height)
                 .min_inner_size(MIN_CONTENT_WIDTH * zoom, MIN_CONTENT_HEIGHT * zoom)
+                .additional_browser_args(crate::browser_args::BROWSER_ARGS)
                 .visible(false);
         // Same chrome as the main window: the card draws its own title bar
         // on Windows.

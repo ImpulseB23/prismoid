@@ -1,9 +1,16 @@
 //! Pop-out stream players: one window per channel, labelled by its login,
 //! that the user can resize, move to another display and fullscreen. The
 //! window loads the app's own page, which shows Twitch's embedded player
-//! and nothing else; its capability allows logging and fullscreen only.
+//! under the app's own title bar; its capability allows window controls,
+//! the pop-back-in message and logging. The main window hears when one
+//! closes, so a channel never plays in two places.
 
-use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, Runtime, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+
+use crate::browser_args::BROWSER_ARGS;
+
+/// Sent with the login when a pop-out closes.
+pub const CLOSED_EVENT: &str = "video_window_closed";
 
 const LABEL_PREFIX: &str = "video-";
 
@@ -30,15 +37,24 @@ pub async fn video_window_open<R: Runtime>(
         let _ = window.unminimize();
         return window.set_focus().map_err(|e| e.to_string());
     }
-    WebviewWindowBuilder::new(&app, label, WebviewUrl::App("index.html".into()))
+    let builder = WebviewWindowBuilder::new(&app, label, WebviewUrl::App("index.html".into()))
         .title(title)
         .inner_size(960.0, 540.0)
         .min_inner_size(400.0, 300.0)
+        .additional_browser_args(BROWSER_ARGS)
         // Twitch only lets its player run under an https parent.
-        .use_https_scheme(true)
-        .build()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+        .use_https_scheme(true);
+    // The page draws its own title bar on Windows, like the main window.
+    #[cfg(windows)]
+    let builder = builder.decorations(false);
+    let window = builder.build().map_err(|e| e.to_string())?;
+    let handle = app.clone();
+    window.on_window_event(move |event| {
+        if matches!(event, WindowEvent::Destroyed) {
+            let _ = handle.emit(CLOSED_EVENT, &login);
+        }
+    });
+    Ok(())
 }
 
 #[cfg(test)]

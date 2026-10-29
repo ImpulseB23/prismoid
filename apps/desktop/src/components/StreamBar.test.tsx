@@ -15,6 +15,15 @@ vi.mock("../stores/streamStore", () => ({
 vi.mock("../stores/channelStore", () => ({
   activeChannel: () => ({ id: "c", login: "c", display_name: "C" }),
 }));
+const popped = { out: false };
+const openVideoWindow = vi.fn<(login: string, title: string) => Promise<void>>(
+  async () => {},
+);
+vi.mock("../lib/videoWindow", () => ({
+  isPoppedOut: () => popped.out,
+  openVideoWindow: (login: string, title: string) =>
+    openVideoWindow(login, title),
+}));
 vi.mock("../stores/pulseStore", () => ({
   startPulse: () => () => {},
   messagesPerMinute: () => 0,
@@ -25,7 +34,10 @@ const { default: StreamBar } = await import("./StreamBar");
 const layout = await import("../stores/layoutStore");
 
 describe("StreamBar", () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    popped.out = false;
+  });
 
   it("shows and hides the stream in the focused pane", () => {
     render(() => <StreamBar />);
@@ -37,5 +49,17 @@ describe("StreamBar", () => {
     expect(hide.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(hide);
     expect(focused()?.video).toBe(false);
+  });
+
+  it("brings a popped out stream's window forward instead of a second player", () => {
+    popped.out = true;
+    render(() => <StreamBar />);
+    const focused = () =>
+      layout.panes().find((p) => p.id === layout.focusedPaneId());
+    fireEvent.click(
+      screen.getByRole("button", { name: "Watching in its own window" }),
+    );
+    expect(openVideoWindow).toHaveBeenCalledWith("c", "C's stream");
+    expect(focused()?.video).toBeFalsy();
   });
 });

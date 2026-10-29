@@ -1,4 +1,5 @@
 pub mod backlog;
+mod browser_args;
 pub mod browser_follow;
 pub mod chat_history;
 mod first_messages;
