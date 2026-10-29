@@ -34,6 +34,25 @@ vi.mock("./ChatFeed", async () => {
   };
 });
 vi.mock("./CommandCenter", () => ({ default: () => null }));
+const openVideoWindow = vi.fn<(login: string, title: string) => Promise<void>>(
+  async () => {},
+);
+vi.mock("../lib/videoWindow", () => ({
+  openVideoWindow: (login: string, title: string) =>
+    openVideoWindow(login, title),
+}));
+vi.mock("./StreamVideo", () => ({
+  default: (p: { onPopOut: () => void; onClose: () => void }) => (
+    <div>
+      <button type="button" onClick={() => p.onPopOut()}>
+        pop out
+      </button>
+      <button type="button" onClick={() => p.onClose()}>
+        close video
+      </button>
+    </div>
+  ),
+}));
 vi.mock("./MessageInput", () => ({ default: () => null }));
 
 let layout: typeof import("../stores/layoutStore");
@@ -85,6 +104,18 @@ describe("SplitView", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Close B's pane" }));
     expect(shown()).toEqual(["a"]);
+  });
+
+  it("pops the preview out into a window in its place", async () => {
+    await mount();
+    const video = () => layout.panes()[0]!.video === true;
+    layout.togglePaneVideo(layout.panes()[0]!.id);
+    fireEvent.click(screen.getByRole("button", { name: "close video" }));
+    expect(video()).toBe(false);
+    layout.togglePaneVideo(layout.panes()[0]!.id);
+    fireEvent.click(screen.getByRole("button", { name: "pop out" }));
+    expect(openVideoWindow).toHaveBeenCalledWith("a", "A's stream");
+    expect(video()).toBe(false);
   });
 
   it("takes a dragged tab on a pane or on the right edge", async () => {

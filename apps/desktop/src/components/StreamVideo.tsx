@@ -19,6 +19,9 @@ const MIN_HEIGHT = 300;
 const PREVIEW_WIDTH = 534;
 /** Gap between the preview and the chat's edges. */
 const INSET = 12;
+/** The strip above the player with its name and buttons, kept off the
+ * player because Twitch does not allow anything over it. */
+const BAR_HEIGHT = 28;
 
 export function playerUrl(login: string, parent: string): string {
   const url = new URL("https://player.twitch.tv/");
@@ -59,11 +62,16 @@ export type VideoFit = { width: number; height: number } | "narrow" | "short";
 export function videoSize(chatWidth: number, chatHeight: number): VideoFit {
   const width = Math.min(PREVIEW_WIDTH, chatWidth - INSET * 2);
   if (width < MIN_WIDTH) return "narrow";
-  if (chatHeight - INSET * 2 < MIN_HEIGHT) return "short";
+  if (chatHeight - INSET * 2 - BAR_HEIGHT < MIN_HEIGHT) return "short";
   return { width, height: MIN_HEIGHT };
 }
 
-const StreamVideo: Component<{ login: string; name: string }> = (props) => {
+const StreamVideo: Component<{
+  login: string;
+  name: string;
+  onPopOut: () => void;
+  onClose: () => void;
+}> = (props) => {
   let ref: HTMLDivElement | undefined;
   const [pane, setPane] = createSignal({ width: 0, height: 0 });
   onMount(() => {
@@ -95,12 +103,61 @@ const StreamVideo: Component<{ login: string; name: string }> = (props) => {
         }
       >
         {(s) => (
-          <PlayerFrame
-            login={props.login}
-            name={props.name}
-            width={s().width}
-            height={s().height}
-          />
+          <>
+            <div class="stream-video__bar">
+              <span class="stream-video__name">{props.name}</span>
+              <button
+                type="button"
+                class="stream-video__btn"
+                aria-label="Watch in its own window"
+                title="Watch in its own window"
+                onClick={() => props.onPopOut()}
+              >
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 14 14"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M8 1.75h4.25V6M12 2 7 7M5.5 2.75H3a1.25 1.25 0 0 0-1.25 1.25v7A1.25 1.25 0 0 0 3 12.25h7A1.25 1.25 0 0 0 11.25 11V8.5"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
+                class="stream-video__btn"
+                aria-label="Close the preview"
+                title="Close the preview"
+                onClick={() => props.onClose()}
+              >
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 10 10"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M2 2l6 6M8 2l-6 6"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
+            <PlayerFrame
+              login={props.login}
+              name={props.name}
+              width={s().width}
+              height={s().height}
+            />
+          </>
         )}
       </Show>
     </div>
