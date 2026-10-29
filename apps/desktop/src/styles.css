@@ -3525,21 +3525,15 @@ option::checkmark {
 .notes {
   width: min(480px, 100%);
   padding: 0 0 12px;
+  /* The scroll container clips this strip to the rounded corners and keeps
+     it in place while the notes scroll. */
+  background:
+    var(--action) top / 100% 3px no-repeat,
+    var(--bg-raised);
 }
 
 .notes__hero {
   padding: 22px 18px 16px;
-  background:
-    radial-gradient(
-      70% 120% at 0% 0%,
-      rgba(111, 56, 201, 0.28),
-      transparent 70%
-    ),
-    radial-gradient(
-      60% 120% at 100% 0%,
-      rgba(77, 179, 50, 0.14),
-      transparent 70%
-    );
   border-bottom: 1px solid var(--border);
 }
 
