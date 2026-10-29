@@ -81,6 +81,7 @@ describe("settingsStore", () => {
       showTimestamps: false,
       alternateRows: false,
       readableColors: true,
+      pauseChat: "scroll",
       hideViewers: false,
       hideUptime: false,
       hideChatRate: false,
@@ -218,6 +219,7 @@ describe("settingsStore", () => {
           theme: "neon",
           showPaints: false,
           readableColors: false,
+          pauseChat: "always",
         }),
       }),
     );
@@ -228,6 +230,7 @@ describe("settingsStore", () => {
       showTimestamps: false,
       alternateRows: false,
       readableColors: false,
+      pauseChat: "scroll",
       hideViewers: false,
       hideUptime: false,
       hideChatRate: false,
