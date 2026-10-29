@@ -11,6 +11,15 @@ const said = (id: string, text: string) =>
     emote_spans: [],
   }) as unknown as ChatMessage;
 
+const follows = { since: null as string | null };
+const followCalls: [string, string][] = [];
+vi.mock("../lib/twitchChannel", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/twitchChannel")>()),
+  getFollowSince: async (channel: string, user: string) => {
+    followCalls.push([channel, user]);
+    return follows.since;
+  },
+}));
 vi.mock("../stores/chatStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../stores/chatStore")>()),
   recentMessagesByUser: () => [
@@ -119,6 +128,57 @@ describe("UserCard", () => {
     ));
     const name = screen.getByText("Viewer", { selector: ".user-card__name" });
     expect(name.classList.contains("name--painted")).toBe(false);
+  });
+});
+
+describe("UserCard follow age", () => {
+  afterEach(() => {
+    cleanup();
+    setAuthStatus(null);
+    follows.since = null;
+    followCalls.length = 0;
+  });
+
+  it("shows how long you've followed the channel on your own card", async () => {
+    setAuthStatus({
+      state: "logged_in",
+      login: "viewer",
+      user_id: "42",
+      missing_scopes: [],
+      enabled_scope_groups: [],
+    });
+    follows.since = "2021-03-04T00:00:00Z";
+    render(() => (
+      <UserCard
+        login="viewer"
+        onClose={() => {}}
+        onSignOut={() => {}}
+        user={viewer}
+      />
+    ));
+    expect(await screen.findByText("Following")).toBeTruthy();
+    expect(followCalls).toEqual([[viewer.channel_id, "42"]]);
+    expect(screen.queryByText("This session")).toBeNull();
+  });
+
+  it("does not ask Twitch about others where it would not answer", () => {
+    setAuthStatus({
+      state: "logged_in",
+      login: "me",
+      user_id: "1",
+      missing_scopes: [],
+      enabled_scope_groups: [],
+    });
+    render(() => (
+      <UserCard
+        login="me"
+        onClose={() => {}}
+        onSignOut={() => {}}
+        user={viewer}
+      />
+    ));
+    expect(followCalls).toEqual([]);
+    expect(screen.queryByText("Following")).toBeNull();
   });
 });
 

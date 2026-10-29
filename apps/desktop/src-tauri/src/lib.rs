@@ -130,6 +130,7 @@ pub fn run() {
             twitch_channel::twitch_lookup_user,
             twitch_channel::twitch_moderated_channels,
             twitch_channel::twitch_users_info,
+            twitch_channel::twitch_follow_since,
             sidecar_supervisor::current_emote_bundle,
             sidecar_supervisor::current_sidecar_status,
             seventv_paints::current_seventv_paints,
@@ -232,6 +233,8 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
             .scope(Scope::ModeratorManageBannedUsers)
             .scope(Scope::ModeratorManageChatMessages)
             .scope(Scope::ModeratorManageWarnings)
+            // Follow age on user cards, in channels the user moderates.
+            .scope(Scope::ModeratorReadFollowers)
             // Chat settings are read and changed from the chat modes panel.
             // The remaining read scopes are what channel.moderate v2 asks
             // for, so moderators see every action in the channel with

@@ -27,6 +27,7 @@ const MODERATION_SCOPES = [
 ];
 
 export const WARN_SCOPE = "moderator:manage:warnings";
+export const FOLLOWERS_SCOPE = "moderator:read:followers";
 
 /** Warn waits on its own reconnect so the other mod tools keep working. */
 export function warnNeedsReconnect(): boolean {

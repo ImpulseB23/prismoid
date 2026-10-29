@@ -1094,6 +1094,68 @@ pub async fn twitch_moderated_channels(
     .await
 }
 
+#[derive(Deserialize)]
+struct FollowRow {
+    followed_at: String,
+}
+
+#[derive(Deserialize)]
+struct FollowResponse {
+    data: Vec<FollowRow>,
+}
+
+/// When `user_id` followed `broadcaster_id`, or `None` when they don't.
+/// The signed-in user's own follow comes from their followed list; anyone
+/// else's needs the broadcaster's follower list, which Twitch only shows to
+/// the broadcaster and their moderators (to others it answers with an empty
+/// list, so callers only ask where the user can moderate).
+pub async fn fetch_follow_since(
+    http: &reqwest::Client,
+    helix_base: &str,
+    access_token: &str,
+    self_id: &str,
+    broadcaster_id: &str,
+    user_id: &str,
+) -> Result<Option<String>, ChannelError> {
+    let page: FollowResponse = if user_id == self_id {
+        helix_get(
+            http,
+            format!("{helix_base}/channels/followed"),
+            &[("user_id", user_id), ("broadcaster_id", broadcaster_id)],
+            access_token,
+        )
+        .await?
+    } else {
+        helix_get(
+            http,
+            format!("{helix_base}/channels/followers"),
+            &[("broadcaster_id", broadcaster_id), ("user_id", user_id)],
+            access_token,
+        )
+        .await?
+    };
+    Ok(page.data.into_iter().next().map(|r| r.followed_at))
+}
+
+#[tauri::command]
+pub async fn twitch_follow_since(
+    auth: State<'_, AuthState>,
+    channels: State<'_, ChannelState>,
+    channel_id: String,
+    user_id: String,
+) -> Result<Option<String>, ChannelError> {
+    let tokens = auth.manager.load_or_refresh().await?;
+    fetch_follow_since(
+        auth.manager.http_client(),
+        &channels.helix_base,
+        &tokens.access_token,
+        &tokens.user_id,
+        &channel_id,
+        &user_id,
+    )
+    .await
+}
+
 /// Public profile fields from Helix `GET /users`, for the account insight
 /// shown on chatters: how old the account is and what it looks like.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1460,6 +1522,47 @@ mod tests {
         assert_eq!(big.calls(), 1);
         assert_eq!(got[0].login, "jynsmall");
         assert!(got[0].followed);
+    }
+
+    #[tokio::test]
+    async fn follow_since_reads_own_list_or_the_channel_followers() {
+        let server = MockServer::start_async().await;
+        let own = server.mock(|when, then| {
+            when.method(GET)
+                .path("/channels/followed")
+                .query_param("user_id", "me")
+                .query_param("broadcaster_id", "chan");
+            then.status(200).json_body(serde_json::json!({
+                "data": [{"broadcaster_id": "chan", "broadcaster_login": "c", "broadcaster_name": "C", "followed_at": "2021-03-04T00:00:00Z"}],
+                "pagination": {}, "total": 1
+            }));
+        });
+        let other = server.mock(|when, then| {
+            when.method(GET)
+                .path("/channels/followers")
+                .query_param("broadcaster_id", "chan")
+                .query_param("user_id", "them");
+            then.status(200).json_body(serde_json::json!({
+                "data": [], "pagination": {}, "total": 900
+            }));
+        });
+        let http = reqwest::Client::new();
+        let base = server.base_url();
+        assert_eq!(
+            fetch_follow_since(&http, &base, "tok", "me", "chan", "me")
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("2021-03-04T00:00:00Z")
+        );
+        assert_eq!(
+            fetch_follow_since(&http, &base, "tok", "me", "chan", "them")
+                .await
+                .unwrap(),
+            None
+        );
+        assert_eq!(own.calls(), 1);
+        assert_eq!(other.calls(), 1);
     }
 
     #[tokio::test]
