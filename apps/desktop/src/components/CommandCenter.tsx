@@ -1,12 +1,11 @@
-// The command center for channels the user streams or moderates: a small
-// tab on the right edge of the chat that slides out a panel with the room
-// modes (Clear chat at their foot), the AutoMod queue and the mod log. Everything opens in
-// place inside the panel, one section at a time, so nothing stacks a second
-// window on top. Kept apart from the composer so chatting stays uncluttered.
+// The chat manager for channels the user streams or moderates: a small tab
+// on the right edge of the chat that slides out a panel with the room modes
+// as tiles, the AutoMod queue and the mod log as tabs, and Clear chat at the
+// foot. Everything stays inside the panel, so nothing stacks a second
+// window on top. Stream controls live in the stream manager window instead.
 
 import {
   Component,
-  JSX,
   Show,
   createEffect,
   createSignal,
@@ -30,26 +29,7 @@ import { clearChat, type SendMessageError } from "../lib/twitchAuth";
 import { formatSendError, toSendError } from "../lib/messageInput";
 import { createConfirmTap } from "../lib/confirmTap";
 
-type Section = "modes" | "automod" | "log";
-
-const Chevron: Component = () => (
-  <svg
-    class="cc__chevron"
-    width="10"
-    height="10"
-    viewBox="0 0 10 10"
-    aria-hidden="true"
-  >
-    <path
-      d="M2.5 3.75 5 6.25l2.5-2.5"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    />
-  </svg>
-);
+type Tab = "held" | "log";
 
 const CommandCenter: Component = () => {
   // The only owner of the modes store: it follows the channel on screen.
@@ -60,7 +40,7 @@ const CommandCenter: Component = () => {
   });
 
   const [open, setOpen] = createSignal(false);
-  const [section, setSection] = createSignal<Section | null>(null);
+  const [tab, setTab] = createSignal<Tab>("held");
   const broadcaster = () => activeChannel()?.id === currentUserId();
   const heldCount = () => {
     const id = activeChannel()?.id;
@@ -82,7 +62,7 @@ const CommandCenter: Component = () => {
   );
 
   // While open, Escape or a click back in the chat closes the panel. The
-  // modes dropdowns open in the top layer, outside the panel's box, so a
+  // duration dropdowns open in the top layer, outside the panel's box, so a
   // click inside one must not count as a click outside.
   let panelRef: HTMLElement | undefined;
   let handleRef: HTMLButtonElement | undefined;
@@ -126,31 +106,7 @@ const CommandCenter: Component = () => {
     }
   };
 
-  const toggle = (s: Section) => setSection((cur) => (cur === s ? null : s));
-
-  const SectionHead = (p: {
-    id: Section;
-    title: JSX.Element;
-    desc: JSX.Element;
-    on?: boolean;
-  }) => (
-    <button
-      type="button"
-      class="cc__item"
-      classList={{
-        "cc__item--on": p.on === true,
-        "cc__item--open": section() === p.id,
-      }}
-      aria-expanded={section() === p.id}
-      onClick={() => toggle(p.id)}
-    >
-      <span class="cc__item-text">
-        <span class="cc__title">{p.title}</span>
-        <span class="cc__desc">{p.desc}</span>
-      </span>
-      <Chevron />
-    </button>
-  );
+  const summary = () => activeSummary(chatSettings());
 
   return (
     <Show when={canModerate()}>
@@ -182,15 +138,22 @@ const CommandCenter: Component = () => {
       <Show when={open()}>
         <aside
           ref={(el) => (panelRef = el)}
-          class="cc"
+          class="cm"
           aria-label="Chat manager"
         >
-          <div class="cc__head">
-            <span
-              class="modbar__role"
-              classList={{ "modbar__role--owner": broadcaster() }}
+          <div class="cm__head">
+            <Show
+              when={activeChannel()?.profile_image_url}
+              fallback={<span class="cm__avatar" />}
             >
-              {broadcaster() ? "Your channel" : "Moderator"}
+              {(url) => <img class="cm__avatar" src={url()} alt="" />}
+            </Show>
+            <span class="cm__who">
+              <span class="cm__title">Chat manager</span>
+              <span class="cm__sub">
+                {activeChannel()?.display_name},{" "}
+                {broadcaster() ? "your channel" : "you moderate"}
+              </span>
             </span>
             <button
               type="button"
@@ -214,67 +177,70 @@ const CommandCenter: Component = () => {
             </button>
           </div>
 
-          <div class="cc__sections">
-            <SectionHead
-              id="modes"
-              on={activeSummary(chatSettings()) !== null}
-              title="Chat modes"
-              desc={
-                activeSummary(chatSettings()) ?? "Open chat, anyone can talk"
-              }
-            />
-            <Show when={section() === "modes"}>
-              <ChatModes />
-              {/* Rare and drastic, so it lives at the bottom of the modes
-                  rather than on the panel's face, and takes a second tap. */}
-              <div class="cc__danger">
-                <button
-                  type="button"
-                  class="btn btn--small btn--danger"
-                  classList={{ "btn--armed": armed() }}
-                  disabled={clearing()}
-                  onClick={() => void onClear()}
-                >
-                  {armed() ? "Tap again to clear for everyone" : "Clear chat"}
-                </button>
-                <Show when={clearError()}>
-                  {(msg) => (
-                    <span class="modbar__error" role="alert">
-                      {msg()}
-                    </span>
-                  )}
-                </Show>
-              </div>
-            </Show>
+          <section class="cm__room" aria-label="Room modes">
+            <div class="cm__room-head">
+              <span>Room</span>
+              <span classList={{ "cm__summary--on": summary() !== null }}>
+                {summary() ?? "Open, anyone can chat"}
+              </span>
+            </div>
+            <ChatModes />
+          </section>
 
-            <SectionHead
-              id="automod"
-              title={
-                <>
-                  AutoMod
-                  <Show when={heldCount() > 0}>
-                    <span class="modbar__count">{heldCount()}</span>
-                  </Show>
-                </>
-              }
-              desc={
-                heldCount() > 0
-                  ? `${heldCount()} held for review`
-                  : "Nothing waiting for review"
-              }
-            />
-            <Show when={section() === "automod"}>
+          <div class="cm__tabs" role="tablist" aria-label="Chat manager lists">
+            <button
+              type="button"
+              role="tab"
+              class="cm__tab"
+              classList={{ "cm__tab--on": tab() === "held" }}
+              aria-selected={tab() === "held"}
+              onClick={() => setTab("held")}
+            >
+              Held by AutoMod
+              <Show when={heldCount() > 0}>
+                <span class="modbar__count">{heldCount()}</span>
+              </Show>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              class="cm__tab"
+              classList={{ "cm__tab--on": tab() === "log" }}
+              aria-selected={tab() === "log"}
+              onClick={() => setTab("log")}
+            >
+              Mod log
+            </button>
+          </div>
+
+          <div class="cm__list" role="tabpanel">
+            <Show when={tab() === "held"} fallback={<ModLog />}>
               <AutomodQueue />
             </Show>
+          </div>
 
-            <SectionHead
-              id="log"
-              title="Mod log"
-              desc="Every timeout, ban and deletion this session"
-            />
-            <Show when={section() === "log"}>
-              <ModLog />
-            </Show>
+          {/* Rare and drastic, so it sits at the foot and takes a second
+              tap. */}
+          <div class="cm__foot">
+            <span
+              class="cm__foot-hint"
+              classList={{ "cm__foot-hint--error": clearError() !== null }}
+              role={clearError() !== null ? "alert" : undefined}
+            >
+              {clearError() ??
+                (armed()
+                  ? "Clears chat for everyone"
+                  : "Rare, so it asks twice")}
+            </span>
+            <button
+              type="button"
+              class="btn btn--small btn--danger"
+              classList={{ "btn--armed": armed() }}
+              disabled={clearing()}
+              onClick={() => void onClear()}
+            >
+              {armed() ? "Tap again to clear" : "Clear chat"}
+            </button>
           </div>
         </aside>
       </Show>

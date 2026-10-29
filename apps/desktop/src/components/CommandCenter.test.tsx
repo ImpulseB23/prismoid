@@ -33,9 +33,6 @@ const { default: CommandCenter } = await import("./CommandCenter");
 
 const openPanel_ = () =>
   fireEvent.click(screen.getByRole("button", { name: "Chat manager" }));
-// Clear chat sits at the foot of the chat modes section.
-const openModes = () =>
-  fireEvent.click(screen.getByRole("button", { name: /^Chat modes/ }));
 const clearButton = () =>
   screen.getByRole("button", { name: /^(Clear chat|Tap again)/ });
 const { CLEAR_CONFIRM_MS } = await import("../lib/confirmTap");
@@ -60,23 +57,21 @@ describe("CommandCenter", () => {
     vi.clearAllMocks();
   });
 
-  it("shows what modes are on and opens them in place", () => {
+  it("shows the room as tiles with a summary of what is on", () => {
     setModes(settings);
     render(() => <CommandCenter />);
     expect(load).toHaveBeenCalledWith("100");
     openPanel_();
-    expect(screen.getByText("Your channel")).toBeTruthy();
-    const modes = screen.getByRole("button", { name: /^Chat modes/ });
-    expect(modes.textContent).toContain("Slow 30s");
+    const room = screen.getByRole("region", { name: "Room modes" });
+    expect(screen.getByText(/your channel$/)).toBeTruthy();
+    expect(room.textContent).toContain("Slow 30s");
+    expect(
+      screen
+        .getByRole("button", { name: /^Slow/ })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
     setModes({ ...settings, slow_mode: false });
-    expect(modes.textContent).toContain("Open chat");
-    fireEvent.click(modes);
-    expect(modes.getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByRole("complementary").textContent).toContain(
-      "Slow mode",
-    );
-    fireEvent.click(modes);
-    expect(modes.getAttribute("aria-expanded")).toBe("false");
+    expect(room.textContent).toContain("Open, anyone can chat");
   });
 
   it("follows the channel with the modes and drops them without mod rights", () => {
@@ -96,10 +91,10 @@ describe("CommandCenter", () => {
     try {
       render(() => <CommandCenter />);
       openPanel_();
-      openModes();
       fireEvent.click(clearButton());
       expect(clear).not.toHaveBeenCalled();
-      expect(clearButton().textContent).toBe("Tap again to clear for everyone");
+      expect(clearButton().textContent).toBe("Tap again to clear");
+      expect(screen.getByText("Clears chat for everyone")).toBeTruthy();
       vi.advanceTimersByTime(CLEAR_CONFIRM_MS);
       expect(clearButton().textContent).toBe("Clear chat");
 
@@ -121,7 +116,6 @@ describe("CommandCenter", () => {
     });
     render(() => <CommandCenter />);
     openPanel_();
-    openModes();
     fireEvent.click(clearButton());
     fireEvent.click(clearButton());
     expect((await screen.findByRole("alert")).textContent).toContain(
@@ -161,7 +155,13 @@ describe("CommandCenter", () => {
     }
     expect(handle().textContent).toBe("2");
     openPanel_();
-    fireEvent.click(screen.getByRole("button", { name: /^AutoMod/ }));
+    const held = screen.getByRole("tab", { name: /^Held by AutoMod/ });
+    expect(held.getAttribute("aria-selected")).toBe("true");
+    expect(held.textContent).toContain("2");
+    expect(screen.getAllByText("Chatter")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("tab", { name: "Mod log" }));
+    expect(screen.queryByText("Chatter")).toBeNull();
+    fireEvent.click(held);
     expect(screen.getAllByText("Chatter")).toHaveLength(2);
     clearHeldMessages();
   });
@@ -170,7 +170,7 @@ describe("CommandCenter", () => {
     setChannel({ id: "200" });
     render(() => <CommandCenter />);
     openPanel_();
-    expect(screen.getByText("Moderator")).toBeTruthy();
+    expect(screen.getByText(/you moderate$/)).toBeTruthy();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("complementary")).toBeNull();
     setCanMod(false);
