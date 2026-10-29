@@ -22,11 +22,13 @@ import {
   updateSettings,
 } from "../../stores/settingsStore";
 import {
+  ownChannelMonetized,
   setStreamManagerTab,
   streamManagerTab,
 } from "../../stores/streamManagerPanelStore";
 import TwitchReconnect from "../TwitchReconnect";
 import AdsSection from "./AdsSection";
+import AffiliateGate from "./AffiliateGate";
 import NowStrip from "./NowStrip";
 import PollsSection from "./PollsSection";
 import QuickActions from "./QuickActions";
@@ -95,7 +97,7 @@ const Curtain: Component<{
         <NowStrip
           info={props.info}
           now={now()}
-          adsReady={scopeGroupReady("ads")}
+          adsReady={scopeGroupReady("ads") && ownChannelMonetized() === true}
         />
         <SectionTabs
           current={streamManagerTab()}
@@ -129,10 +131,17 @@ const Curtain: Component<{
                 </div>
               </Match>
               <Match when={streamManagerTab() === "ads"}>
-                <AdsSection now={now()} since={liveSince(props.info)} />
+                <AffiliateGate monetized={ownChannelMonetized()} what="Ads">
+                  <AdsSection now={now()} since={liveSince(props.info)} />
+                </AffiliateGate>
               </Match>
               <Match when={streamManagerTab() === "polls"}>
-                <PollsSection now={now()} />
+                <AffiliateGate
+                  monetized={ownChannelMonetized()}
+                  what="Polls and predictions"
+                >
+                  <PollsSection now={now()} />
+                </AffiliateGate>
               </Match>
             </Switch>
           </Show>

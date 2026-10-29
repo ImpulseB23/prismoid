@@ -242,6 +242,8 @@ export interface UserInfo {
   description: string;
   /** RFC 3339 account creation time. */
   created_at: string;
+  /** Ads, polls, predictions and Channel Points need Affiliate or Partner. */
+  broadcaster_type: "partner" | "affiliate" | "";
 }
 
 /** Public profiles for up to a few hundred user ids; batched on the host. */

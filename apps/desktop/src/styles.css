@@ -4518,6 +4518,37 @@ option::checkmark {
   gap: 18px;
 }
 
+/* A section Twitch keeps for Affiliates and Partners: greyed, with the
+   reason above it. */
+.sm-gate__note {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.sm-gate__note strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.sm-gate__link {
+  align-self: flex-start;
+  margin-top: 8px;
+}
+
+.sm-gate__body--locked {
+  opacity: 0.4;
+  filter: grayscale(1);
+  user-select: none;
+}
+
 .sm-hint {
   color: var(--text-faint);
   font-size: 12px;

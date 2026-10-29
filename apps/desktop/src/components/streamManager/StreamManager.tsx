@@ -24,9 +24,11 @@ import {
   loadStreamManager,
 } from "../../stores/streamManagerStore";
 import {
+  ownChannelMonetized,
   setStreamManagerOpen,
   streamManagerOpen,
 } from "../../stores/streamManagerPanelStore";
+import { loadUserInfo } from "../../stores/userInfoStore";
 import { followStreamLog } from "../../stores/streamLogStore";
 import { createStreamStore } from "../../stores/streamStore";
 import Curtain from "./Curtain";
@@ -62,12 +64,16 @@ const StreamManager: Component = () => {
         if (owner === null) return;
         clearStreamManager();
         void loadStreamManager();
+        void loadUserInfo([owner]);
       },
     ),
   );
   createEffect(
     on(
-      () => streamManagerOpen() && scopeGroupReady("ads"),
+      () =>
+        streamManagerOpen() &&
+        scopeGroupReady("ads") &&
+        ownChannelMonetized() === true,
       (track) => {
         if (track) onCleanup(trackAdSchedule());
       },

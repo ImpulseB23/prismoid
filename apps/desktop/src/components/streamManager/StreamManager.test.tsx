@@ -20,10 +20,15 @@ const invoke = vi.fn<(cmd: string, args?: unknown) => Promise<unknown>>();
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (cmd: string, args?: unknown) => invoke(cmd, args),
 }));
+const openUrl = vi.fn<(url: string) => Promise<void>>(async () => {});
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openUrl: (url: string) => openUrl(url),
+}));
 
 const { default: StreamManager } = await import("./StreamManager");
+const { AFFILIATE_GUIDE } = await import("./AffiliateGate");
 const { setAuthStatus } = await import("../../stores/authStore");
-const { setStreamManagerOpen, setStreamManagerTab } =
+const { ownChannelMonetized, setStreamManagerOpen, setStreamManagerTab } =
   await import("../../stores/streamManagerPanelStore");
 const { settings, updateSettings } = await import("../../stores/settingsStore");
 
@@ -52,8 +57,20 @@ describe("StreamManager", () => {
   });
 
   beforeEach(async () => {
-    invoke.mockImplementation(async (cmd) =>
-      cmd === "twitch_get_ad_schedule"
+    // User 8 is neither Affiliate nor Partner; everyone else is an Affiliate.
+    invoke.mockImplementation(async (cmd, args) => {
+      if (cmd === "twitch_users_info") {
+        return (args as { ids: string[] }).ids.map((id) => ({
+          id,
+          login: `u${id}`,
+          display_name: `U${id}`,
+          profile_image_url: "",
+          description: "",
+          created_at: "",
+          broadcaster_type: id === "8" ? "" : "affiliate",
+        }));
+      }
+      return cmd === "twitch_get_ad_schedule"
         ? {
             next_ad_at: null,
             last_ad_at: null,
@@ -62,8 +79,8 @@ describe("StreamManager", () => {
             snooze_count: 3,
             snooze_refresh_at: null,
           }
-        : null,
-    );
+        : null;
+    });
     await updateSettings({ streamManagerHeight: 0.58 });
   });
 
@@ -71,6 +88,7 @@ describe("StreamManager", () => {
     cleanup();
     vi.clearAllMocks();
     setStreamManagerOpen(false);
+    setStreamManagerTab("live");
     setAuthStatus(null);
   });
 
@@ -122,6 +140,48 @@ describe("StreamManager", () => {
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("twitch_get_ad_schedule", undefined),
     );
+  });
+
+  it("leaves ads alone for a channel that cannot run them", async () => {
+    signIn({ user_id: "8", enabled_scope_groups: ["ads"] });
+    render(() => <StreamManager />);
+    setStreamManagerOpen(true);
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("twitch_users_info", { ids: ["8"] }),
+    );
+    expect(invoke).not.toHaveBeenCalledWith(
+      "twitch_get_ad_schedule",
+      undefined,
+    );
+  });
+
+  it("greys out ads and polls with the reason for a channel that cannot use them", async () => {
+    signIn({ user_id: "8" });
+    render(() => <StreamManager />);
+    setStreamManagerOpen(true);
+    setStreamManagerTab("ads");
+    const note = await screen.findByRole("note");
+    expect(note.textContent).toContain(
+      "Ads are for Twitch Affiliates and Partners.",
+    );
+    expect((note.nextElementSibling as HTMLElement).inert).toBe(true);
+    fireEvent.click(
+      screen.getByRole("button", { name: "How to reach Affiliate" }),
+    );
+    expect(openUrl).toHaveBeenCalledWith(AFFILIATE_GUIDE);
+    setStreamManagerTab("polls");
+    expect((await screen.findByRole("note")).textContent).toContain(
+      "Polls and predictions are for Twitch Affiliates and Partners.",
+    );
+  });
+
+  it("keeps ads and polls usable for an affiliate", async () => {
+    signIn();
+    render(() => <StreamManager />);
+    setStreamManagerOpen(true);
+    setStreamManagerTab("ads");
+    await waitFor(() => expect(ownChannelMonetized()).toBe(true));
+    expect(screen.queryByRole("note")).toBeNull();
   });
 
   it("resizes with the keyboard and by dragging, and remembers it", () => {
