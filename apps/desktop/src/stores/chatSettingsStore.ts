@@ -1,4 +1,4 @@
-// Room modes for the active channel, as Twitch reports them. Loaded when
+// Room modes for one channel, as Twitch reports them. Loaded when
 // the modes panel opens and after every moderator action that changes a
 // mode, so the panel never shows a stale state after someone else flips
 // slow mode. The commands are injected for tests.
@@ -86,15 +86,6 @@ export function createChatSettingsStore(
   };
 }
 
-const defaultStore = createChatSettingsStore();
-export const chatSettings = defaultStore.settings;
-export const chatSettingsError = defaultStore.error;
-export const chatSettingsBusy = defaultStore.busy;
-export const loadChatSettings = defaultStore.load;
-export const applyChatSettings = defaultStore.apply;
-export const clearChatSettings = defaultStore.clear;
-
-/** Mod actions that change a room mode, so the panel refreshes on them. */
 export const MODE_ACTIONS = new Set([
   "slow",
   "slowoff",

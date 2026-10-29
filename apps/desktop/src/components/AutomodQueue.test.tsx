@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import type { HeldMessage } from "../lib/chatEvents";
 
-vi.mock("../stores/channelStore", () => ({
-  activeChannel: () => ({ id: "1", display_name: "Chan" }),
+vi.mock("../lib/chatSession", () => ({
+  useSession: () => () => ({ channel: { id: "1", display_name: "Chan" } }),
 }));
 const manage =
   vi.fn<(channel: string, id: string, action: string) => Promise<void>>();

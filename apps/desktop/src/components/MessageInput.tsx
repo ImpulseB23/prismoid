@@ -32,7 +32,7 @@ import {
 } from "../lib/completion";
 import { buildOptimisticMessage, type EmoteMeta } from "../stores/chatStore";
 import { useSession } from "../lib/chatSession";
-import { activeChannel, channelBanned } from "../stores/channelStore";
+import { channelBannedIn } from "../stores/channelStore";
 import { bannedText } from "../lib/chatAccess";
 import { lookupUser, formatChannelError } from "../lib/twitchChannel";
 import { banUser, timeoutUser, unbanUser } from "../lib/twitchAuth";
@@ -49,7 +49,6 @@ import {
   ownDisplayName,
 } from "../stores/ownIdentityStore";
 import { currentUserId, moderationNeedsReconnect } from "../stores/authStore";
-import { chatSettings } from "../stores/chatSettingsStore";
 import { modActionsFor } from "../stores/modLogStore";
 import {
   COUNTER_FROM,
@@ -57,7 +56,7 @@ import {
   slowModeLeft,
   timeoutLeft,
 } from "../lib/composerMeta";
-import { canModerate } from "../stores/roleStore";
+import { canModerateIn } from "../stores/roleStore";
 import { formatSeconds } from "../lib/slashCommands";
 import EmotePicker from "./EmotePicker";
 
@@ -80,6 +79,14 @@ const HISTORY_LIMIT = 50;
 
 const MessageInput: Component<Props> = (props) => {
   const session = useSession();
+  const banned = () => {
+    const c = session().channel;
+    return c !== null && channelBannedIn(c.id);
+  };
+  const moderates = () => {
+    const c = session().channel;
+    return c !== null && canModerateIn(c.id);
+  };
   const [text, setText] = createSignal("");
   const [caret, setCaret] = createSignal(0);
   const [status, setStatus] = createSignal<string | null>(null);
@@ -105,15 +112,15 @@ const MessageInput: Component<Props> = (props) => {
   const [now, setNow] = createSignal(Date.now());
 
   const role = () => {
-    const c = activeChannel();
+    const c = session().channel;
     if (c && c.id === currentUserId()) return "Streamer";
-    return canModerate() ? "Mod" : null;
+    return moderates() ? "Mod" : null;
   };
   const slowLeft = () => {
-    const c = activeChannel();
+    const c = session().channel;
     return c
       ? slowModeLeft(
-          chatSettings(),
+          session().roomModes.settings(),
           lastSent().get(c.id),
           now(),
           role() !== null,
@@ -121,7 +128,7 @@ const MessageInput: Component<Props> = (props) => {
       : 0;
   };
   const timedOutLeft = () => {
-    const c = activeChannel();
+    const c = session().channel;
     const me = currentUserId();
     return c && me ? timeoutLeft(modActionsFor(me), c.id, now()) : 0;
   };
@@ -135,8 +142,8 @@ const MessageInput: Component<Props> = (props) => {
   });
 
   const canSend = () =>
-    activeChannel() !== null &&
-    !channelBanned() &&
+    session().channel !== null &&
+    !banned() &&
     slowLeft() === 0 &&
     normalizeOutgoing(text()) !== null;
 
@@ -214,7 +221,7 @@ const MessageInput: Component<Props> = (props) => {
   };
 
   const runCommand = async (command: SlashCommand) => {
-    const channel = activeChannel();
+    const channel = session().channel;
     if (!channel) return;
     const seq = ++lastSubmitSeq;
     const report = (message: string) => {
@@ -257,7 +264,7 @@ const MessageInput: Component<Props> = (props) => {
   };
 
   const submit = () => {
-    const channel = activeChannel();
+    const channel = session().channel;
     // Kept for Twitch's answer: by then the pane may show another channel,
     // and the message still belongs to the session it went into.
     const store = session().chat;
@@ -270,7 +277,7 @@ const MessageInput: Component<Props> = (props) => {
     let body = parsed.kind === "message" ? parsed.text : "";
     if (parsed.kind === "command") {
       if (parsed.command.kind !== "me") {
-        if (!canModerate()) {
+        if (!moderates()) {
           setStatus(
             moderationNeedsReconnect()
               ? "Moderation needs new Twitch permissions. Reconnect in Settings."
@@ -417,9 +424,9 @@ const MessageInput: Component<Props> = (props) => {
   };
 
   const placeholder = () => {
-    const c = activeChannel();
+    const c = session().channel;
     if (!c) return "Pick a channel to chat";
-    return channelBanned() ? bannedText(c.display_name) : "Send a message";
+    return banned() ? bannedText(c.display_name) : "Send a message";
   };
 
   return (
@@ -515,7 +522,7 @@ const MessageInput: Component<Props> = (props) => {
           spellcheck={false}
           value={text()}
           placeholder={placeholder()}
-          disabled={activeChannel() === null || channelBanned()}
+          disabled={session().channel === null || banned()}
           onInput={(e) => {
             setDraft(
               e.currentTarget.value,
@@ -532,7 +539,7 @@ const MessageInput: Component<Props> = (props) => {
           aria-label="Emotes"
           title="Emotes"
           aria-expanded={pickerOpen()}
-          disabled={activeChannel() === null || channelBanned()}
+          disabled={session().channel === null || banned()}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => setPickerOpen((v) => !v)}
         >
@@ -587,7 +594,7 @@ const MessageInput: Component<Props> = (props) => {
       </div>
       <Show
         when={
-          activeChannel() &&
+          session().channel &&
           (timedOutLeft() > 0 || slowLeft() > 0 || left() <= COUNTER_FROM)
         }
       >
