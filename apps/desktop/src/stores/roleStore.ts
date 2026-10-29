@@ -9,12 +9,18 @@ import {
   type ModeratedChannel,
 } from "../lib/twitchChannel";
 import { activeChannel } from "./channelStore";
-import { currentUserId, moderationNeedsReconnect } from "./authStore";
+import {
+  WARN_SCOPE,
+  currentUserId,
+  missingScopes,
+  moderationNeedsReconnect,
+} from "./authStore";
 
 export interface RoleStore {
   /** Replaces the moderated set from Helix. Resolves false when the lookup failed. */
   load: () => Promise<boolean>;
   isModeratorOf: (channelId: string) => boolean;
+  moderatesAny: () => boolean;
   noteModerator: (channelId: string) => void;
   clear: () => void;
 }
@@ -48,6 +54,7 @@ export function createRoleStore(
   return {
     load,
     isModeratorOf: (channelId) => moderated().has(channelId),
+    moderatesAny: () => moderated().size > 0,
     noteModerator,
     clear: () => {
       generation++;
@@ -60,6 +67,18 @@ const defaultStore = createRoleStore();
 export const loadModeratedChannels = defaultStore.load;
 export const noteModerator = defaultStore.noteModerator;
 export const clearRoles = defaultStore.clear;
+
+/**
+ * Missing scopes worth a reconnect prompt. Warn's scope is only asked of
+ * people who moderate someone else's chat; a streamer moderating just
+ * their own is asked the first time they warn.
+ */
+export function reconnectScopes(): string[] {
+  const missing = missingScopes();
+  return defaultStore.moderatesAny()
+    ? missing
+    : missing.filter((s) => s !== WARN_SCOPE);
+}
 
 /**
  * Whether moderation controls should show for the active channel: the

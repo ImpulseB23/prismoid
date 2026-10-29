@@ -445,6 +445,18 @@ func TestHandleBanUser_MissingTargetIgnored(t *testing.T) {
 	}
 }
 
+func TestHandleWarnUser_MissingReasonIgnored(t *testing.T) {
+	logger, buf := bufLogger()
+	notify, _, payloads := captureNotify()
+	HandleWarnUser(context.Background(), control.Command{Cmd: "warn_user", BroadcasterID: "b1", UserID: "u", ClientID: "c", Token: "t", TargetUserID: "x", RequestID: 9}, notify, logger)
+	if !strings.Contains(buf.String(), "missing required field") {
+		t.Errorf("expected warn about missing field, got %s", buf.String())
+	}
+	if len(*payloads) != 1 || (*payloads)[0].Ok || (*payloads)[0].RequestID != 9 {
+		t.Fatalf("unexpected payloads: %#v", *payloads)
+	}
+}
+
 func TestHandleUnbanUser_MissingTargetIgnored(t *testing.T) {
 	logger, buf := bufLogger()
 	notify, _, payloads := captureNotify()
@@ -508,6 +520,51 @@ func TestHandleDeleteMessage_MissingMessageIDIgnored(t *testing.T) {
 	if !strings.Contains(buf.String(), "missing required field") {
 		t.Errorf("expected warn about missing field, got %s", buf.String())
 	}
+	if len(*payloads) != 1 || (*payloads)[0].Ok {
+		t.Fatalf("unexpected payloads: %#v", *payloads)
+	}
+}
+
+func TestHandleWarnUser_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/moderation/warnings" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.String())
+		}
+		q := r.URL.Query()
+		if q.Get("broadcaster_id") != "b1" || q.Get("moderator_id") != "u1" {
+			t.Fatalf("unexpected query: %s", r.URL.RawQuery)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	prev := twitchHelixBase
+	twitchHelixBase = srv.URL
+	defer func() { twitchHelixBase = prev }()
+	notify, msgTypes, payloads := captureNotify()
+
+	HandleWarnUser(context.Background(), control.Command{
+		Cmd:           "warn_user",
+		BroadcasterID: "b1",
+		UserID:        "u1",
+		ClientID:      "cid",
+		Token:         "tok",
+		TargetUserID:  "x",
+		Reason:        "no spoilers",
+		RequestID:     5,
+	}, notify, zerolog.Nop())
+
+	if len(*msgTypes) != 1 || (*msgTypes)[0] != "mod_action_result" {
+		t.Fatalf("expected mod_action_result, got %#v", *msgTypes)
+	}
+	if len(*payloads) != 1 || !(*payloads)[0].Ok || (*payloads)[0].RequestID != 5 {
+		t.Fatalf("unexpected payloads: %#v", *payloads)
+	}
+}
+
+func TestHandleWarnUser_MissingAuthIgnored(t *testing.T) {
+	notify, _, payloads := captureNotify()
+	HandleWarnUser(context.Background(), control.Command{Cmd: "warn_user", TargetUserID: "x", Reason: "r"}, notify, zerolog.Nop())
 	if len(*payloads) != 1 || (*payloads)[0].Ok {
 		t.Fatalf("unexpected payloads: %#v", *payloads)
 	}

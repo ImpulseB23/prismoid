@@ -19,7 +19,7 @@ import {
   type SidecarState,
   type SidecarStatus,
 } from "../lib/sidecarStatus";
-import { missingScopes } from "../stores/authStore";
+import { reconnectScopes } from "../stores/roleStore";
 import {
   applyWindowSettings,
   reapplyZoom,
@@ -262,7 +262,7 @@ const Header: Component<HeaderProps> = (props) => {
 
   const attentions = createMemo(() =>
     settingsAttention({
-      missingScopes: missingScopes(),
+      missingScopes: reconnectScopes(),
       update: updateState(),
       sidecar: state(),
       unseenUpdate: whatsNewUnseen() ? updatedTo() : null,

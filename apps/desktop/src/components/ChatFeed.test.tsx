@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render } from "@solidjs/testing-library";
+import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import type { ChatMessage } from "../stores/chatStore";
 import type { PreparedMessage, TextMetrics } from "../lib/messageLayout";
 
@@ -12,6 +12,11 @@ vi.mock("@tauri-apps/api/event", () => ({
   },
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }));
+const role = { mod: false };
+vi.mock("../stores/roleStore", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../stores/roleStore")>()),
+  canModerate: () => role.mod,
+}));
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({ requestUserAttention: vi.fn() }),
   UserAttentionType: { Informational: 2 },
@@ -57,6 +62,11 @@ vi.mock("../lib/messageLayout", async (importOriginal) => ({
 }));
 
 const { clearMessages } = await import("../stores/chatStore");
+const { invoke } = await import("@tauri-apps/api/core");
+const { closeContextMenu, contextMenu } =
+  await import("../stores/contextMenuStore");
+const { closeModPopover, modPopover } =
+  await import("../stores/modPopoverStore");
 const { updateSettings } = await import("../stores/settingsStore");
 const { default: ChatFeed } = await import("./ChatFeed");
 
@@ -94,7 +104,7 @@ function rowFor(container: HTMLElement, id: string): HTMLElement {
   return row;
 }
 
-describe("ChatFeed first messages", () => {
+describe("ChatFeed", () => {
   beforeEach(() => {
     vi.stubGlobal(
       "ResizeObserver",
@@ -114,6 +124,71 @@ describe("ChatFeed first messages", () => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     await updateSettings({ highlightFirstMessages: true });
+    role.mod = false;
+    closeModPopover();
+  });
+
+  it("opens the timeout picker and the warn box from a mod's hover bar", async () => {
+    role.mod = true;
+    render(() => <ChatFeed login="me" />);
+    await tick();
+    emit("chat_messages", [msg("rude")]);
+    await tick();
+
+    fireEvent.click(screen.getByRole("button", { name: "Timeout" }));
+    const timeout = modPopover();
+    if (timeout?.kind !== "timeout") throw new Error("no timeout picker");
+    expect(timeout.target).toBe("Viewer");
+    timeout.submit(600);
+    expect(invoke).toHaveBeenCalledWith("twitch_timeout_user", {
+      channelId: "chan",
+      targetUserId: "7",
+      durationSeconds: 600,
+      reason: undefined,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Warn" }));
+    const warn = modPopover();
+    if (warn?.kind !== "warn") throw new Error("no warn box");
+    warn.submit("no spoilers");
+    expect(invoke).toHaveBeenCalledWith("twitch_warn_user", {
+      channelId: "chan",
+      targetUserId: "7",
+      reason: "no spoilers",
+    });
+  });
+
+  it("opens both from the right-click menu at the pointer", async () => {
+    role.mod = true;
+    const { container } = render(() => <ChatFeed login="me" />);
+    await tick();
+    emit("chat_messages", [msg("menu")]);
+    await tick();
+    const pick = (label: string) => {
+      fireEvent.contextMenu(rowFor(container, "menu"), {
+        clientX: 40,
+        clientY: 50,
+      });
+      const entry = contextMenu()?.items.find(
+        (i) => i.kind === "item" && i.label === label,
+      );
+      if (entry?.kind !== "item") throw new Error(`no ${label}`);
+      closeContextMenu();
+      entry.onSelect();
+    };
+    pick("Custom timeout…");
+    expect(modPopover()).toMatchObject({ kind: "timeout", x: 40, y: 50 });
+    pick("Warn…");
+    expect(modPopover()).toMatchObject({ kind: "warn", x: 40, y: 50 });
+  });
+
+  it("hides the mod buttons from viewers", async () => {
+    render(() => <ChatFeed login="me" />);
+    await tick();
+    emit("chat_messages", [msg("calm")]);
+    await tick();
+    expect(screen.queryByRole("button", { name: "Warn" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Timeout" })).toBeNull();
   });
 
   it("marks a row whether the flag lands before or after it", async () => {

@@ -15,6 +15,10 @@ export interface MessageMenuActions {
   toggleIgnore: () => void;
   deleteMessage: () => void;
   timeout: (seconds: number) => void;
+  /** Opens the length picker. */
+  customTimeout: () => void;
+  /** Opens the reason box. */
+  warn: () => void;
   ban: () => void;
   unban: () => void;
 }
@@ -62,11 +66,13 @@ export function messageMenuItems(
   }
   if (deletable) items.push(item("Delete message", act.deleteMessage, true));
   if (ctx.canModerate && hasUser && !ctx.own) {
+    items.push(item("Warn…", act.warn));
     for (const seconds of ctx.timeouts) {
       items.push(
         item(`Timeout ${formatSeconds(seconds)}`, () => act.timeout(seconds)),
       );
     }
+    items.push(item("Custom timeout…", act.customTimeout));
     items.push(item("Ban", act.ban, true));
     items.push(item("Unban", act.unban));
   }

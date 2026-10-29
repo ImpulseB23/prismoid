@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"time"
+	"unicode/utf8"
 )
 
 const defaultHelixBase = "https://api.twitch.tv/helix"
@@ -502,6 +503,34 @@ func (c *HelixClient) TimeoutUser(ctx context.Context, broadcasterID, moderatorI
 	}
 	req := banUserRequest{Data: banUserData{UserID: targetUserID, Duration: durationSeconds, Reason: reason}}
 	return c.Post(ctx, moderationBansPath(broadcasterID, moderatorID), req, nil)
+}
+
+// MaxWarningReasonChars is Twitch's cap on a warning's reason.
+const MaxWarningReasonChars = 500
+
+type warnUserRequest struct {
+	Data warnUserData `json:"data"`
+}
+
+type warnUserData struct {
+	UserID string `json:"user_id"`
+	Reason string `json:"reason"`
+}
+
+// WarnUser makes the target acknowledge reason before they can chat again.
+// Twitch requires the reason.
+func (c *HelixClient) WarnUser(ctx context.Context, broadcasterID, moderatorID, targetUserID, reason string) error {
+	if broadcasterID == "" || moderatorID == "" || targetUserID == "" {
+		return errors.New("twitch helix: missing broadcaster, moderator, or target user")
+	}
+	if reason == "" || utf8.RuneCountInString(reason) > MaxWarningReasonChars {
+		return fmt.Errorf("twitch helix: warning reason must be 1 to %d characters", MaxWarningReasonChars)
+	}
+	q := url.Values{}
+	q.Set("broadcaster_id", broadcasterID)
+	q.Set("moderator_id", moderatorID)
+	req := warnUserRequest{Data: warnUserData{UserID: targetUserID, Reason: reason}}
+	return c.Post(ctx, "/moderation/warnings?"+q.Encode(), req, nil)
 }
 
 func (c *HelixClient) UnbanUser(ctx context.Context, broadcasterID, moderatorID, targetUserID string) error {

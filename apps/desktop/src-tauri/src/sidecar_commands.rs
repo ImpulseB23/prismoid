@@ -428,6 +428,19 @@ fn validate_timeout_seconds(duration_seconds: u32) -> Result<u32, SendCommandErr
     Ok(duration_seconds)
 }
 
+pub const MAX_WARNING_REASON_CHARS: usize = 500;
+
+fn validate_warning_reason(reason: &str) -> Result<&str, SendCommandError> {
+    let trimmed = reason.trim();
+    if trimmed.is_empty() || trimmed.chars().count() > MAX_WARNING_REASON_CHARS {
+        return Err(SendCommandError::Helix {
+            code: "invalid_warning_reason".into(),
+            message: format!("reason must be 1 to {MAX_WARNING_REASON_CHARS} characters"),
+        });
+    }
+    Ok(trimmed)
+}
+
 /// One request/response exchange with the sidecar using `tokens`.
 async fn round_trip(
     sender: &SidecarCommandSender,
@@ -609,6 +622,36 @@ pub async fn twitch_timeout_user(
                 user_id,
                 target_user_id: &target_user_id,
                 duration_seconds,
+                reason: &reason,
+                request_id,
+            })
+        },
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn twitch_warn_user(
+    auth: State<'_, AuthState>,
+    sender: State<'_, SidecarCommandSender>,
+    channel_id: String,
+    target_user_id: String,
+    reason: String,
+) -> Result<(), SendCommandError> {
+    let target_user_id = validate_required_id(&target_user_id, "target_user_id")?.to_owned();
+    let reason = validate_warning_reason(&reason)?.to_owned();
+    send_twitch_mod_command(
+        auth,
+        sender,
+        channel_id,
+        |access_token, broadcaster_id, user_id, request_id| {
+            build_twitch_user_mod_action_line(TwitchUserModActionArgs {
+                cmd: "warn_user",
+                client_id: TWITCH_CLIENT_ID,
+                access_token,
+                broadcaster_id,
+                user_id,
+                target_user_id: &target_user_id,
                 reason: &reason,
                 request_id,
             })
@@ -918,6 +961,19 @@ mod tests {
             SendCommandError::Json { message } => assert_eq!(message, "target_user_id is required"),
             other => panic!("expected Json, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn validate_warning_reason_requires_text_within_the_cap() {
+        assert!(validate_warning_reason("   ").is_err());
+        assert_eq!(
+            validate_warning_reason("  no spoilers ").unwrap(),
+            "no spoilers"
+        );
+        let long = "é".repeat(MAX_WARNING_REASON_CHARS + 1);
+        assert!(validate_warning_reason(&long).is_err());
+        let max = "é".repeat(MAX_WARNING_REASON_CHARS);
+        assert!(validate_warning_reason(&max).is_ok());
     }
 
     #[test]
