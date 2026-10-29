@@ -7,16 +7,19 @@ import {
   accountAgeDays,
   createUserInfoStore,
   formatJoined,
+  isMonetized,
   isNewAccount,
 } from "./userInfoStore";
+import type { UserInfo } from "../lib/twitchChannel";
 
-const user = (id: string, createdAt = "2020-01-01T00:00:00Z") => ({
+const user = (id: string, createdAt = "2020-01-01T00:00:00Z"): UserInfo => ({
   id,
   login: `u${id}`,
   display_name: `U${id}`,
   profile_image_url: "",
   description: "",
   created_at: createdAt,
+  broadcaster_type: "",
 });
 
 function manualSchedule() {
@@ -139,6 +142,17 @@ describe("account age", () => {
     expect(isNewAccount(user("1", "2026-10-20T00:00:00Z"), now)).toBe(true);
     expect(isNewAccount(user("1", "2026-10-01T00:00:00Z"), now)).toBe(false);
     expect(isNewAccount(undefined, now)).toBe(false);
+  });
+
+  it("tells affiliates and partners from everyone else", () => {
+    expect(isMonetized({ ...user("1"), broadcaster_type: "affiliate" })).toBe(
+      true,
+    );
+    expect(isMonetized({ ...user("1"), broadcaster_type: "partner" })).toBe(
+      true,
+    );
+    expect(isMonetized(user("1"))).toBe(false);
+    expect(isMonetized(undefined)).toBeUndefined();
   });
 
   it("formats the joined line by age", () => {

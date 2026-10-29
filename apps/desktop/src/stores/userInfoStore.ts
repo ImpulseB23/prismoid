@@ -108,6 +108,11 @@ export function isNewAccount(info: UserInfo | undefined, now: number): boolean {
   return days !== null && days < NEW_ACCOUNT_DAYS;
 }
 
+/** Affiliate or Partner, so Twitch lets them run ads, polls and predictions; undefined until their profile has loaded. */
+export function isMonetized(info: UserInfo | undefined): boolean | undefined {
+  return info === undefined ? undefined : info.broadcaster_type !== "";
+}
+
 /** "Joined today", "Joined 3 days ago", "Joined Mar 2019". */
 export function formatJoined(createdAt: string, now: number): string {
   const days = accountAgeDays(createdAt, now);

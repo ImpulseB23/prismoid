@@ -109,6 +109,7 @@ describe("ChannelPicker", () => {
       profile_image_url: "https://img/home.png",
       description: "",
       created_at: "",
+      broadcaster_type: "",
     });
     (await setup()).openPicker();
     await screen.findByText("BIG");
