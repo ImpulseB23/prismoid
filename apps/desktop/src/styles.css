@@ -1108,6 +1108,29 @@ option::checkmark {
   white-space: nowrap;
 }
 
+/* Like Chatterino's user popup: the time leads the message on one line,
+   and rows sit close together. */
+.msg-row--compact {
+  padding: 3px 8px;
+}
+
+.msg-row--compact .msg-row__main {
+  display: block;
+}
+
+.msg-row--compact .msg-row__meta {
+  display: inline;
+  margin-right: 6px;
+}
+
+.msg-row--compact .msg-row__time {
+  margin-left: 0;
+}
+
+.msg-row--compact .msg-row__text {
+  line-height: 1.4;
+}
+
 .msg-row__detail {
   min-width: 0;
   overflow: hidden;

@@ -17,6 +17,7 @@ import UserCard, { type CardUser } from "./components/UserCard";
 import { sendJump, sendMention } from "./lib/cardBridge";
 import { showCardUser, startCardSession } from "./lib/cardSession";
 import { authStatus } from "./stores/authStore";
+import { reapplyZoom, settings } from "./stores/settingsStore";
 import {
   cardReady,
   closeUserCard,
@@ -105,6 +106,32 @@ const UserCardWindow: Component = () => {
       },
     ),
   );
+
+  // The same zoom as the main window: on open, whenever it changes, and on
+  // a display with another scale.
+  createEffect(
+    on(
+      () => settings().zoom,
+      () => void reapplyZoom().catch(report("failed to apply card zoom")),
+    ),
+  );
+  onMount(() => {
+    let off: (() => void) | undefined;
+    let disposed = false;
+    onCleanup(() => {
+      disposed = true;
+      off?.();
+    });
+    getCurrentWindow()
+      .onScaleChanged(
+        () => void reapplyZoom().catch(report("failed to apply card zoom")),
+      )
+      .then((next) => {
+        if (disposed) next();
+        else off = next;
+      })
+      .catch(report("failed to follow card scale"));
+  });
 
   const login = () => {
     const a = authStatus();

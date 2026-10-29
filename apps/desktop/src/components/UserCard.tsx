@@ -599,6 +599,7 @@ const UserCard: Component<UserCardProps> = (props) => {
                       <MessageRow
                         msg={m}
                         hideName
+                        compact
                         onClick={() => {
                           close();
                           props.onJump(m);
