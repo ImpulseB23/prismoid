@@ -168,7 +168,11 @@ const UpdateRow: Component = () => {
         {(label) => (
           <button
             type="button"
-            class="btn btn--outline"
+            class="btn"
+            classList={{
+              "btn--primary": updateState().kind === "available",
+              "btn--outline": updateState().kind !== "available",
+            }}
             onClick={() =>
               void (updateState().kind === "available"
                 ? installUpdate()
