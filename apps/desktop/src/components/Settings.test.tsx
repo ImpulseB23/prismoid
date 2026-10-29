@@ -239,6 +239,7 @@ describe("Settings", () => {
       [/Stream video/, "streamVideo"],
       [/Stream manager/, "streamManager"],
       [/Mod tools/, "modTools"],
+      [/^7TV/, "sevenTV"],
       [/Mention alerts/, "mentionAlerts"],
     ] as const) {
       fireEvent.click(screen.getByRole("checkbox", { name }));

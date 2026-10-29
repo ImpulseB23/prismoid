@@ -40,6 +40,8 @@ export interface Settings {
   streamVideo: boolean;
   streamManager: boolean;
   modTools: boolean;
+  /** 7TV emotes and, with showPaints, its name paints. */
+  sevenTV: boolean;
   /** Hide the live viewer count in the stream bar. */
   hideViewers: boolean;
   hideUptime: boolean;
@@ -87,6 +89,9 @@ export interface Settings {
   streamManagerHeight: number;
 }
 
+/** Paints show only while 7TV itself is on. */
+export const paintsOn = (s: Settings) => s.sevenTV && s.showPaints;
+
 /** Bounds for streamManagerHeight. */
 export const STREAM_MANAGER_HEIGHT = { min: 0.35, max: 0.85 } as const;
 
@@ -127,6 +132,7 @@ export const DEFAULT_SETTINGS: Settings = {
   streamVideo: true,
   streamManager: true,
   modTools: true,
+  sevenTV: true,
   hideViewers: false,
   hideUptime: false,
   hideChatRate: false,
@@ -170,6 +176,8 @@ export interface SettingsAppliers {
   streamManager: (value: boolean) => Promise<void>;
   /** Starts or stops the moderation and AutoMod feeds. */
   modTools: (value: boolean) => Promise<void>;
+  /** Has the sidecar fetch 7TV emote sets or leave them out. */
+  sevenTV: (value: boolean) => Promise<void>;
   theme: (value: Theme) => Promise<void>;
 }
 
@@ -207,6 +215,7 @@ const defaultAppliers: SettingsAppliers = {
     invoke("set_twitch_feed", { feed: "broadcaster", enabled: v }),
   modTools: (v) =>
     invoke("set_twitch_feed", { feed: "moderation", enabled: v }),
+  sevenTV: (v) => invoke("set_seventv_emotes", { enabled: v }),
   // "system" hands the title bar back to Windows; midnight shares dark chrome.
   theme: (v) =>
     getCurrentWindow().setTheme(
@@ -244,8 +253,11 @@ export function createSettingsStore(
     if (next.highlightFirstMessages !== current.highlightFirstMessages) {
       await appliers.highlightFirstMessages(next.highlightFirstMessages);
     }
-    if (next.showPaints !== current.showPaints) {
-      await appliers.showPaints(next.showPaints);
+    if (paintsOn(next) !== paintsOn(current)) {
+      await appliers.showPaints(paintsOn(next));
+    }
+    if (next.sevenTV !== current.sevenTV) {
+      await appliers.sevenTV(next.sevenTV);
     }
     if (next.streamManager !== current.streamManager) {
       await appliers.streamManager(next.streamManager);
@@ -285,7 +297,8 @@ export function createSettingsStore(
     if (!s.chatBacklog) await appliers.chatBacklog(false);
     if (s.closeToTray) await appliers.closeToTray(true);
     if (!s.highlightFirstMessages) await appliers.highlightFirstMessages(false);
-    if (!s.showPaints) await appliers.showPaints(false);
+    if (!paintsOn(s)) await appliers.showPaints(false);
+    if (!s.sevenTV) await appliers.sevenTV(false);
     if (!s.streamManager) await appliers.streamManager(false);
     if (!s.modTools) await appliers.modTools(false);
     if (s.theme !== "system") await appliers.theme(s.theme);
@@ -361,6 +374,8 @@ function readSettings(storage: StorageLike | null): Settings {
         typeof p.modTools === "boolean"
           ? p.modTools
           : DEFAULT_SETTINGS.modTools,
+      sevenTV:
+        typeof p.sevenTV === "boolean" ? p.sevenTV : DEFAULT_SETTINGS.sevenTV,
       hideViewers:
         typeof p.hideViewers === "boolean"
           ? p.hideViewers

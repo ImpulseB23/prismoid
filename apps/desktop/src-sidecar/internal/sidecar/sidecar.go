@@ -218,6 +218,7 @@ func RunCommandLoop(ctx context.Context, scanner *bufio.Scanner, encoder *json.E
 	session := twitch.NewSession(ctx, out, logger.With().Str("component", "eventsub").Logger(), notify)
 	firsts := newFirstMessages(ctx, notify, logger)
 	cosmetics := emotes.NewSevenTVEvents(ctx, notify, logger.With().Str("component", "7tv-events").Logger())
+	bundles := newEmoteBundles(notify, logger)
 
 	// Heartbeat counter is scoped to this loop's lifetime. Monotonic gaps let
 	// the host watchdog detect missed ticks even if the underlying clock is
@@ -243,7 +244,7 @@ func RunCommandLoop(ctx context.Context, scanner *bufio.Scanner, encoder *json.E
 				return err
 			}
 		case cmd := <-cmdCh:
-			DispatchCommand(ctx, cmd, clients, session, firsts, cosmetics, out, notify, logger)
+			DispatchCommand(ctx, cmd, clients, session, firsts, cosmetics, bundles, out, notify, logger)
 		}
 	}
 }
@@ -271,22 +272,30 @@ func makeNotify(encoder *json.Encoder, encoderMu *sync.Mutex, logger zerolog.Log
 }
 
 // DispatchCommand routes a control.Command to its handler.
-func DispatchCommand(ctx context.Context, cmd control.Command, clients map[string]context.CancelFunc, session *twitch.Session, firsts *firstMessages, cosmetics *emotes.SevenTVEvents, out chan<- []byte, notify twitch.Notify, logger zerolog.Logger) {
+func DispatchCommand(ctx context.Context, cmd control.Command, clients map[string]context.CancelFunc, session *twitch.Session, firsts *firstMessages, cosmetics *emotes.SevenTVEvents, bundles *emoteBundles, out chan<- []byte, notify twitch.Notify, logger zerolog.Logger) {
 	switch cmd.Cmd {
 	case "twitch_connect":
-		HandleTwitchConnect(ctx, cmd, clients, session, firsts, cosmetics, out, notify, logger)
+		HandleTwitchConnect(ctx, cmd, clients, session, firsts, cosmetics, bundles, out, notify, logger)
 	case "twitch_disconnect":
-		HandleTwitchDisconnect(cmd, clients, session, firsts, cosmetics, logger)
+		HandleTwitchDisconnect(cmd, clients, session, firsts, cosmetics, bundles, logger)
 	case "first_messages":
 		firsts.setEnabled(cmd.Enabled)
 	case "seventv_paints":
 		cosmetics.SetEnabled(cmd.Enabled)
 	case "twitch_feed":
 		HandleTwitchFeed(cmd, session, logger)
+	case "seventv_emotes":
+		bundles.setSevenTV(cmd.Enabled)
 	case "token_refresh":
 		HandleTokenRefresh(cmd, session, logger)
+		if cmd.Token != "" {
+			bundles.setToken(cmd.Token)
+		}
 	case "twitch_resubscribe":
 		HandleTwitchResubscribe(cmd, session, logger)
+		if cmd.Token != "" {
+			bundles.setToken(cmd.Token)
+		}
 	case "youtube_connect":
 		HandleYouTubeConnect(ctx, cmd, clients, out, notify, logger)
 	case "youtube_disconnect":
@@ -715,7 +724,7 @@ func youtubeErrorCode(err error) string {
 // and the channel joins the 7TV EventAPI socket that carries name paints.
 // Each channel gets its own cancel context: twitch_disconnect ends an
 // in-flight bundle fetch and the IRC fallback reader, if one is up.
-func HandleTwitchConnect(ctx context.Context, cmd control.Command, clients map[string]context.CancelFunc, session *twitch.Session, firsts *firstMessages, cosmetics *emotes.SevenTVEvents, out chan<- []byte, notify twitch.Notify, logger zerolog.Logger) {
+func HandleTwitchConnect(ctx context.Context, cmd control.Command, clients map[string]context.CancelFunc, session *twitch.Session, firsts *firstMessages, cosmetics *emotes.SevenTVEvents, bundles *emoteBundles, out chan<- []byte, notify twitch.Notify, logger zerolog.Logger) {
 	if _, exists := clients[cmd.BroadcasterID]; exists {
 		logger.Warn().Str("broadcaster", cmd.BroadcasterID).Msg("already connected, ignoring")
 		return
@@ -746,7 +755,7 @@ func HandleTwitchConnect(ctx context.Context, cmd control.Command, clients map[s
 		}()
 	})
 
-	go emoteFetchFn(clientCtx, cmd, notify, logger)
+	bundles.join(clientCtx, cmd)
 
 	cosmetics.SetUser(cmd.UserID)
 	cosmetics.Join(cmd.BroadcasterID)
@@ -755,7 +764,7 @@ func HandleTwitchConnect(ctx context.Context, cmd control.Command, clients map[s
 }
 
 // emoteFetchFn is the goroutine entry point for fetching an emote bundle on
-// twitch_connect. Package-level so tests can stub it to a no-op without
+// twitch_connect and when the 7TV switch flips. Package-level so tests can stub it to a no-op without
 // spinning up httptest servers for all four providers.
 var emoteFetchFn = FetchAndNotifyEmotes
 
@@ -767,11 +776,11 @@ var emoteFetchFn = FetchAndNotifyEmotes
 // An empty BroadcasterID is treated as "nothing to fetch" and the function
 // returns without emitting. A cancelled context (twitch_disconnect or parent
 // shutdown mid-fetch) short-circuits the emit alike.
-func FetchAndNotifyEmotes(ctx context.Context, cmd control.Command, notify twitch.Notify, logger zerolog.Logger) {
+func FetchAndNotifyEmotes(ctx context.Context, cmd control.Command, sevenTV bool, notify twitch.Notify, logger zerolog.Logger) {
 	if cmd.BroadcasterID == "" {
 		return
 	}
-	fetchAndEmit(ctx, buildFetcher(cmd), cmd.BroadcasterID, notify, logger)
+	fetchAndEmit(ctx, buildFetcher(cmd, sevenTV), cmd.BroadcasterID, notify, logger)
 }
 
 // fetchAndEmit is the test-friendly core of [FetchAndNotifyEmotes]: given an
@@ -809,11 +818,14 @@ func fetchAndEmit(ctx context.Context, f *emotes.Fetcher, broadcasterID string, 
 // Twitch Helix lookups require a client ID and bearer token; without them
 // the first-party sub-client is left nil and the fetcher skips those
 // endpoints entirely (third-party providers still run).
-func buildFetcher(cmd control.Command) *emotes.Fetcher {
+// buildFetcher leaves 7TV out while the user has it switched off.
+func buildFetcher(cmd control.Command, sevenTV bool) *emotes.Fetcher {
 	f := &emotes.Fetcher{
-		SevenTV: &emotes.SevenTVClient{},
-		BTTV:    &emotes.BTTVClient{},
-		FFZ:     &emotes.FFZClient{},
+		BTTV: &emotes.BTTVClient{},
+		FFZ:  &emotes.FFZClient{},
+	}
+	if sevenTV {
+		f.SevenTV = &emotes.SevenTVClient{}
 	}
 	if cmd.ClientID != "" && cmd.Token != "" {
 		f.Twitch = &emotes.TwitchClient{
@@ -825,7 +837,7 @@ func buildFetcher(cmd control.Command) *emotes.Fetcher {
 }
 
 // HandleTwitchDisconnect leaves a joined channel and cancels its work.
-func HandleTwitchDisconnect(cmd control.Command, clients map[string]context.CancelFunc, session *twitch.Session, firsts *firstMessages, cosmetics *emotes.SevenTVEvents, logger zerolog.Logger) {
+func HandleTwitchDisconnect(cmd control.Command, clients map[string]context.CancelFunc, session *twitch.Session, firsts *firstMessages, cosmetics *emotes.SevenTVEvents, bundles *emoteBundles, logger zerolog.Logger) {
 	cancelFn, exists := clients[cmd.BroadcasterID]
 	if !exists {
 		logger.Warn().Str("broadcaster", cmd.BroadcasterID).Msg("no active connection to disconnect")
@@ -836,6 +848,7 @@ func HandleTwitchDisconnect(cmd control.Command, clients map[string]context.Canc
 	session.Leave(cmd.BroadcasterID)
 	firsts.part(cmd.BroadcasterID)
 	cosmetics.Leave(cmd.BroadcasterID)
+	bundles.part(cmd.BroadcasterID)
 	logger.Info().Str("broadcaster", cmd.BroadcasterID).Msg("twitch channel left")
 }
 

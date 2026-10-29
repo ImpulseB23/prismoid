@@ -231,7 +231,7 @@ func TestHandleTwitchConnect_JoinsSession(t *testing.T) {
 	}
 
 	cosmetics := idleCosmetics(t)
-	HandleTwitchConnect(context.Background(), cmd, clients, session, idleFirsts(), cosmetics, out, func(string, any) {}, zerolog.Nop())
+	HandleTwitchConnect(context.Background(), cmd, clients, session, idleFirsts(), cosmetics, idleBundles(), out, func(string, any) {}, zerolog.Nop())
 
 	if _, ok := clients["broadcaster-1"]; !ok {
 		t.Fatal("expected channel to be registered")
@@ -260,7 +260,7 @@ func TestHandleTwitchConnect_RejectsDuplicate(t *testing.T) {
 	clients["broadcaster-1"] = func() { cancelled.Store(true) }
 
 	cmd := control.Command{Cmd: "twitch_connect", BroadcasterID: "broadcaster-1"}
-	HandleTwitchConnect(context.Background(), cmd, clients, session, idleFirsts(), idleCosmetics(t), out, func(string, any) {}, zerolog.Nop())
+	HandleTwitchConnect(context.Background(), cmd, clients, session, idleFirsts(), idleCosmetics(t), idleBundles(), out, func(string, any) {}, zerolog.Nop())
 
 	if cancelled.Load() {
 		t.Fatal("existing client cancel was overwritten")
@@ -283,7 +283,7 @@ func TestHandleTwitchDisconnect_CancelsAndLeaves(t *testing.T) {
 	clients["broadcaster-1"] = func() { cancelled.Store(true) }
 
 	cmd := control.Command{Cmd: "twitch_disconnect", BroadcasterID: "broadcaster-1"}
-	HandleTwitchDisconnect(cmd, clients, session, idleFirsts(), cosmetics, zerolog.Nop())
+	HandleTwitchDisconnect(cmd, clients, session, idleFirsts(), cosmetics, idleBundles(), zerolog.Nop())
 
 	if len(cosmetics.Joined()) != 0 {
 		t.Fatalf("expected 7tv events to leave, still joined: %v", cosmetics.Joined())
@@ -304,7 +304,7 @@ func TestHandleTwitchDisconnect_NoOpForUnknown(t *testing.T) {
 	cmd := control.Command{Cmd: "twitch_disconnect", BroadcasterID: "broadcaster-unknown"}
 
 	// should not panic
-	HandleTwitchDisconnect(cmd, clients, idleSession(t), idleFirsts(), idleCosmetics(t), zerolog.Nop())
+	HandleTwitchDisconnect(cmd, clients, idleSession(t), idleFirsts(), idleCosmetics(t), idleBundles(), zerolog.Nop())
 }
 
 func TestHandleTokenRefresh_UpdatesSession(t *testing.T) {
@@ -336,7 +336,7 @@ func TestDispatchCommand_RoutesTokenRefresh(t *testing.T) {
 	out := make(chan []byte, 1)
 	cmd := control.Command{Cmd: "token_refresh", Token: "new"}
 
-	DispatchCommand(context.Background(), cmd, clients, session, idleFirsts(), idleCosmetics(t), out, func(string, any) {}, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, clients, session, idleFirsts(), idleCosmetics(t), idleBundles(), out, func(string, any) {}, zerolog.Nop())
 
 	if got := session.AccessToken(); got != "new" {
 		t.Errorf("dispatch did not route token_refresh: token = %q", got)
@@ -348,7 +348,7 @@ func TestDispatchCommand_RoutesResubscribe(t *testing.T) {
 	session.Configure("u", "old", "cid")
 	cmd := control.Command{Cmd: "twitch_resubscribe", Token: "regranted"}
 
-	DispatchCommand(context.Background(), cmd, map[string]context.CancelFunc{}, session, idleFirsts(), idleCosmetics(t), make(chan []byte, 1), func(string, any) {}, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, map[string]context.CancelFunc{}, session, idleFirsts(), idleCosmetics(t), idleBundles(), make(chan []byte, 1), func(string, any) {}, zerolog.Nop())
 
 	if got := session.AccessToken(); got != "regranted" {
 		t.Errorf("dispatch did not route twitch_resubscribe: token = %q", got)
@@ -361,7 +361,7 @@ func TestDispatchCommand_RoutesTwitchFeed(t *testing.T) {
 	logger := zerolog.New(&logs)
 	dispatch := func(feed string) {
 		cmd := control.Command{Cmd: "twitch_feed", Feed: feed, Enabled: false}
-		DispatchCommand(context.Background(), cmd, map[string]context.CancelFunc{}, session, idleFirsts(), idleCosmetics(t), make(chan []byte, 1), func(string, any) {}, logger)
+		DispatchCommand(context.Background(), cmd, map[string]context.CancelFunc{}, session, idleFirsts(), idleCosmetics(t), idleBundles(), make(chan []byte, 1), func(string, any) {}, logger)
 	}
 
 	dispatch("broadcaster")
@@ -395,7 +395,7 @@ func TestDispatchCommand_RoutesConnect(t *testing.T) {
 	out := make(chan []byte, 1)
 	cmd := control.Command{Cmd: "twitch_connect", BroadcasterID: "b1"}
 
-	DispatchCommand(context.Background(), cmd, clients, session, idleFirsts(), idleCosmetics(t), out, func(string, any) {}, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, clients, session, idleFirsts(), idleCosmetics(t), idleBundles(), out, func(string, any) {}, zerolog.Nop())
 
 	if _, ok := clients["b1"]; !ok {
 		t.Fatal("expected connect to register client")
@@ -411,7 +411,7 @@ func TestDispatchCommand_RoutesDisconnect(t *testing.T) {
 	out := make(chan []byte, 1)
 	cmd := control.Command{Cmd: "twitch_disconnect", BroadcasterID: "b1"}
 
-	DispatchCommand(context.Background(), cmd, clients, idleSession(t), idleFirsts(), idleCosmetics(t), out, func(string, any) {}, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, clients, idleSession(t), idleFirsts(), idleCosmetics(t), idleBundles(), out, func(string, any) {}, zerolog.Nop())
 
 	if !cancelled.Load() {
 		t.Fatal("expected disconnect to cancel client")
@@ -424,7 +424,7 @@ func TestDispatchCommand_IgnoresUnknown(t *testing.T) {
 	cmd := control.Command{Cmd: "frobnicate"}
 
 	// should not panic, should not modify clients
-	DispatchCommand(context.Background(), cmd, clients, idleSession(t), idleFirsts(), idleCosmetics(t), out, func(string, any) {}, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, clients, idleSession(t), idleFirsts(), idleCosmetics(t), idleBundles(), out, func(string, any) {}, zerolog.Nop())
 
 	if len(clients) != 0 {
 		t.Fatalf("expected no clients, got %d", len(clients))
@@ -964,7 +964,7 @@ func TestRunWithIO_HappyPath(t *testing.T) {
 func stubEmoteFetcher(t *testing.T) func() {
 	t.Helper()
 	orig := emoteFetchFn
-	emoteFetchFn = func(context.Context, control.Command, twitch.Notify, zerolog.Logger) {}
+	emoteFetchFn = func(context.Context, control.Command, bool, twitch.Notify, zerolog.Logger) {}
 	return func() { emoteFetchFn = orig }
 }
 
@@ -974,7 +974,7 @@ func TestBuildFetcher_WithTwitchCredsPopulatesHelixClient(t *testing.T) {
 		BroadcasterID: "b1",
 		ClientID:      "cid",
 		Token:         "tok",
-	})
+	}, true)
 	if f.Twitch == nil {
 		t.Fatal("expected Twitch client to be set when cid+token are present")
 	}
@@ -995,7 +995,7 @@ func TestBuildFetcher_WithoutTwitchCredsSkipsHelix(t *testing.T) {
 		{BroadcasterID: "b1", Token: "tok"},
 	}
 	for i, cmd := range cases {
-		f := buildFetcher(cmd)
+		f := buildFetcher(cmd, true)
 		if f.Twitch != nil {
 			t.Errorf("case %d: expected nil Twitch client, got %+v", i, f.Twitch)
 		}
@@ -1006,7 +1006,7 @@ func TestFetchAndNotifyEmotes_EmptyBroadcasterDoesNotEmit(t *testing.T) {
 	var called atomic.Bool
 	notify := func(string, any) { called.Store(true) }
 
-	FetchAndNotifyEmotes(context.Background(), control.Command{}, notify, zerolog.Nop())
+	FetchAndNotifyEmotes(context.Background(), control.Command{}, true, notify, zerolog.Nop())
 
 	if called.Load() {
 		t.Fatal("expected no emit when BroadcasterID is empty")
@@ -1231,7 +1231,7 @@ func TestDispatchCommand_RoutesKickConnect(t *testing.T) {
 	out := make(chan []byte, 1)
 	cmd := control.Command{Cmd: "kick_connect", ChatroomID: 777}
 
-	DispatchCommand(context.Background(), cmd, clients, idleSession(t), idleFirsts(), idleCosmetics(t), out, func(string, any) {}, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, clients, idleSession(t), idleFirsts(), idleCosmetics(t), idleBundles(), out, func(string, any) {}, zerolog.Nop())
 
 	if _, ok := clients["kick:777"]; !ok {
 		t.Fatal("expected kick_connect to register client")
@@ -1247,7 +1247,7 @@ func TestDispatchCommand_RoutesKickDisconnect(t *testing.T) {
 	out := make(chan []byte, 1)
 	cmd := control.Command{Cmd: "kick_disconnect", ChatroomID: 777}
 
-	DispatchCommand(context.Background(), cmd, clients, idleSession(t), idleFirsts(), idleCosmetics(t), out, func(string, any) {}, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, clients, idleSession(t), idleFirsts(), idleCosmetics(t), idleBundles(), out, func(string, any) {}, zerolog.Nop())
 
 	if !cancelled.Load() {
 		t.Fatal("expected kick_disconnect to cancel client")
@@ -1340,7 +1340,7 @@ func TestDispatchCommand_RoutesYouTubeConnect(t *testing.T) {
 	out := make(chan []byte, 1)
 	cmd := control.Command{Cmd: "youtube_connect", LiveChatID: "xyz", APIKey: "k"}
 
-	DispatchCommand(context.Background(), cmd, clients, idleSession(t), idleFirsts(), idleCosmetics(t), out, func(string, any) {}, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, clients, idleSession(t), idleFirsts(), idleCosmetics(t), idleBundles(), out, func(string, any) {}, zerolog.Nop())
 
 	if _, ok := clients["yt:xyz"]; !ok {
 		t.Fatal("expected youtube_connect to register client")
@@ -1356,7 +1356,7 @@ func TestDispatchCommand_RoutesYouTubeDisconnect(t *testing.T) {
 	out := make(chan []byte, 1)
 	cmd := control.Command{Cmd: "youtube_disconnect", LiveChatID: "xyz"}
 
-	DispatchCommand(context.Background(), cmd, clients, idleSession(t), idleFirsts(), idleCosmetics(t), out, func(string, any) {}, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, clients, idleSession(t), idleFirsts(), idleCosmetics(t), idleBundles(), out, func(string, any) {}, zerolog.Nop())
 
 	if !cancelled.Load() {
 		t.Fatal("expected youtube_disconnect to cancel client")
@@ -1417,7 +1417,7 @@ func TestDispatchCommand_RoutesSendChatMessage(t *testing.T) {
 		_ = p
 	}
 	cmd := control.Command{Cmd: "send_chat_message", RequestID: 11}
-	DispatchCommand(context.Background(), cmd, map[string]context.CancelFunc{}, idleSession(t), idleFirsts(), idleCosmetics(t), make(chan []byte, 1), notify, zerolog.Nop())
+	DispatchCommand(context.Background(), cmd, map[string]context.CancelFunc{}, idleSession(t), idleFirsts(), idleCosmetics(t), idleBundles(), make(chan []byte, 1), notify, zerolog.Nop())
 	if typ != "send_chat_result" {
 		t.Fatalf("expected dispatch to invoke HandleSendChatMessage, got notify type %q", typ)
 	}
@@ -1713,7 +1713,7 @@ func TestSevenTVPaintsCommandFlipsTheSwitch(t *testing.T) {
 	cosmetics := idleCosmetics(t)
 	dispatch := func(enabled bool) {
 		DispatchCommand(context.Background(), control.Command{Cmd: "seventv_paints", Enabled: enabled},
-			map[string]context.CancelFunc{}, idleSession(t), idleFirsts(), cosmetics, make(chan []byte, 1), func(string, any) {}, zerolog.Nop())
+			map[string]context.CancelFunc{}, idleSession(t), idleFirsts(), cosmetics, idleBundles(), make(chan []byte, 1), func(string, any) {}, zerolog.Nop())
 	}
 	if cosmetics.Enabled() {
 		t.Fatal("7tv events must stay off until the host says otherwise")
