@@ -1181,6 +1181,12 @@ option::checkmark {
   max-height: calc(100vh - 66px);
 }
 
+/* The card is a height-capped column: only the scrolling message list
+   gives way, everything above it keeps its full height. */
+.user-card > :not(.palette__body) {
+  flex-shrink: 0;
+}
+
 .user-card__hero {
   display: flex;
   align-items: flex-start;
