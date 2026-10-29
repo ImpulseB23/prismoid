@@ -33,15 +33,18 @@ describe("ContextMenu", () => {
     document.body.innerHTML = "";
   });
 
-  it("stays open while another chat scrolls on its own", () => {
-    const { chat } = setup();
+  it("stays open while chat scrolls on its own", () => {
+    const { holder, chat } = setup();
     fireEvent.scroll(chat);
+    fireEvent.scroll(holder);
     expect(contextMenu()).not.toBeNull();
   });
 
-  it("closes when what was right-clicked scrolls", () => {
+  it("closes when the user scrolls, but not inside the menu", () => {
     const { holder } = setup();
-    fireEvent.scroll(holder);
+    fireEvent.wheel(document.querySelector(".ctx")!);
+    expect(contextMenu()).not.toBeNull();
+    fireEvent.wheel(holder);
     expect(contextMenu()).toBeNull();
   });
 });
