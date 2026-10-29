@@ -79,7 +79,9 @@ describe("Settings", () => {
         onSignOut={() => {}}
       />
     ));
-    fireEvent.click(screen.getByRole("button", { name: "Chat" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Mentions & highlights" }),
+    );
     const vips = screen.getByRole("button", { name: "VIPs" });
     fireEvent.click(vips);
     await vi.waitFor(() => expect(settings().highlightBadges).toContain("vip"));
@@ -101,7 +103,9 @@ describe("Settings", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /7TV name paints/ }));
     await vi.waitFor(() => expect(settings().showPaints).toBe(false));
 
-    fireEvent.click(screen.getByRole("button", { name: "Chat" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Mentions & highlights" }),
+    );
     const users = screen.getByPlaceholderText("bestfriend, cohost");
     fireEvent.change(users, { target: { value: "Friend, cohost" } });
     await vi.waitFor(() =>
@@ -142,7 +146,9 @@ describe("Settings", () => {
         onSignOut={() => {}}
       />
     ));
-    fireEvent.click(screen.getByRole("button", { name: "Notifications" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Mentions & highlights" }),
+    );
     fireEvent.change(screen.getByRole("slider", { name: "Chime volume" }), {
       target: { value: "0.5" },
     });

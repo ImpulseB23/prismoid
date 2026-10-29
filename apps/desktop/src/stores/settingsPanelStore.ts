@@ -8,7 +8,7 @@ export const SETTINGS_SECTIONS = [
   "account",
   "appearance",
   "chat",
-  "notifications",
+  "highlights",
   "moderation",
   "window",
   "updates",
