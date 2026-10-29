@@ -91,8 +91,9 @@ const App: Component = () => {
   });
 
   // Runs for the whole session, sign-in screen included, so a release that
-  // fixes a sign-in bug still reaches whoever is stuck there.
-  onMount(() => onCleanup(scheduleUpdateChecks()));
+  // fixes a sign-in bug still reaches whoever is stuck there. Dev builds
+  // skip it: the launch check would install the release over them.
+  if (!import.meta.env.DEV) onMount(() => onCleanup(scheduleUpdateChecks()));
   onMount(() => onCleanup(installContextMenus()));
   // The listener resolves after an await, outside the owner, so the stop
   // function is kept and released from a cleanup registered up front.
