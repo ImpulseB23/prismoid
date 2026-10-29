@@ -239,6 +239,22 @@ pub fn build_twitch_feed_line(
     Ok(bytes)
 }
 
+/// Serializes a `seventv_emotes` control command line, which has the
+/// sidecar fetch 7TV sets or leave them out.
+pub fn build_seventv_emotes_line(enabled: bool) -> serde_json::Result<Vec<u8>> {
+    #[derive(Serialize)]
+    struct SevenTvEmotesCmd {
+        cmd: &'static str,
+        enabled: bool,
+    }
+    let mut bytes = serde_json::to_vec(&SevenTvEmotesCmd {
+        cmd: "seventv_emotes",
+        enabled,
+    })?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
 /// Serializes a `seventv_paints` control command line, which opens or
 /// closes the sidecar's 7TV EventAPI socket.
 pub fn build_seventv_paints_line(enabled: bool) -> serde_json::Result<Vec<u8>> {

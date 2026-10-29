@@ -32,6 +32,7 @@ function appliers(): SettingsAppliers & {
   paints: boolean[];
   managers: boolean[];
   mods: boolean[];
+  sevenTVs: boolean[];
 } {
   const tops: boolean[] = [];
   const zooms: number[] = [];
@@ -40,6 +41,7 @@ function appliers(): SettingsAppliers & {
   const paints: boolean[] = [];
   const managers: boolean[] = [];
   const mods: boolean[] = [];
+  const sevenTVs: boolean[] = [];
   return {
     tops,
     zooms,
@@ -48,6 +50,7 @@ function appliers(): SettingsAppliers & {
     paints,
     managers,
     mods,
+    sevenTVs,
     alwaysOnTop: async (v) => {
       tops.push(v);
     },
@@ -68,6 +71,9 @@ function appliers(): SettingsAppliers & {
     },
     modTools: async (v) => {
       mods.push(v);
+    },
+    sevenTV: async (v) => {
+      sevenTVs.push(v);
     },
     theme: async (v) => {
       themes.push(v);
@@ -99,6 +105,7 @@ describe("settingsStore", () => {
       streamVideo: true,
       streamManager: true,
       modTools: true,
+      sevenTV: true,
       hideViewers: false,
       hideUptime: false,
       hideChatRate: false,
@@ -191,6 +198,7 @@ describe("settingsStore", () => {
         showPaints: async () => {},
         streamManager: async () => {},
         modTools: async () => {},
+        sevenTV: async () => {},
         theme: async () => {},
       },
       memStorage(),
@@ -258,6 +266,7 @@ describe("settingsStore", () => {
       streamVideo: false,
       streamManager: false,
       modTools: true,
+      sevenTV: true,
       hideViewers: false,
       hideUptime: false,
       hideChatRate: false,
@@ -403,6 +412,27 @@ describe("settingsStore", () => {
       }),
     );
     await off.apply();
+    expect(b.paints).toEqual([false]);
+  });
+
+  it("7TV off leaves out its emotes and its paints, whatever the paint switch", async () => {
+    const a = appliers();
+    const store = createSettingsStore(a, memStorage());
+    await store.update({ sevenTV: false });
+    expect(a.sevenTVs).toEqual([false]);
+    expect(a.paints).toEqual([false]);
+    await store.update({ showPaints: false });
+    await store.update({ sevenTV: true });
+    expect(a.paints).toEqual([false]);
+    await store.update({ showPaints: true });
+    expect(a.paints).toEqual([false, true]);
+
+    const b = appliers();
+    await createSettingsStore(
+      b,
+      memStorage({ "prismoid.settings": JSON.stringify({ sevenTV: false }) }),
+    ).apply();
+    expect(b.sevenTVs).toEqual([false]);
     expect(b.paints).toEqual([false]);
   });
 

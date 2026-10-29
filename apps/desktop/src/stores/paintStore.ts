@@ -5,7 +5,7 @@
 import { createSignal } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { settings } from "./settingsStore";
+import { paintsOn, settings } from "./settingsStore";
 
 export interface PaintStop {
   at: number;
@@ -93,7 +93,7 @@ export const paintFor = defaultStore.paintFor;
 
 /** The paint to draw on a Twitch user's name, unless paints are off. */
 export function shownPaint(userId: string): Paint | undefined {
-  return settings().showPaints ? paintFor(userId) : undefined;
+  return paintsOn(settings()) ? paintFor(userId) : undefined;
 }
 
 /** Follows the host's paint events and loads what it already has. */

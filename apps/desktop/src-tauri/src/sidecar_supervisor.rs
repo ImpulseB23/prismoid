@@ -52,6 +52,7 @@ use crate::host::{
 use crate::message::{assign_arrival_seqs, ChatEvent, UnifiedMessage};
 #[cfg(windows)]
 use crate::ringbuf::{RawHandle, RingBufReader, WaitOutcome, DEFAULT_CAPACITY};
+use crate::seventv_emotes::SevenTvEmoteSetting;
 #[cfg(windows)]
 use crate::seventv_paints::{PaintEvent, PaintSetting, PaintState};
 #[cfg(windows)]
@@ -389,6 +390,8 @@ async fn run_once<R: Runtime>(
     app.state::<PaintSetting>()
         .sync(|line| sender.write_raw(line));
     app.state::<TwitchFeedSetting>()
+        .sync(|line| sender.write_raw(line));
+    app.state::<SevenTvEmoteSetting>()
         .sync(|line| sender.write_raw(line));
 
     // The channel task owns every twitch_connect / twitch_disconnect

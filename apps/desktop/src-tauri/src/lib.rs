@@ -9,6 +9,7 @@ mod message;
 pub mod oauth_pkce;
 mod reset;
 pub mod ringbuf;
+mod seventv_emotes;
 mod seventv_paints;
 mod seventv_users;
 mod sidecar_commands;
@@ -132,6 +133,7 @@ pub fn run() {
             tray::show_main_window,
             first_messages::set_first_messages,
             twitch_feeds::set_twitch_feed,
+            seventv_emotes::set_seventv_emotes,
             twitch_channel::twitch_get_channel,
             twitch_channel::twitch_search_channels,
             twitch_channel::twitch_followed_live,
@@ -355,6 +357,7 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
     app.manage(backlog::BacklogSetting::default());
     app.manage(first_messages::FirstMessageSetting::default());
     app.manage(twitch_feeds::TwitchFeedSetting::default());
+    app.manage(seventv_emotes::SevenTvEmoteSetting::default());
 
     let follow = browser_follow::BrowserFollow::default();
     app.manage(follow.clone());
