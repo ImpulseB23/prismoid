@@ -1305,6 +1305,16 @@ option::checkmark {
   padding: 0 16px 14px;
 }
 
+.user-card__actions--account {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.user-card__reconnect {
+  margin: 0 16px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
 .user-card__action {
   display: flex;
   flex-direction: column;

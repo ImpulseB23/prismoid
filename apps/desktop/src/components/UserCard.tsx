@@ -55,6 +55,9 @@ import {
   userInfoRevision,
 } from "../stores/userInfoStore";
 import MessageRow from "./MessageRow";
+import TwitchReconnect from "./TwitchReconnect";
+import { reconnectScopes } from "../stores/roleStore";
+import { openSettings } from "../stores/settingsPanelStore";
 import PaletteClose from "./PaletteClose";
 
 export interface CardUser {
@@ -72,6 +75,7 @@ export interface UserCardProps {
   /** Signed-in login, so messages that mention it are highlighted. */
   login: string;
   onClose: () => void;
+  onSignOut: () => void;
 }
 
 const RECENT_LIMIT = 20;
@@ -87,6 +91,80 @@ const UserCard: Component<UserCardProps> = (props) => {
   // other moderators, not to the chatter.
   const [reason, setReason] = createSignal("");
   let dialogRef: HTMLDivElement | undefined;
+
+  const isSelf = () => props.user?.platform_user_id === currentUserId();
+
+  // On your own card the actions are about your account, not a chatter.
+  const AccountActions = () => (
+    <>
+      <Show when={reconnectScopes().length > 0}>
+        <div class="user-card__reconnect">
+          <TwitchReconnect
+            title="Twitch needs new permissions"
+            hint="Reconnect once to turn on what was added since you signed in."
+          />
+        </div>
+      </Show>
+      <div class="user-card__actions user-card__actions--account">
+        <button
+          type="button"
+          class="user-card__action"
+          onClick={() => {
+            openSettings("account");
+            close();
+          }}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            aria-hidden="true"
+          >
+            <circle
+              cx="8"
+              cy="5.5"
+              r="2.7"
+              stroke="currentColor"
+              stroke-width="1.4"
+            />
+            <path
+              d="M2.8 14c.6-2.7 2.7-4.3 5.2-4.3s4.6 1.6 5.2 4.3"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+            />
+          </svg>
+          Account settings
+        </button>
+        <button
+          type="button"
+          class="user-card__action"
+          onClick={() => {
+            close();
+            props.onSignOut();
+          }}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M6 2.5H3.5v11H6M10.5 5l3 3-3 3M13.3 8H6.5"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          Sign out
+        </button>
+      </div>
+    </>
+  );
 
   // A new person starts fresh: their messages, no leftover notice or reason.
   createEffect(
@@ -299,125 +377,127 @@ const UserCard: Component<UserCardProps> = (props) => {
               </Show>
             </dl>
 
-            <div class="user-card__actions">
-              <button
-                type="button"
-                class="user-card__action"
-                onClick={() => {
-                  requestMention(u().username);
-                  close();
-                }}
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  aria-hidden="true"
+            <Show when={!isSelf()} fallback={<AccountActions />}>
+              <div class="user-card__actions">
+                <button
+                  type="button"
+                  class="user-card__action"
+                  onClick={() => {
+                    requestMention(u().username);
+                    close();
+                  }}
                 >
-                  <circle
-                    cx="8"
-                    cy="8"
-                    r="2.6"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                  />
-                  <path
-                    d="M10.6 8v1.2a1.9 1.9 0 0 0 3.8 0V8A6.4 6.4 0 1 0 11 13.4"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="round"
-                  />
-                </svg>
-                Mention
-              </button>
-              <button
-                type="button"
-                class="user-card__action"
-                aria-pressed={spotlit()}
-                onClick={() =>
-                  void setUserHighlighted(u().username, !spotlit()).catch(
-                    (err: unknown) => console.error("highlight user", err),
-                  )
-                }
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  aria-hidden="true"
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <circle
+                      cx="8"
+                      cy="8"
+                      r="2.6"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                    />
+                    <path
+                      d="M10.6 8v1.2a1.9 1.9 0 0 0 3.8 0V8A6.4 6.4 0 1 0 11 13.4"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                  Mention
+                </button>
+                <button
+                  type="button"
+                  class="user-card__action"
+                  aria-pressed={spotlit()}
+                  onClick={() =>
+                    void setUserHighlighted(u().username, !spotlit()).catch(
+                      (err: unknown) => console.error("highlight user", err),
+                    )
+                  }
                 >
-                  <path
-                    d="M8 1.8l1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.6l-3.8 2 .7-4.3-3.1-3 4.3-.6z"
-                    stroke="currentColor"
-                    stroke-width="1.4"
-                    stroke-linejoin="round"
-                    fill={spotlit() ? "currentColor" : "none"}
-                  />
-                </svg>
-                {spotlit() ? "Stop highlighting" : "Highlight"}
-              </button>
-              <button
-                type="button"
-                class="user-card__action"
-                aria-pressed={ignored()}
-                onClick={() =>
-                  void setIgnored(u().username, !ignored()).catch(
-                    (err: unknown) => console.error("ignore", err),
-                  )
-                }
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  aria-hidden="true"
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M8 1.8l1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.6l-3.8 2 .7-4.3-3.1-3 4.3-.6z"
+                      stroke="currentColor"
+                      stroke-width="1.4"
+                      stroke-linejoin="round"
+                      fill={spotlit() ? "currentColor" : "none"}
+                    />
+                  </svg>
+                  {spotlit() ? "Stop highlighting" : "Highlight"}
+                </button>
+                <button
+                  type="button"
+                  class="user-card__action"
+                  aria-pressed={ignored()}
+                  onClick={() =>
+                    void setIgnored(u().username, !ignored()).catch(
+                      (err: unknown) => console.error("ignore", err),
+                    )
+                  }
                 >
-                  <circle
-                    cx="8"
-                    cy="8"
-                    r="5.8"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                  />
-                  <path
-                    d="M4 4l8 8"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="round"
-                  />
-                </svg>
-                {ignored() ? "Unignore" : "Ignore"}
-              </button>
-              <button
-                type="button"
-                class="user-card__action"
-                onClick={() =>
-                  void openUrl(`https://www.twitch.tv/${u().username}`).catch(
-                    (err: unknown) => console.error("open profile", err),
-                  )
-                }
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  aria-hidden="true"
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <circle
+                      cx="8"
+                      cy="8"
+                      r="5.8"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                    />
+                    <path
+                      d="M4 4l8 8"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                  {ignored() ? "Unignore" : "Ignore"}
+                </button>
+                <button
+                  type="button"
+                  class="user-card__action"
+                  onClick={() =>
+                    void openUrl(`https://www.twitch.tv/${u().username}`).catch(
+                      (err: unknown) => console.error("open profile", err),
+                    )
+                  }
                 >
-                  <path
-                    d="M6.5 3.5h-3v9h9v-3M9.5 2.5h4v4M13.5 2.5 7.5 8.5"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-                Twitch
-              </button>
-            </div>
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M6.5 3.5h-3v9h9v-3M9.5 2.5h4v4M13.5 2.5 7.5 8.5"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                  Twitch
+                </button>
+              </div>
+            </Show>
 
             <Show when={moderationNeedsReconnect()}>
               <div class="user-card__note">
