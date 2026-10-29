@@ -2,12 +2,8 @@
 // still loaded, oldest first, with a button to join in.
 
 import { Component, For, Show, createEffect, createMemo } from "solid-js";
-import {
-  findMessageById,
-  messageRevision,
-  searchMessages,
-  type ChatMessage,
-} from "../stores/chatStore";
+import type { ChatMessage } from "../stores/chatStore";
+import { useSession } from "../lib/chatSession";
 import { closeThread, threadRoot, threadRootOf } from "../stores/threadStore";
 import { requestReply } from "../stores/composerStore";
 import MessageRow from "./MessageRow";
@@ -17,6 +13,7 @@ import PaletteClose from "./PaletteClose";
 export const MAX_REPLIES = 200;
 
 const Thread: Component = () => {
+  const session = useSession();
   let dialogRef: HTMLDivElement | undefined;
 
   createEffect(() => {
@@ -29,14 +26,14 @@ const Thread: Component = () => {
   };
 
   const thread = createMemo(() => {
-    messageRevision();
+    const chat = session()?.chat;
     const root = threadRoot();
-    if (!root) return null;
-    const replies = searchMessages(
-      (m) => threadRootOf(m) === root,
-      MAX_REPLIES,
-    ).reverse();
-    return { origin: findMessageById(root), replies };
+    if (!root || !chat) return null;
+    chat.messageRevision();
+    const replies = chat
+      .search((m) => threadRootOf(m) === root, MAX_REPLIES)
+      .reverse();
+    return { origin: chat.findById(root), replies };
   });
 
   // The original can scroll out of memory; the first reply still quotes it.

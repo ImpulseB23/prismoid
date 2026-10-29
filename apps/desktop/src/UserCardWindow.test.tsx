@@ -7,6 +7,7 @@ import {
   waitFor,
 } from "@solidjs/testing-library";
 import type { CardUser } from "./components/UserCard";
+import type { ChatStore } from "./stores/chatStore";
 
 const minimize = vi.fn(async () => {});
 vi.mock("@tauri-apps/api/window", () => ({
@@ -37,7 +38,7 @@ vi.mock("./lib/userCardWindow", () => card);
 
 const session = {
   startCardSession: vi.fn(async () => () => {}),
-  showCardUser: vi.fn<(u: CardUser) => Promise<() => void>>(
+  showCardUser: vi.fn<(u: CardUser, chat: ChatStore) => Promise<() => void>>(
     async () => () => {},
   ),
 };
@@ -100,12 +101,18 @@ describe("UserCardWindow", () => {
     card.currentCardUser.mockResolvedValue(user("ann"));
     render(() => <UserCardWindow />);
     await waitFor(() =>
-      expect(session.showCardUser).toHaveBeenCalledWith(user("ann")),
+      expect(session.showCardUser).toHaveBeenCalledWith(
+        user("ann"),
+        expect.anything(),
+      ),
     );
     expect(session.startCardSession).toHaveBeenCalledOnce();
     announce!(user("bob"));
     await waitFor(() =>
-      expect(session.showCardUser).toHaveBeenLastCalledWith(user("bob")),
+      expect(session.showCardUser).toHaveBeenLastCalledWith(
+        user("bob"),
+        expect.anything(),
+      ),
     );
     fireEvent.click(screen.getByRole("button", { name: "BOB (@bob)" }));
     expect(bridge.sendMention).toHaveBeenCalledWith("bob");

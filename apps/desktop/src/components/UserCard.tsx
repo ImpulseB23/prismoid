@@ -28,13 +28,7 @@ import { nameStyle } from "../lib/paint";
 import { shownPaint } from "../stores/paintStore";
 import { isLight } from "../stores/themeStore";
 import { resolveBadge, badgeRevision } from "../stores/badgeStore";
-import {
-  markMessageDeleted,
-  messageRevision,
-  recentMessagesByUser,
-  viewport,
-  type ChatMessage,
-} from "../stores/chatStore";
+import type { ChatMessage, ChatStore } from "../stores/chatStore";
 import {
   FOLLOWERS_SCOPE,
   currentUserId,
@@ -76,6 +70,8 @@ export interface CardUser {
 
 export interface UserCardProps {
   user: CardUser | null;
+  /** Their messages in the card's channel. */
+  chat: ChatStore;
   /** Signed-in login, so messages that mention it are highlighted. */
   login: string;
   onClose: () => void;
@@ -139,10 +135,11 @@ const UserCard: Component<UserCardProps> = (props) => {
   });
 
   const recent = createMemo(() => {
-    viewport();
-    messageRevision();
+    const chat = props.chat;
+    chat.viewport();
+    chat.messageRevision();
     const u = props.user;
-    return u ? recentMessagesByUser(u.platform_user_id, RECENT_LIMIT) : [];
+    return u ? chat.recentByUser(u.platform_user_id, RECENT_LIMIT) : [];
   });
 
   const ignored = () => {
@@ -180,7 +177,11 @@ const UserCard: Component<UserCardProps> = (props) => {
   const history = () => {
     modLogRevision();
     const u = props.user;
-    return u ? modActionsFor(u.platform_user_id) : [];
+    return u
+      ? modActionsFor(u.platform_user_id).filter(
+          (a) => a.channel_id === u.channel_id,
+        )
+      : [];
   };
 
   const close = () => {
@@ -622,7 +623,7 @@ const UserCard: Component<UserCardProps> = (props) => {
                                   "delete",
                                   async () => {
                                     await deleteMessage(m.channel_id, m.id);
-                                    markMessageDeleted(m.id);
+                                    props.chat.markDeleted(m.id);
                                   },
                                   "Message deleted.",
                                 )

@@ -4,7 +4,7 @@
 
 import { Component, Show, createMemo } from "solid-js";
 import type { ChatMessage } from "../stores/chatStore";
-import { messageRevision, recentMessagesByUser } from "../stores/chatStore";
+import { sessionFor } from "../lib/chatSession";
 import { activeChannel } from "../stores/channelStore";
 import { currentUserId } from "../stores/authStore";
 import { ownBadges } from "../stores/ownIdentityStore";
@@ -25,13 +25,14 @@ const AccountAvatar: Component<{ login: string; onSignOut: () => void }> = (
   // color. When none is loaded, the badges remembered from their last
   // message in the channel stand in, then their role.
   const self = createMemo(() => {
-    messageRevision();
     const me = currentUserId();
     const channel = activeChannel();
     if (!me || !channel) return null;
-    const last: ChatMessage | undefined = recentMessagesByUser(me, 1).find(
-      (m) => m.channel_id === channel.id,
-    );
+    const chat = sessionFor(channel.id)?.chat;
+    chat?.messageRevision();
+    const last: ChatMessage | undefined = chat
+      ?.recentByUser(me, 1)
+      .find((m) => m.channel_id === channel.id);
     const roleBadges =
       channel.id === me
         ? [{ set_id: "broadcaster", id: "1" }]

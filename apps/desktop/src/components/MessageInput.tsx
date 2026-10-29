@@ -30,16 +30,10 @@ import {
   wordAtCaret,
   type Candidate,
 } from "../lib/completion";
-import {
-  buildOptimisticMessage,
-  confirmPendingId,
-  failPending,
-  insertPending,
-  type EmoteMeta,
-} from "../stores/chatStore";
+import { buildOptimisticMessage, type EmoteMeta } from "../stores/chatStore";
+import { useSession } from "../lib/chatSession";
 import { activeChannel, channelBanned } from "../stores/channelStore";
 import { bannedText } from "../lib/chatAccess";
-import { chatterByLogin, recentChatters } from "../stores/chatterStore";
 import { lookupUser, formatChannelError } from "../lib/twitchChannel";
 import { banUser, timeoutUser, unbanUser } from "../lib/twitchAuth";
 import { parseInput, type SlashCommand } from "../lib/slashCommands";
@@ -86,6 +80,7 @@ const PROVIDER_LABEL: Record<EmoteMeta["provider"], string> = {
 const HISTORY_LIMIT = 50;
 
 const MessageInput: Component<Props> = (props) => {
+  const session = useSession();
   const [text, setText] = createSignal("");
   const [caret, setCaret] = createSignal(0);
   const [status, setStatus] = createSignal<string | null>(null);
@@ -150,7 +145,11 @@ const MessageInput: Component<Props> = (props) => {
   const candidates = createMemo(() => {
     emoteRevision();
     if (dismissed()) return [];
-    return complete(word().word, allEmotes(), recentChatters());
+    return complete(
+      word().word,
+      allEmotes(),
+      session()?.chatters.recent() ?? [],
+    );
   });
   const open = () => candidates().length > 0;
 
@@ -213,7 +212,7 @@ const MessageInput: Component<Props> = (props) => {
   };
 
   const resolveId = async (login: string): Promise<string> => {
-    const known = chatterByLogin(login);
+    const known = session()?.chatters.byLogin(login);
     if (known) return known.id;
     return (await lookupUser(login)).id;
   };
@@ -263,7 +262,10 @@ const MessageInput: Component<Props> = (props) => {
 
   const submit = () => {
     const channel = activeChannel();
-    if (!channel) return;
+    // Kept for Twitch's answer: by then the pane may show another channel,
+    // and the message still belongs to the session it went into.
+    const store = session()?.chat;
+    if (!channel || !store) return;
     const parsed = parseInput(text().trim());
     if (parsed.kind === "error") {
       setStatus(parsed.message);
@@ -338,7 +340,7 @@ const MessageInput: Component<Props> = (props) => {
         thread_id: "",
       };
     }
-    insertPending(optimistic);
+    store.insertPending(optimistic);
     setLastSent((m) => new Map(m).set(channel.id, Date.now()));
     setNow(Date.now());
     const localId = optimistic.local_id!;
@@ -346,7 +348,7 @@ const MessageInput: Component<Props> = (props) => {
 
     sendMessage(channel.id, payload, reply?.message_id).then(
       (ok) => {
-        confirmPendingId(localId, ok.message_id);
+        store.confirmPendingId(localId, ok.message_id);
       },
       (raw) => {
         const err = toSendError(raw);
@@ -354,7 +356,7 @@ const MessageInput: Component<Props> = (props) => {
           typeof err === "string"
             ? err
             : formatSendError(err as SendMessageError);
-        failPending(localId, message);
+        store.failPending(localId, message);
         if (submitSeq === lastSubmitSeq) setStatus(message);
       },
     );
