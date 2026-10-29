@@ -56,11 +56,19 @@ pub async fn video_window_open<R: Runtime>(
     let window = builder.build().map_err(|e| e.to_string())?;
     #[cfg(windows)]
     {
-        let hwnd = window.hwnd().map_err(|e| e.to_string())?;
         // Tauri and this crate use different `windows` versions; the handle
-        // is the same raw pointer in both.
-        aspect::lock(windows::Win32::Foundation::HWND(hwnd.0), BAR_HEIGHT)
-            .map_err(|e| e.to_string())?;
+        // is the same raw pointer in both, carried as an address because a
+        // pointer cannot cross threads.
+        let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
+        // Windows only lets the thread that owns a window subclass it, and
+        // commands run on the async pool.
+        app.run_on_main_thread(move || {
+            let hwnd = windows::Win32::Foundation::HWND(hwnd as *mut std::ffi::c_void);
+            if let Err(e) = aspect::lock(hwnd, BAR_HEIGHT) {
+                tracing::error!(error = %e, "pop-out aspect lock failed");
+            }
+        })
+        .map_err(|e| e.to_string())?;
     }
     let handle = app.clone();
     window.on_window_event(move |event| {
