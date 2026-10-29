@@ -58,6 +58,7 @@ import { announceModLog, serveCards } from "./lib/cardBridge";
 import { focusedPane } from "./lib/pane";
 import EmoteCard from "./components/EmoteCard";
 import EmoteTooltip from "./components/EmoteTooltip";
+import ChatHoverCard from "./components/ChatHoverCard";
 import { jumpToMessage } from "./stores/jumpStore";
 import { modActionsFor, modLogRevision } from "./stores/modLogStore";
 import { followSettingsElsewhere, settings } from "./stores/settingsStore";
@@ -198,6 +199,7 @@ const App: Component = () => {
       <ModPopover />
       <EmoteCard />
       <EmoteTooltip />
+      <ChatHoverCard />
       <UpdateScreen
         state={updateState}
         onRetry={() => void installUpdate()}

@@ -3766,6 +3766,51 @@ option::checkmark {
   font-size: 12px;
 }
 
+.user-tip {
+  flex-direction: row;
+  gap: 10px;
+  max-width: 280px;
+  padding: 10px 14px 10px 10px;
+  text-align: left;
+}
+
+.user-tip__picture {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.user-tip__picture--initial {
+  display: grid;
+  place-items: center;
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.user-tip__who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.user-tip__name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.user-tip__login,
+.user-tip__joined {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.user-tip__joined--new {
+  color: var(--color-amber);
+}
+
 /* Mod bar */
 
 .modbar__role {
