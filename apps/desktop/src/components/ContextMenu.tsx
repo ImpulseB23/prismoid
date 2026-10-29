@@ -31,23 +31,26 @@ const ContextMenu: Component = () => {
       if (e.key === "Escape") closeContextMenu();
     };
     const close = () => closeContextMenu();
-    // Only a scroll that moves what was right-clicked closes the menu; with
-    // several chats open, another one is always scrolling on its own.
-    const onScroll = (e: Event) => {
-      const anchor = contextMenu()?.anchor;
-      if (!anchor || (e.target instanceof Node && e.target.contains(anchor))) {
-        close();
+    // Only the user scrolling closes the menu. Chat moving on its own does
+    // not: the feed a menu came from holds still while it is open.
+    const onWheel = (e: WheelEvent) => {
+      if (menuRef && e.target instanceof Node && menuRef.contains(e.target)) {
+        return;
       }
+      close();
     };
     document.addEventListener("mousedown", onPointerDown, true);
     document.addEventListener("keydown", onKey, true);
-    document.addEventListener("scroll", onScroll, true);
+    document.addEventListener("wheel", onWheel, {
+      capture: true,
+      passive: true,
+    });
     window.addEventListener("blur", close);
     window.addEventListener("resize", close);
     onCleanup(() => {
       document.removeEventListener("mousedown", onPointerDown, true);
       document.removeEventListener("keydown", onKey, true);
-      document.removeEventListener("scroll", onScroll, true);
+      document.removeEventListener("wheel", onWheel, { capture: true });
       window.removeEventListener("blur", close);
       window.removeEventListener("resize", close);
     });

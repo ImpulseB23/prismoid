@@ -43,7 +43,8 @@ import { openModPopover } from "../stores/modPopoverStore";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { formatSeconds } from "../lib/slashCommands";
 import { messageMenuItems } from "../lib/messageMenu";
-import { openContextMenu } from "../stores/contextMenuStore";
+import { contextMenu, openContextMenu } from "../stores/contextMenuStore";
+import { emoteHoverPane } from "../stores/emoteCardStore";
 import { formatSendError, toSendError } from "../lib/messageInput";
 import { retainPulse } from "../stores/pulseStore";
 import { canModerateIn } from "../stores/roleStore";
@@ -149,6 +150,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     const c = session().channel;
     return c !== null && canModerateIn(c.id);
   };
+  let rootRef: HTMLDivElement | undefined;
   let containerRef: HTMLDivElement | undefined;
   const entryCache = new Map<number, CachedEntry>();
   let cachedFor: ChatSession | undefined;
@@ -195,9 +197,19 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       setAltDown(false);
     });
   });
+  // A menu or emote tooltip opened from this feed holds it still too, so
+  // what it points at stays put until it closes.
+  const popupOpen = () => {
+    const anchor = contextMenu()?.anchor;
+    return (
+      (anchor != null && rootRef?.contains(anchor) === true) ||
+      emoteHoverPane() === pane
+    );
+  };
   const held = () => {
     const mode = settings().pauseChat;
     return (
+      popupOpen() ||
       ((mode === "hover" || mode === "hoverAlt") && hovering()) ||
       ((mode === "alt" || mode === "hoverAlt") && altDown())
     );
@@ -210,6 +222,18 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     const m = messages[i];
     return m ? { mono: m.monoIndex, offset: top - m.top } : null;
   };
+  // The browser rounds scrollTop to whole device pixels, so reading the
+  // anchor back after the feed's own scroll would shift it a fraction of a
+  // pixel each time, and held chat would creep. Under a pixel is never the
+  // user.
+  const sameSpot = (
+    a: { mono: number; offset: number } | null,
+    b: { mono: number; offset: number } | null,
+  ) =>
+    a !== null &&
+    b !== null &&
+    a.mono === b.mono &&
+    Math.abs(a.offset - b.offset) < 1;
 
   const handleScroll = () => {
     if (!containerRef) return;
@@ -227,14 +251,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
         // The feed's own scrolls keep the held message in place; any other
         // scroll is the user's, and scrolling up leaves the pause behind.
         const at = anchorAt(top);
-        if (
-          at &&
-          anchor &&
-          at.mono === anchor.mono &&
-          Math.abs(at.offset - anchor.offset) < 1
-        ) {
-          return;
-        }
+        if (sameSpot(at, anchor)) return;
         anchor = at;
         if (!atBottom) setStickToBottom(false);
         return;
@@ -244,7 +261,11 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
         const v = chat().viewport();
         setReadUpTo(atBottom ? null : v.start + v.count);
       }
-      anchor = atBottom ? null : anchorAt(top);
+      if (atBottom) anchor = null;
+      else {
+        const at = anchorAt(top);
+        if (!sameSpot(at, anchor)) anchor = at;
+      }
     });
   };
 
@@ -693,6 +714,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
 
   return (
     <div
+      ref={(el) => (rootRef = el)}
       class="feed"
       data-tour="feed"
       onPointerEnter={() => setHovering(true)}
