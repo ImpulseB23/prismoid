@@ -2,56 +2,17 @@
 // comes from with the provider's mark, and who made it. Sits above the emote
 // and flips below near the top edge. Clicking the emote opens the full card.
 
-import { Component, For, Show, createEffect, onCleanup } from "solid-js";
+import { Component, For, Show } from "solid-js";
 import {
   emoteSetName,
   endEmoteHover,
   hoveredEmote,
   largeUrl,
 } from "../stores/emoteCardStore";
+import HoverTip from "./HoverTip";
 import ProviderIcon from "./ProviderIcon";
 
-const EDGE_GAP = 8;
-const ANCHOR_GAP = 8;
-
 const EmoteTooltip: Component = () => {
-  let ref: HTMLDivElement | undefined;
-
-  createEffect(() => {
-    if (!hoveredEmote()) return;
-    // Only the user's own scrolling ends it; chat following new messages
-    // does not.
-    window.addEventListener("wheel", endEmoteHover, {
-      capture: true,
-      passive: true,
-    });
-    window.addEventListener("blur", endEmoteHover);
-    window.addEventListener("resize", endEmoteHover);
-    onCleanup(() => {
-      window.removeEventListener("wheel", endEmoteHover, { capture: true });
-      window.removeEventListener("blur", endEmoteHover);
-      window.removeEventListener("resize", endEmoteHover);
-    });
-  });
-
-  // Placed once its size is known, before the frame paints.
-  createEffect(() => {
-    const h = hoveredEmote();
-    if (!h || !ref) return;
-    const box = ref.getBoundingClientRect();
-    const a = h.anchor;
-    const above = a.top - box.height - ANCHOR_GAP;
-    const top = above >= EDGE_GAP ? above : a.bottom + ANCHOR_GAP;
-    const centered = a.left + a.width / 2 - box.width / 2;
-    const left = Math.min(
-      Math.max(EDGE_GAP, centered),
-      window.innerWidth - box.width - EDGE_GAP,
-    );
-    ref.style.top = `${top}px`;
-    ref.style.left = `${left}px`;
-    ref.style.visibility = "visible";
-  });
-
   return (
     <Show when={hoveredEmote()}>
       {(h) => {
@@ -65,7 +26,11 @@ const EmoteTooltip: Component = () => {
           );
         };
         return (
-          <div ref={(el) => (ref = el)} class="emote-tip" role="tooltip">
+          <HoverTip
+            anchor={h().anchor}
+            class="emote-tip"
+            onDismiss={endEmoteHover}
+          >
             <div class="emote-tip__art">
               <img src={largeUrl(h().emote)} alt="" draggable={false} />
               <For each={h().overlays}>
@@ -89,7 +54,7 @@ const EmoteTooltip: Component = () => {
             <Show when={h().emote.owner}>
               {(o) => <span class="emote-tip__by">by {o().display_name}</span>}
             </Show>
-          </div>
+          </HoverTip>
         );
       }}
     </Show>

@@ -44,6 +44,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { formatSeconds } from "../lib/slashCommands";
 import { messageMenuItems } from "../lib/messageMenu";
 import { openContextMenu } from "../stores/contextMenuStore";
+import { endChatHover, hoverBadge, hoverUser } from "../stores/chatHoverStore";
 import { formatSendError, toSendError } from "../lib/messageInput";
 import { retainPulse } from "../stores/pulseStore";
 import { canModerateIn } from "../stores/roleStore";
@@ -1147,7 +1148,10 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                                   : undefined
                               }
                               alt={b.badge.title}
-                              title={b.badge.title}
+                              onPointerEnter={(e) =>
+                                hoverBadge(e.currentTarget, b.badge)
+                              }
+                              onPointerLeave={endChatHover}
                               width={row().prepared.metrics.badgeSize}
                               height={row().prepared.metrics.badgeSize}
                               draggable={false}
@@ -1160,14 +1164,22 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                           classList={{ "name--painted": name().painted }}
                           role="button"
                           tabIndex={0}
-                          title={
-                            newAccount()
-                              ? "Account created in the last week"
-                              : undefined
-                          }
                           style={name().style}
+                          onPointerEnter={(e) => {
+                            const m = row().msg;
+                            if (m.platform !== "Twitch") return;
+                            hoverUser(e.currentTarget, {
+                              userId: m.platform_user_id,
+                              login: m.username,
+                              displayName: m.display_name,
+                              nameStyle: name().style,
+                              painted: name().painted,
+                            });
+                          }}
+                          onPointerLeave={endChatHover}
                           onClick={(e) => {
                             e.stopPropagation();
+                            endChatHover();
                             openCard(row().msg);
                           }}
                           onKeyDown={(e) => {
