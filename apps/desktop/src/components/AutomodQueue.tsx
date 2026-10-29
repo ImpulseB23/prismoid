@@ -3,7 +3,7 @@
 // it expire, shows on its row for a moment before it drops off.
 
 import { Component, For, Show, createSignal } from "solid-js";
-import { activeChannel } from "../stores/channelStore";
+import { useSession } from "../lib/chatSession";
 import { automodNeedsReconnect } from "../stores/authStore";
 import {
   heldMessagesIn,
@@ -128,8 +128,9 @@ const HeldRow: Component<{ entry: HeldEntry }> = (props) => {
 };
 
 const AutomodQueue: Component = () => {
+  const session = useSession();
   const rows = () => {
-    const id = activeChannel()?.id;
+    const id = session().channel?.id;
     return id === undefined ? [] : heldMessagesIn(id);
   };
 

@@ -12,14 +12,9 @@ import {
   on,
   onCleanup,
 } from "solid-js";
-import { activeChannel } from "../stores/channelStore";
 import { currentUserId } from "../stores/authStore";
-import { canModerate } from "../stores/roleStore";
-import {
-  chatSettings,
-  clearChatSettings,
-  loadChatSettings,
-} from "../stores/chatSettingsStore";
+import { canModerateIn } from "../stores/roleStore";
+import { useSession } from "../lib/chatSession";
 import ChatModes from "./ChatModes";
 import ModLog from "./ModLog";
 import AutomodQueue from "./AutomodQueue";
@@ -32,18 +27,28 @@ import { createConfirmTap } from "../lib/confirmTap";
 type Tab = "held" | "log";
 
 const CommandCenter: Component = () => {
-  // The only owner of the modes store: it follows the channel on screen.
+  const session = useSession();
+  const channel = () => session().channel;
+  const moderates = () => {
+    const c = channel();
+    return c !== null && canModerateIn(c.id);
+  };
+  // The only owner of the pane's room modes: loaded for moderators, and
+  // dropped when the rights go so nothing reads stale modes.
   createEffect(() => {
-    const id = activeChannel()?.id;
-    if (id !== undefined && canModerate()) void loadChatSettings(id);
-    else clearChatSettings();
+    const s = session();
+    if (s.channel && canModerateIn(s.channel.id)) {
+      void s.roomModes.load(s.channel.id);
+    } else {
+      s.roomModes.clear();
+    }
   });
 
   const [open, setOpen] = createSignal(false);
   const [tab, setTab] = createSignal<Tab>("held");
-  const broadcaster = () => activeChannel()?.id === currentUserId();
+  const broadcaster = () => channel()?.id === currentUserId();
   const heldCount = () => {
-    const id = activeChannel()?.id;
+    const id = channel()?.id;
     return id === undefined ? 0 : pendingHeldCount(id);
   };
 
@@ -53,7 +58,7 @@ const CommandCenter: Component = () => {
 
   createEffect(
     on(
-      () => activeChannel()?.id,
+      () => channel()?.id,
       () => {
         disarm();
         setClearError(null);
@@ -85,7 +90,7 @@ const CommandCenter: Component = () => {
   });
 
   const onClear = async () => {
-    const id = activeChannel()?.id;
+    const id = channel()?.id;
     if (id === undefined) return;
     if (!tap()) {
       setClearError(null);
@@ -106,10 +111,10 @@ const CommandCenter: Component = () => {
     }
   };
 
-  const summary = () => activeSummary(chatSettings());
+  const summary = () => activeSummary(session().roomModes.settings());
 
   return (
-    <Show when={canModerate()}>
+    <Show when={moderates()}>
       <button
         ref={(el) => (handleRef = el)}
         type="button"
@@ -143,7 +148,7 @@ const CommandCenter: Component = () => {
         >
           <div class="cm__head">
             <Show
-              when={activeChannel()?.profile_image_url}
+              when={channel()?.profile_image_url}
               fallback={<span class="cm__avatar" />}
             >
               {(url) => <img class="cm__avatar" src={url()} alt="" />}
@@ -151,7 +156,7 @@ const CommandCenter: Component = () => {
             <span class="cm__who">
               <span class="cm__title">Chat manager</span>
               <span class="cm__sub">
-                {activeChannel()?.display_name},{" "}
+                {channel()?.display_name},{" "}
                 {broadcaster() ? "your channel" : "you moderate"}
               </span>
             </span>

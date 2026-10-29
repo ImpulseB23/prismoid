@@ -13,12 +13,7 @@ import {
   type ChatMode,
 } from "../lib/chatModes";
 import { settings } from "../stores/settingsStore";
-import {
-  applyChatSettings,
-  chatSettings,
-  chatSettingsBusy,
-  chatSettingsError,
-} from "../stores/chatSettingsStore";
+import { useSession } from "../lib/chatSession";
 
 const DELAY_CHOICES = [2, 4, 6];
 
@@ -52,8 +47,10 @@ const TILES: {
 ];
 
 const ChatModes: Component = () => {
+  const session = useSession();
+  const modes = () => session().roomModes;
   const toggle = (s: ChatSettings, mode: ChatMode) =>
-    void applyChatSettings(
+    void modes().apply(
       patchFor(mode, !isOn(s, mode), {
         slowSeconds: settings().defaultSlowSeconds,
         followerMinutes: settings().defaultFollowerMinutes,
@@ -62,11 +59,11 @@ const ChatModes: Component = () => {
 
   return (
     <Show
-      when={chatSettings()}
+      when={modes().settings()}
       fallback={
         <div class="cm-empty">
-          {chatSettingsError()
-            ? formatChannelError(chatSettingsError())
+          {modes().error()
+            ? formatChannelError(modes().error())
             : "Loading room modes"}
         </div>
       }
@@ -81,7 +78,7 @@ const ChatModes: Component = () => {
                   class="cm-tile"
                   classList={{ "cm-tile--on": isOn(s(), t.mode) }}
                   aria-pressed={isOn(s(), t.mode)}
-                  disabled={chatSettingsBusy()}
+                  disabled={modes().busy()}
                   onClick={() => toggle(s(), t.mode)}
                 >
                   <span class="cm-tile__name">{t.name}</span>
@@ -107,9 +104,9 @@ const ChatModes: Component = () => {
                     value={
                       s().slow_mode_wait_time ?? settings().defaultSlowSeconds
                     }
-                    disabled={chatSettingsBusy()}
+                    disabled={modes().busy()}
                     onChange={(e) =>
-                      void applyChatSettings({
+                      void modes().apply({
                         slow_mode: true,
                         slow_mode_wait_time: Number(e.currentTarget.value),
                       })
@@ -130,9 +127,9 @@ const ChatModes: Component = () => {
                       s().follower_mode_duration ??
                       settings().defaultFollowerMinutes
                     }
-                    disabled={chatSettingsBusy()}
+                    disabled={modes().busy()}
                     onChange={(e) =>
-                      void applyChatSettings({
+                      void modes().apply({
                         follower_mode: true,
                         follower_mode_duration: Number(e.currentTarget.value),
                       })
@@ -152,9 +149,9 @@ const ChatModes: Component = () => {
                   <select
                     class="modes__select"
                     value={s().non_moderator_chat_delay_duration ?? 2}
-                    disabled={chatSettingsBusy()}
+                    disabled={modes().busy()}
                     onChange={(e) =>
-                      void applyChatSettings({
+                      void modes().apply({
                         non_moderator_chat_delay: true,
                         non_moderator_chat_delay_duration: Number(
                           e.currentTarget.value,
@@ -171,7 +168,7 @@ const ChatModes: Component = () => {
             </div>
           </Show>
 
-          <Show when={chatSettingsError()}>
+          <Show when={modes().error()}>
             {(err) => (
               <div class="dialog__error" role="alert">
                 {formatChannelError(err())}

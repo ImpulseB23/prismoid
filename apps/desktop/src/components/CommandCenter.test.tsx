@@ -9,21 +9,25 @@ const [modes, setModes] = createSignal<ChatSettings | null>(null);
 const apply = vi.fn<(patch: unknown) => Promise<void>>(async () => {});
 const load = vi.fn<(id: string) => Promise<void>>(async () => {});
 
-vi.mock("../stores/roleStore", () => ({ canModerate: () => canMod() }));
-vi.mock("../stores/channelStore", () => ({ activeChannel: () => channel() }));
+vi.mock("../stores/roleStore", () => ({ canModerateIn: () => canMod() }));
 vi.mock("../stores/authStore", () => ({
   currentUserId: () => "100",
   automodNeedsReconnect: () => false,
 }));
-vi.mock("../stores/chatSettingsStore", () => ({
-  chatSettings: () => modes(),
-  chatSettingsBusy: () => false,
-  applyChatSettings: (p: unknown) => apply(p),
-  chatSettingsError: () => null,
-  loadChatSettings: (id: string) => load(id),
-  clearChatSettings: () => clearModes(),
-}));
 const clearModes = vi.fn();
+vi.mock("../lib/chatSession", () => ({
+  useSession: () => () => ({
+    channel: channel(),
+    roomModes: {
+      settings: () => modes(),
+      busy: () => false,
+      apply: (p: unknown) => apply(p),
+      error: () => null,
+      load: (id: string) => load(id),
+      clear: () => clearModes(),
+    },
+  }),
+}));
 const clear = vi.fn<(id: string) => Promise<void>>(async () => {});
 vi.mock("../lib/twitchAuth", () => ({
   clearChat: (id: string) => clear(id),

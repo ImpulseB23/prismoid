@@ -28,10 +28,10 @@ const shown = { id: "a" };
 vi.mock("../stores/channelStore", () => ({
   activeChannel: () => ({ id: shown.id }),
 }));
-const roomModes = { loadChatSettings: vi.fn(async () => {}) };
+const roomModes = { load: vi.fn(async () => {}) };
 vi.mock("../stores/chatSettingsStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../stores/chatSettingsStore")>()),
-  ...roomModes,
+  createChatSettingsStore: () => roomModes,
 }));
 const roles = { mod: false, noteModerator: vi.fn() };
 vi.mock("../stores/roleStore", () => ({
@@ -168,19 +168,19 @@ describe("chatSession", () => {
       channel_id: "a",
       action: "slow",
     } as ChatEvent);
-    expect(roomModes.loadChatSettings).toHaveBeenCalledWith("a");
+    expect(roomModes.load).toHaveBeenCalledWith("a");
     await tick();
     // Viewers get a public row for each, and the mod action its own row.
     expect(ids("a").length).toBe(6);
 
-    roles.mod = true;
+    // Off screen too: the pane showing it may have the modes open.
     shown.id = "b";
     sink.event({
       kind: "mod_action",
       channel_id: "a",
       action: "slow",
     } as ChatEvent);
-    expect(roomModes.loadChatSettings).toHaveBeenCalledOnce();
+    expect(roomModes.load).toHaveBeenCalledTimes(2);
   });
 
   it("notes a ban and keeps its own badges and emotes, on screen or not", async () => {
