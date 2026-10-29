@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
-import type { ChatMessage } from "../stores/chatStore";
+import type { ChatMessage, ChatStore } from "../stores/chatStore";
 
 const said = (id: string, text: string) =>
   ({
@@ -30,13 +30,15 @@ vi.mock("../lib/twitchAuth", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/twitchAuth")>()),
   ...mod,
 }));
-vi.mock("../stores/chatStore", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../stores/chatStore")>()),
-  recentMessagesByUser: () => [
+const chat = {
+  viewport: () => ({ start: 0, count: 2 }),
+  messageRevision: () => 0,
+  recentByUser: () => [
     said("a", "hey @Me how is it going"),
     said("b", "nothing to see"),
   ],
-}));
+  markDeleted: vi.fn(),
+} as unknown as ChatStore;
 vi.mock("../stores/userInfoStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../stores/userInfoStore")>()),
   ensureUserInfo: () => {},
@@ -79,6 +81,7 @@ describe("UserCard", () => {
   it("highlights recent messages that mention you", () => {
     render(() => (
       <UserCard
+        chat={chat}
         login="me"
         onClose={() => {}}
         onMention={() => {}}
@@ -102,6 +105,7 @@ describe("UserCard", () => {
   it("toggles highlighting everything they say", async () => {
     render(() => (
       <UserCard
+        chat={chat}
         login="me"
         onClose={() => {}}
         onMention={() => {}}
@@ -118,6 +122,7 @@ describe("UserCard", () => {
   it("paints the name of a 7TV paint wearer", () => {
     render(() => (
       <UserCard
+        chat={chat}
         login="me"
         onClose={() => {}}
         onMention={() => {}}
@@ -132,6 +137,7 @@ describe("UserCard", () => {
   it("leaves other names plain", () => {
     render(() => (
       <UserCard
+        chat={chat}
         login="me"
         onClose={() => {}}
         onMention={() => {}}
@@ -163,6 +169,7 @@ describe("UserCard follow age", () => {
     follows.since = "2021-03-04T00:00:00Z";
     render(() => (
       <UserCard
+        chat={chat}
         login="viewer"
         onClose={() => {}}
         onMention={() => {}}
@@ -185,6 +192,7 @@ describe("UserCard follow age", () => {
     });
     render(() => (
       <UserCard
+        chat={chat}
         login="me"
         onClose={() => {}}
         onMention={() => {}}
@@ -217,6 +225,7 @@ describe("UserCard moderation", () => {
     const onJump = vi.fn();
     render(() => (
       <UserCard
+        chat={chat}
         login="streamer"
         onClose={() => {}}
         onMention={onMention}
@@ -270,6 +279,7 @@ describe("UserCard moderation", () => {
     mod.unbanUser.mockRejectedValueOnce("not banned");
     render(() => (
       <UserCard
+        chat={chat}
         login="streamer"
         onClose={() => {}}
         onMention={() => {}}
@@ -311,6 +321,7 @@ describe("UserCard mod history", () => {
     });
     render(() => (
       <UserCard
+        chat={chat}
         login="me"
         onClose={() => {}}
         onMention={() => {}}

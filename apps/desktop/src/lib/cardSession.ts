@@ -12,11 +12,7 @@ import { loadUserHistory } from "./userCardWindow";
 import { createHistoryGate } from "./chatHistory";
 import { setAuthStatus } from "../stores/authStore";
 import { loadBadgeBundle } from "../stores/badgeStore";
-import {
-  addMessages,
-  clearMessages,
-  type ChatMessage,
-} from "../stores/chatStore";
+import type { ChatMessage, ChatStore } from "../stores/chatStore";
 import { loadEmoteBundle } from "../stores/emoteStore";
 import { clearModLog, recordModAction } from "../stores/modLogStore";
 import { syncPaints } from "../stores/paintStore";
@@ -42,13 +38,18 @@ export async function startCardSession(): Promise<() => void> {
   };
 }
 
-/** For each person the card shows; returns the stop function. */
-export async function showCardUser(user: CardUser): Promise<() => void> {
+/**
+ * For each person the card shows, into a store of their own; returns the
+ * stop function.
+ */
+export async function showCardUser(
+  user: CardUser,
+  chat: ChatStore,
+): Promise<() => void> {
   const { channel_id: channel, platform_user_id: id } = user;
   const theirs = (m: ChatMessage) =>
     m.channel_id === channel && m.platform_user_id === id;
 
-  clearMessages();
   clearModLog();
   const offs: UnlistenFn[] = [];
   let stopped = false;
@@ -59,14 +60,14 @@ export async function showCardUser(user: CardUser): Promise<() => void> {
 
   // The same gate the feed uses: live messages that land while history
   // loads wait for it, and a stored copy of one of them is dropped.
-  const gate = createHistoryGate(addMessages);
+  const gate = createHistoryGate(chat.addMessages);
   offs.push(gate.cancel);
   gate.begin(loadUserHistory(channel, id, CARD_HISTORY));
   offs.push(
     await listen<ChatMessage[]>("chat_messages", (e) => {
       const batch = e.payload.filter(theirs);
       if (!stopped && batch.length > 0 && !gate.offer(batch)) {
-        addMessages(batch);
+        chat.addMessages(batch);
       }
     }),
   );

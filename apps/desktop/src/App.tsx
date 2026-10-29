@@ -12,6 +12,7 @@ import {
 import { listen } from "@tauri-apps/api/event";
 import ChannelTabs from "./components/ChannelTabs";
 import ChatFeed from "./components/ChatFeed";
+import ChatPane from "./components/ChatPane";
 import Header from "./components/Header";
 import MessageInput from "./components/MessageInput";
 import CommandCenter from "./components/CommandCenter";
@@ -41,7 +42,6 @@ import { clearStreamManager } from "./stores/streamManagerStore";
 import { clearAds } from "./stores/adStore";
 import { clearStreamLog } from "./stores/streamLogStore";
 import { setStreamManagerOpen } from "./stores/streamManagerPanelStore";
-import { clearMessages } from "./stores/chatStore";
 import {
   isMentionFor,
   resetMentions,
@@ -160,7 +160,6 @@ const App: Component = () => {
 
   const signOut = async () => {
     await logout();
-    clearMessages();
     resetMentions();
     clearHeldMessages();
     clearStreamManager();
@@ -281,11 +280,13 @@ const ChatShell: Component<{ login: string; onSignOut: () => void }> = (
       <div class="app__body">
         <ChannelTabs />
         <StreamBar />
-        <div class="chat-area">
-          <ChatFeed login={props.login} />
-          <CommandCenter />
-        </div>
-        <MessageInput login={props.login} />
+        <ChatPane channel={activeChannel()}>
+          <div class="chat-area">
+            <ChatFeed login={props.login} />
+            <CommandCenter />
+          </div>
+          <MessageInput login={props.login} />
+        </ChatPane>
         <StreamManager />
       </div>
       <Tour />

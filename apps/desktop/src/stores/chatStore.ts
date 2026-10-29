@@ -587,23 +587,3 @@ export function createChatStore(maxMessages = DEFAULT_MAX_MESSAGES): ChatStore {
     markAllDeleted,
   };
 }
-
-// Default singleton used by the production app.
-const defaultStore = createChatStore();
-
-export const viewport = defaultStore.viewport;
-export const messageRevision = defaultStore.messageRevision;
-export const addMessages = defaultStore.addMessages;
-export const getMessage = defaultStore.getMessage;
-export const findMessageById = defaultStore.findById;
-export const messageMono = defaultStore.monoOf;
-export const insertPending = defaultStore.insertPending;
-export const confirmPendingId = defaultStore.confirmPendingId;
-export const failPending = defaultStore.failPending;
-export const retryPending = defaultStore.retryPending;
-export const clearMessages = defaultStore.clear;
-export const recentMessagesByUser = defaultStore.recentByUser;
-export const searchMessages = defaultStore.search;
-export const markMessageDeleted = defaultStore.markDeleted;
-export const markUserMessagesCleared = defaultStore.markUserCleared;
-export const markAllMessagesDeleted = defaultStore.markAllDeleted;

@@ -62,7 +62,6 @@ vi.mock("../lib/messageLayout", async (importOriginal) => ({
   firstLabelWidth: () => 80,
 }));
 
-const { clearMessages } = await import("../stores/chatStore");
 const { invoke } = await import("@tauri-apps/api/core");
 const { setAuthStatus } = await import("../stores/authStore");
 const { clearJump, jumpRequest, jumpToMessage } =
@@ -76,6 +75,16 @@ const { closeModPopover, modPopover } =
   await import("../stores/modPopoverStore");
 const { updateSettings } = await import("../stores/settingsStore");
 const { default: ChatFeed } = await import("./ChatFeed");
+const { default: ChatPane } = await import("./ChatPane");
+const { activeChannel } = await import("../stores/channelStore");
+
+// The feed draws the session of the pane it sits in.
+const renderFeed = (login: string) =>
+  render(() => (
+    <ChatPane channel={activeChannel()}>
+      <ChatFeed login={login} />
+    </ChatPane>
+  ));
 const { startChatRouter } = await import("../lib/chatRouter");
 
 let seq = 0;
@@ -131,7 +140,6 @@ describe("ChatFeed", () => {
   afterEach(async () => {
     stopRouter();
     cleanup();
-    clearMessages();
     handlers.clear();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -143,7 +151,7 @@ describe("ChatFeed", () => {
 
   it("opens the timeout picker and the warn box from a mod's hover bar", async () => {
     role.mod = true;
-    render(() => <ChatFeed login="me" />);
+    renderFeed("me");
     await tick();
     emit("chat_messages", [msg("rude")]);
     await tick();
@@ -173,7 +181,7 @@ describe("ChatFeed", () => {
 
   it("opens both from the right-click menu at the pointer", async () => {
     role.mod = true;
-    const { container } = render(() => <ChatFeed login="me" />);
+    const { container } = renderFeed("me");
     await tick();
     emit("chat_messages", [msg("menu")]);
     await tick();
@@ -203,7 +211,7 @@ describe("ChatFeed", () => {
       missing_scopes: [],
       enabled_scope_groups: [],
     });
-    render(() => <ChatFeed login="viewer" />);
+    renderFeed("viewer");
     await tick();
     emit("chat_messages", [
       { ...msg("mine"), badges: [{ set_id: "subscriber", id: "6" }] },
@@ -214,7 +222,7 @@ describe("ChatFeed", () => {
   });
 
   it("jumps to a loaded message and flashes it", async () => {
-    const { container } = render(() => <ChatFeed login="me" />);
+    const { container } = renderFeed("me");
     await tick();
     emit("chat_messages", [msg("old"), msg("new")]);
     await tick();
@@ -225,7 +233,7 @@ describe("ChatFeed", () => {
   });
 
   it("says when the message is gone, and opens another channel first", async () => {
-    render(() => <ChatFeed login="me" />);
+    renderFeed("me");
     await tick();
     jumpToMessage("chan", "missing");
     await tick();
@@ -238,7 +246,7 @@ describe("ChatFeed", () => {
   });
 
   it("opens a card window for the name clicked", async () => {
-    const { container } = render(() => <ChatFeed login="me" />);
+    const { container } = renderFeed("me");
     await tick();
     emit("chat_messages", [msg("hi")]);
     await tick();
@@ -257,7 +265,7 @@ describe("ChatFeed", () => {
   });
 
   it("hides the mod buttons from viewers", async () => {
-    render(() => <ChatFeed login="me" />);
+    renderFeed("me");
     await tick();
     emit("chat_messages", [msg("calm")]);
     await tick();
@@ -266,7 +274,7 @@ describe("ChatFeed", () => {
   });
 
   it("marks a row whether the flag lands before or after it", async () => {
-    const { container } = render(() => <ChatFeed login="me" />);
+    const { container } = renderFeed("me");
     await tick();
 
     emit("chat_messages", [msg("late"), msg("plain")]);
@@ -284,7 +292,7 @@ describe("ChatFeed", () => {
   });
 
   it("marks rows that carry the saved flag", async () => {
-    const { container } = render(() => <ChatFeed login="me" />);
+    const { container } = renderFeed("me");
     await tick();
 
     emit("chat_messages", [{ ...msg("saved"), first_message: true }]);
@@ -293,7 +301,7 @@ describe("ChatFeed", () => {
   });
 
   it("hides the mark while the setting is off", async () => {
-    const { container } = render(() => <ChatFeed login="me" />);
+    const { container } = renderFeed("me");
     await tick();
 
     emit("first_message", { channel_id: "chan", message_id: "off" });
@@ -307,7 +315,7 @@ describe("ChatFeed", () => {
   });
 
   it("gilds raids and gift bombs but not other notices", async () => {
-    const { container } = render(() => <ChatFeed login="me" />);
+    const { container } = renderFeed("me");
     await tick();
 
     const noticed = (id: string, notice_type: string) => ({

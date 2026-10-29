@@ -12,8 +12,7 @@ import {
   createSignal,
 } from "solid-js";
 import { activeChannel } from "../stores/channelStore";
-import { messageRevision, searchMessages } from "../stores/chatStore";
-import { recentChatters } from "../stores/chatterStore";
+import { sessionFor } from "../lib/chatSession";
 import { emoteByCode } from "../stores/emoteStore";
 import { isFirstMessage } from "../stores/firstMessageStore";
 import {
@@ -46,7 +45,11 @@ const ChatSearch: Component<ChatSearchProps> = (props) => {
 
   const query = createMemo(() => parseQuery(text()));
   const chips = createMemo(() => filterTokens(text()));
-  const suggestions = createMemo(() => suggest(text(), recentChatters()));
+  // Search looks through the channel on screen.
+  const session = () => sessionFor(activeChannel()?.id);
+  const suggestions = createMemo(() =>
+    suggest(text(), session()?.chatters.recent() ?? []),
+  );
 
   createEffect(() => {
     suggestions();
@@ -54,16 +57,16 @@ const ChatSearch: Component<ChatSearchProps> = (props) => {
   });
 
   const results = createMemo(() => {
-    messageRevision();
+    const s = session();
     const q = query();
-    const channel = activeChannel()?.id;
-    if (isEmpty(q) || channel === undefined) return [];
+    if (isEmpty(q) || !s) return [];
+    s.chat.messageRevision();
     const ctx = {
       isFirst: isFirstMessage,
       isEmote: (w: string) => emoteByCode(w) !== undefined,
     };
-    return searchMessages(
-      (m) => m.channel_id === channel && matches(m, q, ctx),
+    return s.chat.search(
+      (m) => m.channel_id === s.channelId && matches(m, q, ctx),
       MAX_RESULTS,
     );
   });

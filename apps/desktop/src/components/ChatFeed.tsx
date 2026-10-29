@@ -16,21 +16,11 @@ import {
   onMount,
 } from "solid-js";
 import {
-  addMessages,
-  clearMessages,
-  confirmPendingId,
-  failPending,
-  findMessageById,
-  getMessage,
-  markAllMessagesDeleted,
-  markMessageDeleted,
-  messageMono,
-  markUserMessagesCleared,
-  messageRevision,
-  retryPending,
-  viewport,
+  createChatStore,
   type ChatMessage,
+  type ChatStore,
 } from "../stores/chatStore";
+import { useSession } from "../lib/chatSession";
 import {
   activeChannel,
   channelBanned,
@@ -54,33 +44,17 @@ import {
   type SendMessageError,
 } from "../lib/twitchAuth";
 import { openModPopover } from "../stores/modPopoverStore";
-import { noteOwnMessage } from "../stores/ownIdentityStore";
-import { currentUserId } from "../stores/authStore";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { formatSeconds } from "../lib/slashCommands";
 import { messageMenuItems } from "../lib/messageMenu";
 import { openContextMenu } from "../stores/contextMenuStore";
 import { notice, notify } from "../stores/noticeStore";
 import { formatSendError, toSendError } from "../lib/messageInput";
-import { attachFeed } from "../lib/chatRouter";
-import { createHistoryGate, loadHistory } from "../lib/chatHistory";
-import { currentEmoteBundle } from "../lib/emoteBundle";
-import {
-  loadBadgeBundle,
-  resolveBadge,
-  badgeRevision,
-  type EmoteBundle,
-} from "../stores/badgeStore";
-import { loadEmoteBundle, type EmoteBundleSets } from "../stores/emoteStore";
-import { clearChatters, recordChatter } from "../stores/chatterStore";
+import { resolveBadge, badgeRevision } from "../stores/badgeStore";
 import { retainPulse } from "../stores/pulseStore";
-import { canModerate, noteModerator } from "../stores/roleStore";
-import { clearModLog, recordModAction } from "../stores/modLogStore";
-import { MODE_ACTIONS, loadChatSettings } from "../stores/chatSettingsStore";
-import { modActionMessage, publicModerationMessage } from "../lib/modActions";
-import { BANNED_HINT, bannedNotice, bannedText } from "../lib/chatAccess";
+import { canModerate } from "../stores/roleStore";
+import { BANNED_HINT, bannedText } from "../lib/chatAccess";
 import {
-  ensureUserInfo,
   isNewAccount,
   userInfo,
   userInfoRevision,
@@ -121,10 +95,8 @@ const CELEBRATIONS = new Set([
   "shared_chat_community_sub_gift",
 ]);
 
-// Moderator action rows are made here, not by the host, so they need their
-// own ordering key. Starting far above any host sequence keeps them at the
-// tail where they arrived, the same trick optimistic sends use.
-let nextModActionSeq = Number.MAX_SAFE_INTEGER - 2 ** 40;
+// What a feed with no channel open reads: never written, always empty.
+const idleChat = createChatStore();
 
 interface PositionedMessage {
   monoIndex: number;
@@ -177,8 +149,12 @@ export interface ChatFeedProps {
 }
 
 const ChatFeed: Component<ChatFeedProps> = (props) => {
+  const session = useSession();
+  const chat = () => session()?.chat ?? idleChat;
+  const historyLoading = () => session()?.historyLoading() ?? false;
   let containerRef: HTMLDivElement | undefined;
   const entryCache = new Map<number, CachedEntry>();
+  let cachedFor: ChatStore | undefined;
   let lastBadgeRev = 0;
   let lastMessageRev = 0;
   let lastTimestamps: boolean | undefined;
@@ -221,7 +197,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       const atBottom = totalH - top - clientH <= STICK_THRESHOLD;
       if (atBottom !== stickToBottom()) {
         setStickToBottom(atBottom);
-        const v = viewport();
+        const v = chat().viewport();
         setReadUpTo(atBottom ? null : v.start + v.count);
       }
       anchor = atBottom ? null : anchorAt(top);
@@ -236,77 +212,49 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     setReadUpTo(null);
   };
 
-  // Stored history can hold the user's newest message in a channel when
-  // the live feed does not.
-  const history = createHistoryGate((batch) => {
-    addMessages(batch);
-    const me = currentUserId();
-    if (me) for (const m of batch) noteOwnMessage(m, me);
-  });
-  onCleanup(() => history.cancel());
-
-  // A channel switch empties the view. Indices stay monotonic so the
-  // entry cache cannot serve stale layouts, but nothing in it is
-  // reachable any more, so drop it too. The stored tail then fills the
-  // empty view; a remount (hot reload) keeps the store, so a view that
-  // already has rows does not ask again.
+  // A channel switch starts the view over at the bottom of the new one.
   createEffect(
     on(
-      () => activeChannel()?.id,
-      (id, prev) => {
-        if (id === prev) return;
-        if (prev !== undefined) {
-          // A short cross-fade so the new channel arrives instead of
-          // snapping in. Script animations ignore the CSS reduced-motion
-          // rule, so the preference is checked here; jsdom has no animate.
-          if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
-            containerRef?.animate?.([{ opacity: 0.35 }, { opacity: 1 }], {
-              duration: 200,
-              easing: "ease-out",
-            });
-          }
-          clearMessages();
-          clearChatters();
-          clearModLog();
-          entryCache.clear();
-          anchor = null;
-          setStickToBottom(true);
-          setReadUpTo(null);
+      () => session(),
+      (_, prev) => {
+        if (prev === undefined) return;
+        // A short cross-fade so the new channel arrives instead of
+        // snapping in. Script animations ignore the CSS reduced-motion
+        // rule, so the preference is checked here; jsdom has no animate.
+        if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          containerRef?.animate?.([{ opacity: 0.35 }, { opacity: 1 }], {
+            duration: 200,
+            easing: "ease-out",
+          });
         }
-        if (id !== undefined && viewport().count === 0) {
-          history.begin(loadHistory(id));
-        }
-        // Each tab has its own emotes and badges; the host keeps the bundle
-        // of every joined channel.
-        if (id !== undefined) {
-          currentEmoteBundle(id)
-            .then((bundle) => {
-              if (bundle && activeChannel()?.id === id) applyBundle(bundle);
-            })
-            .catch((err) => console.error("failed to load emote bundle:", err));
-        }
+        anchor = null;
+        setStickToBottom(true);
+        setReadUpTo(null);
       },
+      { defer: true },
     ),
   );
-
-  const applyBundle = (bundle: EmoteBundle & EmoteBundleSets) => {
-    loadBadgeBundle(bundle);
-    loadEmoteBundle(bundle);
-  };
 
   const layout = createMemo<{
     messages: PositionedMessage[];
     byMono: Map<number, PositionedMessage>;
     totalHeight: number;
   }>(() => {
-    const v = viewport();
+    // Each session numbers its messages from zero, so rows cached for
+    // another channel would answer for this one's indices.
+    const store = chat();
+    if (store !== cachedFor) {
+      entryCache.clear();
+      cachedFor = store;
+    }
+    const v = store.viewport();
     const w = width();
     // Read the badge revision so bundle reloads invalidate the prepared
     // cache and trigger a full re-measure.
     const rev = badgeRevision();
     // Read the message-mutation revision so reconciled or failed
     // pending entries re-render with their new content.
-    const msgRev = messageRevision();
+    const msgRev = chat().messageRevision();
     const timestamps = settings().showTimestamps;
     const markFirsts = settings().highlightFirstMessages;
     const metrics = textMetrics(settings().textSize);
@@ -342,7 +290,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     let y = 0;
     let writeIdx = 0;
     for (let mono = liveStart; mono < liveEnd; mono++) {
-      const msg = getMessage(mono);
+      const msg = chat().getMessage(mono);
       if (!msg) continue;
       // The first-message mark can land after the row was measured; the
       // label needs room on the right, so only the height is measured again.
@@ -418,7 +366,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
   const unseenCount = createMemo(() => {
     const upTo = readUpTo();
     if (upTo === null) return 0;
-    const v = viewport();
+    const v = chat().viewport();
     return Math.max(0, v.start + v.count - upTo);
   });
 
@@ -474,9 +422,9 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       }
       return;
     }
-    if (history.loading()) return;
+    if (historyLoading()) return;
     const { byMono } = layout();
-    const mono = messageMono(j.message_id);
+    const mono = chat().monoOf(j.message_id);
     if (mono === undefined) {
       notify("That message is no longer in the loaded chat");
       focusedFor = null;
@@ -491,7 +439,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     containerRef.scrollTop = target;
     setScrollTop(target);
     anchor = anchorAt(target);
-    const v = viewport();
+    const v = chat().viewport();
     setReadUpTo(v.start + v.count);
     setFlashId(j.message_id);
     clearTimeout(flashTimer);
@@ -530,83 +478,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       setFontsLoaded(true);
     }
 
-    const detach = attachFeed({
-      channel: () => activeChannel()?.id,
-      messages: (batch) => {
-        const id = activeChannel()?.id;
-        const ignored = settings().ignoredLogins;
-        const accepted = batch.filter((m) => !ignored.includes(m.username));
-        for (const m of accepted) {
-          recordChatter(
-            m.platform_user_id,
-            m.username,
-            m.display_name,
-            m.arrival_time,
-          );
-          // Our own message wearing the moderator badge is proof of the role
-          // here, including one granted after the Helix list was fetched.
-          if (m.is_mod && m.username === props.login && id !== undefined) {
-            noteModerator(id);
-          }
-        }
-        ensureUserInfo(
-          accepted
-            .filter((m) => m.platform === "Twitch")
-            .map((m) => m.platform_user_id),
-        );
-        if (!history.offer(accepted)) addMessages(accepted);
-      },
-      event: (e) => {
-        // Moderators get the full story from channel.moderate; everyone
-        // else sees the effect Twitch reports to the whole channel.
-        const publicRows = settings().showModActions && !canModerate();
-        switch (e.kind) {
-          case "message_deleted": {
-            const target = findMessageById(e.message_id);
-            markMessageDeleted(e.message_id);
-            if (publicRows) {
-              addMessages([
-                publicModerationMessage(e, nextModActionSeq++, target),
-              ]);
-            }
-            break;
-          }
-          case "user_cleared":
-            markUserMessagesCleared(e.target_user_id);
-            if (publicRows) {
-              addMessages([publicModerationMessage(e, nextModActionSeq++)]);
-            }
-            break;
-          case "chat_cleared":
-            markAllMessagesDeleted();
-            if (publicRows) {
-              addMessages([publicModerationMessage(e, nextModActionSeq++)]);
-            }
-            break;
-          case "mod_action": {
-            recordModAction(e);
-            const id = activeChannel()?.id;
-            if (MODE_ACTIONS.has(e.action) && id !== undefined) {
-              void loadChatSettings(id);
-            }
-            if (settings().showModActions) {
-              addMessages([modActionMessage(e, nextModActionSeq++)]);
-            }
-            break;
-          }
-        }
-      },
-      banned: () => {
-        const channel = activeChannel();
-        if (channel) addMessages([bannedNotice(channel, nextModActionSeq++)]);
-      },
-      bundle: applyBundle,
-    });
-
-    onCleanup(() => {
-      ro.disconnect();
-      detach();
-    });
+    onCleanup(() => ro.disconnect());
   });
 
   const openCard = (msg: ChatMessage) => {
@@ -678,7 +550,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
   const modDelete = (msg: ChatMessage) =>
     runModAction("Message deleted", async () => {
       await deleteMessage(msg.channel_id, msg.id);
-      markMessageDeleted(msg.id);
+      chat().markDeleted(msg.id);
     });
 
   // Hover icons for moderators: delete, the timeout picker, warn, ban.
@@ -802,17 +674,17 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
               const onRetry = () => {
                 const localId = row().msg.local_id;
                 if (!localId) return;
-                const text = retryPending(localId);
+                const text = chat().retryPending(localId);
                 if (!text) return;
                 sendMessage(
                   row().msg.channel_id,
                   text,
                   row().msg.reply_to ?? undefined,
                 ).then(
-                  (ok) => confirmPendingId(localId, ok.message_id),
+                  (ok) => chat().confirmPendingId(localId, ok.message_id),
                   (raw) => {
                     const err = toSendError(raw);
-                    failPending(
+                    chat().failPending(
                       localId,
                       typeof err === "string"
                         ? err
@@ -1254,9 +1126,9 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
         </div>
       </div>
 
-      <Show when={fontsLoaded() && viewport().count === 0}>
+      <Show when={fontsLoaded() && chat().viewport().count === 0}>
         <EmptyState
-          loading={channelStatus() === "connecting" || history.loading()}
+          loading={channelStatus() === "connecting" || historyLoading()}
         />
       </Show>
 

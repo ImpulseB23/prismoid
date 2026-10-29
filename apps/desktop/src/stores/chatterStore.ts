@@ -1,4 +1,4 @@
-// Who has spoken in the current channel, most recent first, for @mention
+// Who has spoken in a channel, most recent first, for @mention
 // completion. Backed by a Map whose insertion order is recency: a chatter
 // who speaks again is deleted and re-inserted so they move to the end.
 
@@ -59,10 +59,3 @@ export function createChatterStore(max = MAX_CHATTERS): ChatterStore {
     },
   };
 }
-
-const defaultStore = createChatterStore();
-export const recordChatter = defaultStore.record;
-export const recentChatters = defaultStore.recent;
-export const chatterByLogin = defaultStore.byLogin;
-export const chatterStats = defaultStore.stats;
-export const clearChatters = defaultStore.clear;
