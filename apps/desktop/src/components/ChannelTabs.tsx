@@ -9,6 +9,7 @@ import {
   For,
   Show,
   createEffect,
+  createSignal,
   on,
   onCleanup,
   onMount,
@@ -18,12 +19,14 @@ import {
   channelTabs,
   closeChannel,
   focusChannel,
+  moveChannelTab,
   unreadCount,
 } from "../stores/channelStore";
 import { openPicker, pickerLoading, prefetchLive } from "../stores/pickerStore";
 import {
   TAB_DRAG_TYPE,
   canSplitPane,
+  draggedTab,
   dropPaneChannel,
   panes,
   setDraggedTab,
@@ -37,6 +40,11 @@ const report = (what: string) => (err: unknown) => console.error(what, err);
 const ChannelTabs: Component = () => {
   let strip: HTMLDivElement | undefined;
   const tabEls = new Map<string, HTMLElement>();
+  // The tab a dragged tab would land beside, and on which side.
+  const [dropAt, setDropAt] = createSignal<{
+    id: string;
+    after: boolean;
+  } | null>(null);
 
   // The active tab draws its own underline, so it always matches the tab's
   // width. On a switch it slides over from the old tab (FLIP): it starts
@@ -136,6 +144,10 @@ const ChannelTabs: Component = () => {
                 classList={{
                   "tab--active": active(),
                   "tab--shown": inOtherPane(),
+                  "tab--drop-before":
+                    dropAt()?.id === channel.id && !dropAt()!.after,
+                  "tab--drop-after":
+                    dropAt()?.id === channel.id && dropAt()!.after,
                 }}
                 role="tab"
                 aria-selected={active()}
@@ -145,7 +157,44 @@ const ChannelTabs: Component = () => {
                   e.dataTransfer?.setData(TAB_DRAG_TYPE, channel.id);
                   setDraggedTab(channel.id);
                 }}
-                onDragEnd={() => setDraggedTab(null)}
+                onDragEnd={() => {
+                  setDraggedTab(null);
+                  setDropAt(null);
+                }}
+                // Another tab dropped here moves before or after this one,
+                // whichever half the pointer is over.
+                onDragOver={(e) => {
+                  if (
+                    !e.dataTransfer?.types.includes(TAB_DRAG_TYPE) ||
+                    draggedTab() === channel.id
+                  ) {
+                    return;
+                  }
+                  e.preventDefault();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setDropAt({
+                    id: channel.id,
+                    after: e.clientX > r.left + r.width / 2,
+                  });
+                }}
+                onDragLeave={(e) => {
+                  if (
+                    !e.currentTarget.contains(e.relatedTarget as Node | null)
+                  ) {
+                    setDropAt(null);
+                  }
+                }}
+                onDrop={(e) => {
+                  const at = dropAt();
+                  setDropAt(null);
+                  const id = e.dataTransfer?.getData(TAB_DRAG_TYPE);
+                  if (!id || !at || id === channel.id) return;
+                  e.preventDefault();
+                  const order = channelTabs().map((c) => c.id);
+                  let to = order.indexOf(channel.id) + (at.after ? 1 : 0);
+                  if (order.indexOf(id) < to) to -= 1;
+                  moveChannelTab(id, to);
+                }}
                 onContextMenu={(e) =>
                   openContextMenu(
                     e,

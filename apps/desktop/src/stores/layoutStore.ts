@@ -12,6 +12,8 @@ const KEY = "prismoid.layout";
 
 /** Carries a tab's channel id while it is dragged onto the panes. */
 export const TAB_DRAG_TYPE = "application/x-prismoid-channel";
+/** Carries a pane's id while its header is dragged onto another pane. */
+export const PANE_DRAG_TYPE = "application/x-prismoid-pane";
 
 export interface PaneSlot {
   id: string;
@@ -50,6 +52,8 @@ export interface LayoutStore {
    */
   split: (channelId: string, afterId?: string) => boolean;
   canSplit: () => boolean;
+  /** Swaps two panes' places, as dragging one onto the other does. */
+  swap: (aId: string, bId: string) => void;
   /** Closes a pane; the last one never closes. */
   close: (paneId: string) => void;
   /** A tab closed: its pane goes, or empties if it is the last one. */
@@ -147,6 +151,16 @@ export function createLayoutStore(
     return true;
   }
 
+  function swap(aId: string, bId: string): void {
+    const list = panes();
+    const a = list.findIndex((p) => p.id === aId);
+    const b = list.findIndex((p) => p.id === bId);
+    if (a < 0 || b < 0 || a === b) return;
+    const next = [...list];
+    [next[a], next[b]] = [next[b]!, next[a]!];
+    update(next);
+  }
+
   function close(paneId: string): void {
     const list = panes();
     if (list.length < 2) return;
@@ -214,6 +228,7 @@ export function createLayoutStore(
     showIn,
     split,
     canSplit: () => features.split() && panes().length < MAX_PANES,
+    swap,
     close,
     drop,
     keepOnly,
@@ -276,9 +291,12 @@ function defaultStorage(): StorageLike | null {
 }
 
 const [draggedTab, setDraggedTab] = createSignal<string | null>(null);
+const [draggedPane, setDraggedPane] = createSignal<string | null>(null);
 
 /** The channel of the tab being dragged, so panes can show drop targets. */
 export { draggedTab, setDraggedTab };
+/** The pane whose header is being dragged, so the others take the drop. */
+export { draggedPane, setDraggedPane };
 
 const defaultStore = createLayoutStore(defaultStorage(), {
   split: () => settings().splitView,
@@ -293,6 +311,7 @@ export const showInFocusedPane = defaultStore.show;
 export const splitPane = defaultStore.split;
 export const canSplitPane = defaultStore.canSplit;
 export const closePane = defaultStore.close;
+export const swapPanes = defaultStore.swap;
 export const dropPaneChannel = defaultStore.drop;
 export const keepPaneChannels = defaultStore.keepOnly;
 export const togglePaneVideo = defaultStore.toggleVideo;

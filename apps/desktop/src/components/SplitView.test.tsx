@@ -208,4 +208,20 @@ describe("SplitView", () => {
     setStatus("ready");
     expect(shown()).toEqual(["a"]);
   });
+
+  it("swaps panes when one's header is dropped on another", async () => {
+    await mount();
+    layout.splitPane("b");
+    const [first, second] = layout.panes().map((p) => p.id);
+    const head = document.querySelectorAll(".pane-head")[1]!;
+    fireEvent.dragStart(head, { dataTransfer: { setData: () => {} } });
+    const drop = document.querySelectorAll(".split__drop")[0]!;
+    expect(drop.classList.contains("split__drop--armed")).toBe(true);
+    const data = { types: [layout.PANE_DRAG_TYPE], getData: () => second! };
+    fireEvent.dragOver(drop, { dataTransfer: data });
+    fireEvent.drop(drop, { dataTransfer: data });
+    expect(layout.panes().map((p) => p.id)).toEqual([second, first]);
+    expect(shown()).toEqual(["b", "a"]);
+    fireEvent.dragEnd(head);
+  });
 });
