@@ -54,6 +54,24 @@ describe("ChatSearch", () => {
     expect(screen.getByText("2 matches")).toBeTruthy();
   });
 
+  it("suggests filters as you type and removes them by chip", () => {
+    render(() => <ChatSearch open onClose={() => {}} />);
+    const box = screen.getByRole("searchbox") as HTMLInputElement;
+    expect(screen.getAllByRole("option")).toHaveLength(4);
+
+    fireEvent.input(box, { target: { value: "i" } });
+    fireEvent.keyDown(box, { key: "Tab" });
+    expect(box.value).toBe("is:");
+    fireEvent.input(box, { target: { value: "is:" } });
+    fireEvent.keyDown(box, { key: "ArrowDown" });
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(box.value).toBe("is:reply ");
+
+    fireEvent.input(box, { target: { value: "is:reply has:link" } });
+    fireEvent.click(screen.getByRole("button", { name: "Remove is:reply" }));
+    expect(box.value).toBe("has:link");
+  });
+
   it("closes on Escape", () => {
     const onClose = vi.fn();
     render(() => <ChatSearch open onClose={onClose} />);
