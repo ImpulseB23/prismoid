@@ -25,6 +25,7 @@ pub mod twitch_polls;
 pub mod twitch_quick_actions;
 mod uninstall;
 mod user_card;
+mod video_window;
 pub mod youtube_auth;
 
 pub mod emote_index;
@@ -150,6 +151,7 @@ pub fn run() {
             user_card::user_card_ready,
             user_card::user_card_set_pinned,
             user_card::user_card_close,
+            video_window::video_window_open,
             twitch_chat_settings::twitch_get_chat_settings,
             twitch_chat_settings::twitch_update_chat_settings,
             twitch_channel_info::twitch_get_channel_info,

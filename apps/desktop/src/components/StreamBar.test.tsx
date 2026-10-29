@@ -15,6 +15,13 @@ vi.mock("../stores/streamStore", () => ({
 vi.mock("../stores/channelStore", () => ({
   activeChannel: () => ({ id: "c", login: "c", display_name: "C" }),
 }));
+const openVideoWindow = vi.fn<(login: string, title: string) => Promise<void>>(
+  async () => {},
+);
+vi.mock("../lib/videoWindow", () => ({
+  openVideoWindow: (login: string, title: string) =>
+    openVideoWindow(login, title),
+}));
 vi.mock("../stores/pulseStore", () => ({
   startPulse: () => () => {},
   messagesPerMinute: () => 0,
@@ -36,6 +43,18 @@ describe("StreamBar", () => {
     const hide = screen.getByRole("button", { name: "Hide the stream" });
     expect(hide.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(hide);
+    expect(focused()?.video).toBe(false);
+  });
+
+  it("pops the stream out in place of the corner preview", () => {
+    render(() => <StreamBar />);
+    const focused = () =>
+      layout.panes().find((p) => p.id === layout.focusedPaneId());
+    fireEvent.click(screen.getByRole("button", { name: "Watch the stream" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Watch in its own window" }),
+    );
+    expect(openVideoWindow).toHaveBeenCalledWith("c", "C's stream");
     expect(focused()?.video).toBe(false);
   });
 });
