@@ -9,7 +9,10 @@ const [modes, setModes] = createSignal<ChatSettings | null>(null);
 const apply = vi.fn<(patch: unknown) => Promise<void>>(async () => {});
 const load = vi.fn<(id: string) => Promise<void>>(async () => {});
 
-vi.mock("../stores/roleStore", () => ({ canModerateIn: () => canMod() }));
+vi.mock("../stores/roleStore", () => ({
+  canModerateIn: () => canMod(),
+  holdsModRole: () => canMod(),
+}));
 vi.mock("../stores/authStore", () => ({
   currentUserId: () => "100",
   automodNeedsReconnect: () => false,
@@ -78,14 +81,16 @@ describe("CommandCenter", () => {
     expect(room.textContent).toContain("Open, anyone can chat");
   });
 
-  it("follows the channel with the modes and drops them without mod rights", () => {
+  it("loads the modes for every channel, again when the role changes", () => {
     render(() => <CommandCenter />);
     expect(load).toHaveBeenLastCalledWith("100");
     setChannel({ id: "200" });
     expect(load).toHaveBeenLastCalledWith("200");
-    expect(clearModes).not.toHaveBeenCalled();
+    const calls = load.mock.calls.length;
     setCanMod(false);
-    expect(clearModes).toHaveBeenCalledTimes(1);
+    expect(load).toHaveBeenCalledTimes(calls + 1);
+    expect(load).toHaveBeenLastCalledWith("200");
+    expect(clearModes).not.toHaveBeenCalled();
     setCanMod(true);
     setChannel({ id: "100" });
   });

@@ -148,6 +148,9 @@ function openSession(channel: Channel): {
             chat.addMessages([publicModerationMessage(e, nextLocalSeq++)]);
           }
           break;
+        case "chat_settings":
+          roomModes.receive(e);
+          break;
         case "mod_action":
           recordModAction(e);
           // Only moderators get these, and they may have the modes open.

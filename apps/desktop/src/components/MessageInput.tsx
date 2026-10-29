@@ -126,7 +126,9 @@ const MessageInput: Component<Props> = (props) => {
           session().roomModes.settings(),
           lastSent().get(c.id),
           now(),
-          role() !== null,
+          // Twitch lets VIPs past slow mode, like moderators.
+          role() !== null ||
+            (ownBadges(c.id) ?? []).some((b) => b.set_id === "vip"),
         )
       : 0;
   };

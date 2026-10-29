@@ -3,6 +3,7 @@
 
 import type { AdBreak } from "./ads";
 import type { Poll, Prediction } from "./streamManager";
+import type { ChatSettings } from "./twitchChannel";
 
 export interface ModAction {
   kind: "mod_action";
@@ -77,7 +78,17 @@ export type PredictionUpdate = Prediction & { kind: "prediction_update" };
 /** An ad break began on the user's own channel. */
 export type AdBreakEvent = AdBreak & { kind: "ad_break" };
 
+/**
+ * The room's modes changed. Every chatter gets it; the non-moderator delay
+ * is not part of it.
+ */
+export type ChatSettingsUpdate = Omit<
+  ChatSettings,
+  "non_moderator_chat_delay" | "non_moderator_chat_delay_duration"
+> & { kind: "chat_settings"; channel_id: string };
+
 export type ChatEvent =
+  | ChatSettingsUpdate
   | PublicModerationEvent
   | ModAction
   | HeldMessage

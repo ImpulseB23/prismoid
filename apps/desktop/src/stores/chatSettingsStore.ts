@@ -1,7 +1,7 @@
-// Room modes for one channel, as Twitch reports them. Loaded when
-// the modes panel opens and after every moderator action that changes a
-// mode, so the panel never shows a stale state after someone else flips
-// slow mode. The commands are injected for tests.
+// Room modes for one channel, as Twitch reports them. Loaded for every
+// channel shown, so the composer knows about slow mode even for viewers,
+// and kept current by Twitch's settings updates and, for moderators, after
+// every mode action. The commands are injected for tests.
 
 import { createSignal } from "solid-js";
 import {
@@ -10,6 +10,8 @@ import {
   type ChatSettings,
   type ChatSettingsPatch,
 } from "../lib/twitchChannel";
+import type { ChatSettingsUpdate } from "../lib/chatEvents";
+import { holdsModRole } from "./roleStore";
 
 export interface ChatSettingsStore {
   settings: () => ChatSettings | null;
@@ -19,11 +21,14 @@ export interface ChatSettingsStore {
   /** Loads the modes of `channelId`; later `apply` calls change that channel. */
   load: (channelId: string) => Promise<void>;
   apply: (patch: ChatSettingsPatch) => Promise<void>;
+  /** A live update from Twitch; ignored unless it is this channel's. */
+  receive: (update: ChatSettingsUpdate) => void;
   clear: () => void;
 }
 
 export function createChatSettingsStore(
-  fetch: (channelId: string) => Promise<ChatSettings | null> = getChatSettings,
+  fetch: (channelId: string) => Promise<ChatSettings | null> = (id) =>
+    getChatSettings(id, holdsModRole(id)),
   update: (
     channelId: string,
     patch: ChatSettingsPatch,
@@ -70,12 +75,34 @@ export function createChatSettingsStore(
     }
   }
 
+  function receive(update: ChatSettingsUpdate): void {
+    if (update.channel_id !== channelId) return;
+    // Anything still loading would be older than this.
+    generation++;
+    const prev = settings();
+    setSettings({
+      emote_mode: update.emote_mode,
+      follower_mode: update.follower_mode,
+      follower_mode_duration: update.follower_mode_duration,
+      slow_mode: update.slow_mode,
+      slow_mode_wait_time: update.slow_mode_wait_time,
+      subscriber_mode: update.subscriber_mode,
+      unique_chat_mode: update.unique_chat_mode,
+      non_moderator_chat_delay: prev?.non_moderator_chat_delay ?? false,
+      non_moderator_chat_delay_duration:
+        prev?.non_moderator_chat_delay_duration ?? null,
+    });
+    setError(null);
+    setBusy(false);
+  }
+
   return {
     settings,
     error,
     busy,
     load,
     apply,
+    receive,
     clear: () => {
       generation++;
       channelId = null;

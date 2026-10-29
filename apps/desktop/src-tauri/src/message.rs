@@ -282,6 +282,19 @@ pub enum ChatEvent {
     /// An ad break began on the user's own channel, from
     /// `channel.ad_break.begin` v1.
     AdBreak(Box<AdBreak>),
+    /// The room's modes changed, from `channel.chat_settings.update` v1.
+    /// Every chatter gets it, so viewers learn about slow mode too. Field
+    /// names follow Helix Get Chat Settings.
+    ChatSettings {
+        channel_id: String,
+        emote_mode: bool,
+        follower_mode: bool,
+        follower_mode_duration: Option<u64>,
+        slow_mode: bool,
+        slow_mode_wait_time: Option<u64>,
+        subscriber_mode: bool,
+        unique_chat_mode: bool,
+    },
 }
 
 /// A message AutoMod is holding. `reason` is `automod`, `blocked_term` or
@@ -629,6 +642,26 @@ struct TwitchClearUserEvent {
 }
 
 #[derive(Debug, Deserialize)]
+struct TwitchChatSettingsEvent {
+    #[serde(default, deserialize_with = "null_default")]
+    broadcaster_user_id: String,
+    #[serde(default)]
+    emote_mode: bool,
+    #[serde(default)]
+    follower_mode: bool,
+    #[serde(default)]
+    follower_mode_duration_minutes: Option<u64>,
+    #[serde(default)]
+    slow_mode: bool,
+    #[serde(default)]
+    slow_mode_wait_time_seconds: Option<u64>,
+    #[serde(default)]
+    subscriber_mode: bool,
+    #[serde(default)]
+    unique_chat_mode: bool,
+}
+
+#[derive(Debug, Deserialize)]
 struct TwitchClearEvent {
     #[serde(default, deserialize_with = "null_default")]
     broadcaster_user_id: String,
@@ -714,6 +747,19 @@ pub fn parse_twitch_envelope(bytes: &[u8]) -> Result<Option<TwitchItem>, ParseEr
             let event: TwitchClearEvent = serde_json::from_value(event_value)?;
             TwitchItem::Event(ChatEvent::ChatCleared {
                 channel_id: event.broadcaster_user_id,
+            })
+        }
+        "channel.chat_settings.update" => {
+            let e: TwitchChatSettingsEvent = serde_json::from_value(event_value)?;
+            TwitchItem::Event(ChatEvent::ChatSettings {
+                channel_id: e.broadcaster_user_id,
+                emote_mode: e.emote_mode,
+                follower_mode: e.follower_mode,
+                follower_mode_duration: e.follower_mode_duration_minutes,
+                slow_mode: e.slow_mode,
+                slow_mode_wait_time: e.slow_mode_wait_time_seconds,
+                subscriber_mode: e.subscriber_mode,
+                unique_chat_mode: e.unique_chat_mode,
             })
         }
         "channel.moderate" => {
@@ -1770,6 +1816,41 @@ mod tests {
             "event": { "broadcaster_user_id": "1971641" }
         }
     }"##;
+
+    #[test]
+    fn chat_settings_update_maps_to_helix_names() {
+        let bytes = br##"{
+            "metadata": { "message_type": "notification", "message_timestamp": "2023-11-06T18:12:05.250Z" },
+            "payload": {
+                "subscription": { "type": "channel.chat_settings.update" },
+                "event": {
+                    "broadcaster_user_id": "1337",
+                    "broadcaster_user_login": "cool_user",
+                    "broadcaster_user_name": "Cool_User",
+                    "emote_mode": true,
+                    "follower_mode": false,
+                    "follower_mode_duration_minutes": null,
+                    "slow_mode": true,
+                    "slow_mode_wait_time_seconds": 10,
+                    "subscriber_mode": false,
+                    "unique_chat_mode": false
+                }
+            }
+        }"##;
+        assert_eq!(
+            event(bytes),
+            ChatEvent::ChatSettings {
+                channel_id: "1337".into(),
+                emote_mode: true,
+                follower_mode: false,
+                follower_mode_duration: None,
+                slow_mode: true,
+                slow_mode_wait_time: Some(10),
+                subscriber_mode: false,
+                unique_chat_mode: false,
+            }
+        );
+    }
 
     fn event(bytes: &[u8]) -> ChatEvent {
         match parse_twitch_envelope(bytes).unwrap().unwrap() {

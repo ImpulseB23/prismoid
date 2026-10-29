@@ -36,6 +36,44 @@ describe("chatSettingsStore", () => {
     expect(store.busy()).toBe(false);
   });
 
+  it("takes live updates for its channel and keeps the moderator delay", async () => {
+    let resolve: (s: ChatSettings) => void = () => {};
+    const store = createChatSettingsStore(
+      () => new Promise((r) => (resolve = r)),
+    );
+    const update = {
+      kind: "chat_settings" as const,
+      channel_id: "c1",
+      emote_mode: false,
+      follower_mode: false,
+      follower_mode_duration: null,
+      slow_mode: true,
+      slow_mode_wait_time: 120,
+      subscriber_mode: false,
+      unique_chat_mode: false,
+    };
+    const loading = store.load("c1");
+    store.receive(update);
+    // The older load landing later must not undo the live update.
+    resolve({ ...base, non_moderator_chat_delay: true });
+    await loading;
+    expect(store.settings()).toEqual({
+      ...base,
+      slow_mode: true,
+      slow_mode_wait_time: 120,
+    });
+
+    store.receive({ ...update, channel_id: "c2", slow_mode: false });
+    expect(store.settings()?.slow_mode).toBe(true);
+
+    const again = store.load("c1");
+    resolve({ ...base, non_moderator_chat_delay: true, slow_mode: true });
+    await again;
+    store.receive({ ...update, slow_mode_wait_time: 30 });
+    expect(store.settings()?.non_moderator_chat_delay).toBe(true);
+    expect(store.settings()?.slow_mode_wait_time).toBe(30);
+  });
+
   it("surfaces errors and clears them on the next success", async () => {
     let fail = true;
     const store = createChatSettingsStore(
