@@ -177,7 +177,8 @@ describe("Settings", () => {
   it("shows versions without a trailing .0", async () => {
     vi.mocked(check).mockResolvedValueOnce({
       version: "0.7.0",
-      downloadAndInstall: vi.fn(),
+      download: vi.fn(async () => {}),
+      install: vi.fn(async () => {}),
     } as unknown as Update);
     render(() => (
       <Settings
@@ -198,9 +199,9 @@ describe("Settings", () => {
     expect(checkButton.classList.contains("btn--outline")).toBe(true);
     fireEvent.click(checkButton);
     await vi.waitFor(() =>
-      expect(screen.getByText("Version 0.7 is available")).toBeTruthy(),
+      expect(screen.getByText("Version 0.7 is ready to install")).toBeTruthy(),
     );
-    const install = screen.getByRole("button", { name: "Install and restart" });
+    const install = screen.getByRole("button", { name: "Restart to update" });
     expect(install.classList.contains("btn--primary")).toBe(true);
   });
 });

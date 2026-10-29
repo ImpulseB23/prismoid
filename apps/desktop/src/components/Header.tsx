@@ -58,10 +58,11 @@ import WindowControls from "./WindowControls";
 import Mentions from "./Mentions";
 import AccountAvatar from "./AccountAvatar";
 import ChatSearch from "./ChatSearch";
-import { updateState } from "../stores/updateStore";
+import { installUpdate, updateState } from "../stores/updateStore";
 import { updatedTo, whatsNewUnseen } from "../stores/whatsNewStore";
 import Settings from "./Settings";
 import { settingsAttention } from "../lib/settingsAttention";
+import { displayVersion } from "../lib/version";
 import { logo } from "../stores/themeStore";
 import {
   streamManagerOpen,
@@ -467,6 +468,27 @@ const Header: Component<HeaderProps> = (props) => {
         </button>
 
         <AccountAvatar login={props.login} />
+
+        {/* Shows once an update has downloaded in the background, so the
+            click is just the restart. */}
+        <Show
+          when={(() => {
+            const u = updateState();
+            return u.kind === "downloaded" ? u : null;
+          })()}
+        >
+          {(u) => (
+            <button
+              type="button"
+              class="icon-btn"
+              title={`Restart to update to ${displayVersion(u().version)}`}
+              aria-label={`Restart to update to ${displayVersion(u().version)}`}
+              onClick={() => void installUpdate()}
+            >
+              <span class="header__update" aria-hidden="true" />
+            </button>
+          )}
+        </Show>
 
         <button
           type="button"

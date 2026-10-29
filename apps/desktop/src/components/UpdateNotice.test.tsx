@@ -43,6 +43,18 @@ describe("UpdateNotice", () => {
     expect(screen.getByRole("status").textContent).toContain("Restarting");
   });
 
+  it("offers a restart once the update has downloaded", () => {
+    const onInstall = vi.fn();
+    const [state] = createSignal<UpdateState>({
+      kind: "downloaded",
+      version: "0.3.0",
+      notes: null,
+    });
+    render(() => <UpdateNotice state={state} onInstall={onInstall} />);
+    fireEvent.click(screen.getByRole("button", { name: "Restart to update" }));
+    expect(onInstall).toHaveBeenCalledOnce();
+  });
+
   it("lets a failed install be retried", () => {
     const onInstall = vi.fn();
     const [state] = createSignal<UpdateState>({

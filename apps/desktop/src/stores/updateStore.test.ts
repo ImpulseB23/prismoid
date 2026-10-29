@@ -5,23 +5,40 @@ import {
   LAUNCH_WINDOW_MS,
   createUpdateStore,
   type DownloadEvent,
-  type PendingUpdate,
 } from "./updateStore";
 
 vi.mock("@tauri-apps/plugin-updater", () => ({ check: vi.fn() }));
 vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: vi.fn() }));
 
+type OnEvent = (e: DownloadEvent) => void;
+
 function update(
   version: string,
   events: DownloadEvent[] = [{ event: "Finished" }],
-): PendingUpdate {
+) {
   return {
     version,
     body: `notes for ${version}`,
-    downloadAndInstall: async (onEvent) => {
+    download: vi.fn(async (onEvent?: OnEvent) => {
       for (const e of events) onEvent?.(e);
-    },
+    }),
+    install: vi.fn(async () => {}),
   };
+}
+
+/** An update whose download waits until `finish` is called. */
+function slowUpdate(version: string) {
+  let finish!: () => void;
+  let emit!: OnEvent;
+  const u = update(version);
+  u.download.mockImplementation(
+    (onEvent?: OnEvent) =>
+      new Promise<void>((resolve) => {
+        emit = (e) => onEvent?.(e);
+        finish = resolve;
+      }),
+  );
+  return { u, finish: () => finish(), emit: (e: DownloadEvent) => emit(e) };
 }
 
 describe("updateStore", () => {
@@ -34,27 +51,57 @@ describe("updateStore", () => {
     vi.restoreAllMocks();
   });
 
-  it("reports an available update and installs it with progress", async () => {
+  it("downloads a found update quietly, then installs without waiting", async () => {
     const restarted = vi.fn(async () => {});
-    const store = createUpdateStore(
-      async () =>
-        update("0.2.0", [
-          { event: "Started", data: { contentLength: 100 } },
-          { event: "Progress", data: { chunkLength: 40 } },
-          { event: "Progress", data: { chunkLength: 60 } },
-          { event: "Finished" },
-        ]),
-      restarted,
-    );
+    const u = update("0.2.0");
+    const store = createUpdateStore(async () => u, restarted);
     await store.check(true);
+    await vi.advanceTimersByTimeAsync(0);
     expect(store.state()).toEqual({
-      kind: "available",
+      kind: "downloaded",
       version: "0.2.0",
       notes: "notes for 0.2.0",
     });
     await store.install();
+    expect(u.download).toHaveBeenCalledOnce();
+    expect(u.install).toHaveBeenCalledOnce();
     expect(store.state()).toEqual({ kind: "ready", version: "0.2.0" });
     expect(restarted).toHaveBeenCalledOnce();
+  });
+
+  it("waits on the quiet download when installed early, with progress", async () => {
+    const { u, finish, emit } = slowUpdate("0.2.0");
+    const store = createUpdateStore(
+      async () => u,
+      async () => {},
+    );
+    await store.check(false);
+    expect(store.state().kind).toBe("available");
+    emit({ event: "Started", data: { contentLength: 100 } });
+    emit({ event: "Progress", data: { chunkLength: 40 } });
+    const installing = store.install();
+    expect(store.state()).toEqual({
+      kind: "downloading",
+      version: "0.2.0",
+      received: 40,
+      total: 100,
+    });
+    emit({ event: "Progress", data: { chunkLength: 60 } });
+    expect(store.state()).toMatchObject({ received: 100 });
+    finish();
+    await installing;
+    expect(u.download).toHaveBeenCalledOnce();
+    expect(store.state().kind).toBe("ready");
+  });
+
+  it("does not download the same version twice", async () => {
+    const u = update("0.2.0");
+    const store = createUpdateStore(async () => u);
+    await store.check(false);
+    await vi.advanceTimersByTimeAsync(0);
+    await store.check(true);
+    expect(u.download).toHaveBeenCalledOnce();
+    expect(store.state().kind).toBe("downloaded");
   });
 
   it("records when the app is current", async () => {
@@ -77,23 +124,39 @@ describe("updateStore", () => {
     });
   });
 
-  it("surfaces an install failure", async () => {
+  it("stays available when the quiet download fails, and retries on install", async () => {
+    const u = update("0.2.0");
+    u.download.mockRejectedValueOnce(new Error("reset"));
     const store = createUpdateStore(
-      async () => ({
-        version: "0.2.0",
-        downloadAndInstall: async () => {
-          throw new Error("signature mismatch");
-        },
-      }),
+      async () => u,
+      async () => {},
+    );
+    await store.check(false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.state().kind).toBe("available");
+    await store.install();
+    expect(u.download).toHaveBeenCalledTimes(2);
+    expect(store.state().kind).toBe("ready");
+  });
+
+  it("surfaces an install failure and downloads again on retry", async () => {
+    const u = update("0.2.0");
+    u.install.mockRejectedValueOnce(new Error("signature mismatch"));
+    const store = createUpdateStore(
+      async () => u,
       async () => {},
     );
     await store.check(true);
+    await vi.advanceTimersByTimeAsync(0);
     await store.install();
     expect(store.state()).toEqual({
       kind: "error",
       message: "signature mismatch",
       during: "install",
     });
+    await store.install();
+    expect(u.download).toHaveBeenCalledTimes(2);
+    expect(store.state().kind).toBe("ready");
   });
 
   it("checks at launch and on the interval", async () => {
@@ -128,21 +191,18 @@ describe("updateStore", () => {
     expect(unwatch).toHaveBeenCalledOnce();
   });
 
-  it("ignores a check while a download is running", async () => {
-    let release!: () => void;
-    const store = createUpdateStore(async () => ({
-      version: "0.2.0",
-      downloadAndInstall: () =>
-        new Promise<void>((r) => {
-          release = r;
-        }),
-    }));
+  it("ignores a check while an install is downloading", async () => {
+    const { u, finish } = slowUpdate("0.2.0");
+    const store = createUpdateStore(
+      async () => u,
+      async () => {},
+    );
     await store.check(true);
     const installing = store.install();
     expect(store.state().kind).toBe("downloading");
     await store.check(true);
     expect(store.state().kind).toBe("downloading");
-    release();
+    finish();
     await installing;
   });
 
@@ -156,7 +216,7 @@ describe("updateStore", () => {
     stop();
   });
 
-  it("only nudges when the launch check answers late", async () => {
+  it("only downloads quietly when the launch check answers late", async () => {
     const store = createUpdateStore(
       () =>
         new Promise((resolve) =>
@@ -166,20 +226,17 @@ describe("updateStore", () => {
     const stop = store.schedule();
     await vi.advanceTimersByTimeAsync(LAUNCH_WINDOW_MS + 1);
     expect(store.state()).toMatchObject({
-      kind: "available",
+      kind: "downloaded",
       version: "0.3.0",
     });
     stop();
   });
 
   it("goes back to available when a failed install is dismissed", async () => {
+    const u = update("0.3.0");
+    u.install.mockRejectedValueOnce(new Error("disk full"));
     const store = createUpdateStore(
-      async () => ({
-        version: "0.3.0",
-        downloadAndInstall: async () => {
-          throw new Error("disk full");
-        },
-      }),
+      async () => u,
       async () => {},
     );
     await store.check(true);
@@ -189,7 +246,7 @@ describe("updateStore", () => {
     expect(store.state()).toEqual({
       kind: "available",
       version: "0.3.0",
-      notes: null,
+      notes: "notes for 0.3.0",
     });
   });
 });

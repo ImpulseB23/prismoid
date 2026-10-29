@@ -20,6 +20,12 @@ export function noticeFor(state: UpdateState): Notice | null {
         action: "Install and restart",
         error: false,
       };
+    case "downloaded":
+      return {
+        text: `Version ${displayVersion(state.version)} is ready.`,
+        action: "Restart to update",
+        error: false,
+      };
     case "downloading":
       return {
         text: state.total
