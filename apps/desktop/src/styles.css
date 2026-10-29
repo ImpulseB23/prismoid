@@ -3817,6 +3817,21 @@ option::checkmark {
   color: var(--text);
 }
 
+.settings-page__tab-dot,
+.settings__row--attention .settings__name::after {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 8px;
+  border-radius: 50%;
+  background: var(--color-amber);
+  vertical-align: middle;
+}
+
+.settings__row--attention .settings__name::after {
+  content: "";
+}
+
 .settings-page__tab--on,
 .settings-page__tab--on:hover {
   background: var(--select-tint);

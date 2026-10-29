@@ -13,7 +13,12 @@ import {
 import { setAuthStatus } from "../stores/authStore";
 import { authErrorMessage, isAuthError } from "./SignIn";
 
-const TwitchReconnect: Component<{ title: string; hint: string }> = (props) => {
+const TwitchReconnect: Component<{
+  title: string;
+  hint: string;
+  /** Carries the Settings attention marker. */
+  marked?: boolean;
+}> = (props) => {
   const [pending, setPending] = createSignal<LoginView | null>(null);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
@@ -68,7 +73,10 @@ const TwitchReconnect: Component<{ title: string; hint: string }> = (props) => {
   });
 
   return (
-    <div class="settings__row settings__row--stack settings__reconnect">
+    <div
+      class="settings__row settings__row--stack settings__reconnect"
+      classList={{ "settings__row--attention": props.marked === true }}
+    >
       <div class="settings__text">
         <span class="settings__name">{props.title}</span>
         <span class="settings__hint">{props.hint}</span>
