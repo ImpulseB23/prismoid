@@ -8,6 +8,7 @@ import {
 } from "@solidjs/testing-library";
 import type { CardUser } from "./components/UserCard";
 import type { ChatStore } from "./stores/chatStore";
+import type { BadgeStore } from "./stores/badgeStore";
 
 const minimize = vi.fn(async () => {});
 vi.mock("@tauri-apps/api/window", () => ({
@@ -38,9 +39,9 @@ vi.mock("./lib/userCardWindow", () => card);
 
 const session = {
   startCardSession: vi.fn(async () => () => {}),
-  showCardUser: vi.fn<(u: CardUser, chat: ChatStore) => Promise<() => void>>(
-    async () => () => {},
-  ),
+  showCardUser: vi.fn<
+    (u: CardUser, chat: ChatStore, badges: BadgeStore) => Promise<() => void>
+  >(async () => () => {}),
 };
 vi.mock("./lib/cardSession", () => session);
 const bridge = { sendMention: vi.fn(), sendJump: vi.fn() };
@@ -104,6 +105,7 @@ describe("UserCardWindow", () => {
       expect(session.showCardUser).toHaveBeenCalledWith(
         user("ann"),
         expect.anything(),
+        expect.anything(),
       ),
     );
     expect(session.startCardSession).toHaveBeenCalledOnce();
@@ -111,6 +113,7 @@ describe("UserCardWindow", () => {
     await waitFor(() =>
       expect(session.showCardUser).toHaveBeenLastCalledWith(
         user("bob"),
+        expect.anything(),
         expect.anything(),
       ),
     );

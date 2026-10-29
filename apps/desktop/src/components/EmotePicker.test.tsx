@@ -10,9 +10,10 @@ const [channel, setChannel] = createSignal<{
   profile_image_url: string;
 } | null>(null);
 
-vi.mock("../stores/emoteStore", () => ({
-  emoteGroups: () => groups(),
-  emoteRevision: () => 0,
+vi.mock("../lib/chatSession", () => ({
+  useSession: () => () => ({
+    emotes: { revision: () => 0, groups: () => groups() },
+  }),
 }));
 vi.mock("../stores/channelStore", () => ({
   activeChannel: () => channel(),

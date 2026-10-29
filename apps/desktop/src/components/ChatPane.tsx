@@ -12,6 +12,7 @@ import type { Channel } from "../lib/twitchChannel";
 import {
   SessionProvider,
   holdSession,
+  idleSession,
   releaseSession,
 } from "../lib/chatSession";
 
@@ -21,7 +22,7 @@ const ChatPane: ParentComponent<{ channel: Channel | null }> = (props) => {
       () => props.channel?.id,
       (id) => {
         const channel = untrack(() => props.channel);
-        if (id === undefined || !channel) return undefined;
+        if (id === undefined || !channel) return idleSession;
         const held = holdSession(channel);
         onCleanup(() => releaseSession(id));
         return held;

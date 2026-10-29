@@ -1,7 +1,7 @@
 // What a user card window loads for itself. It shares nothing in memory
 // with the main window, so it fetches the session, roles and paints once,
-// and for each person it shows: their stored messages, the channel's badges
-// and emotes, the mod log from the main window, and their new messages.
+// and for each person it shows: their stored messages, the channel's
+// badges, the mod log from the main window, and their new messages.
 
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { CardUser } from "../components/UserCard";
@@ -11,9 +11,8 @@ import { followModLog } from "./cardBridge";
 import { loadUserHistory } from "./userCardWindow";
 import { createHistoryGate } from "./chatHistory";
 import { setAuthStatus } from "../stores/authStore";
-import { loadBadgeBundle } from "../stores/badgeStore";
+import type { BadgeStore } from "../stores/badgeStore";
 import type { ChatMessage, ChatStore } from "../stores/chatStore";
-import { loadEmoteBundle } from "../stores/emoteStore";
 import { clearModLog, recordModAction } from "../stores/modLogStore";
 import { syncPaints } from "../stores/paintStore";
 import { loadModeratedChannels } from "../stores/roleStore";
@@ -45,6 +44,7 @@ export async function startCardSession(): Promise<() => void> {
 export async function showCardUser(
   user: CardUser,
   chat: ChatStore,
+  badges: BadgeStore,
 ): Promise<() => void> {
   const { channel_id: channel, platform_user_id: id } = user;
   const theirs = (m: ChatMessage) =>
@@ -76,10 +76,7 @@ export async function showCardUser(
     return null;
   });
   if (stopped) return stop;
-  if (bundle) {
-    loadBadgeBundle(bundle);
-    loadEmoteBundle(bundle);
-  }
+  if (bundle) badges.loadBundle(bundle);
   offs.push(
     await followModLog(id, (actions) => {
       if (stopped) return;

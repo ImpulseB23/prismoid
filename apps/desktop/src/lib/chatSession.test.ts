@@ -28,11 +28,6 @@ const shown = { id: "a" };
 vi.mock("../stores/channelStore", () => ({
   activeChannel: () => ({ id: shown.id }),
 }));
-const badges = { loadBadgeBundle: vi.fn() };
-vi.mock("../stores/badgeStore", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../stores/badgeStore")>()),
-  ...badges,
-}));
 const roomModes = { loadChatSettings: vi.fn(async () => {}) };
 vi.mock("../stores/chatSettingsStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../stores/chatSettingsStore")>()),
@@ -188,17 +183,35 @@ describe("chatSession", () => {
     expect(roomModes.loadChatSettings).toHaveBeenCalledOnce();
   });
 
-  it("notes a ban and loads badges and emotes only for the channel on screen", async () => {
-    const bundle = { broadcaster_id: "a" };
-    emoteBundle.mockResolvedValueOnce(bundle);
-    holdSession(channel("a"));
+  it("notes a ban and keeps its own badges and emotes, on screen or not", async () => {
+    const badge = (version: string) => ({
+      set: "subscriber",
+      version,
+      title: `Sub ${version}`,
+      url_1x: "1x",
+      url_2x: "2x",
+      url_4x: "4x",
+    });
+    emoteBundle.mockResolvedValueOnce({
+      broadcaster_id: "a",
+      twitch_channel_badges: { badges: [badge("6")] },
+      seventv_channel: { emotes: [{ code: "Clap", id: "1" }] },
+    });
+    const s = holdSession(channel("a"));
+    const other = holdSession(channel("b"));
     releaseHistory([]);
     await Promise.resolve();
-    expect(badges.loadBadgeBundle).toHaveBeenCalledWith(bundle);
+    expect(s.badges.resolve("subscriber", "6")?.title).toBe("Sub 6");
+    expect(s.emotes.byCode("Clap")).toBeDefined();
+    expect(other.emotes.byCode("Clap")).toBeUndefined();
 
+    // A channel off screen still takes the bundle the host sends it.
     shown.id = "b";
-    sinks[0]!.bundle(bundle as never);
-    expect(badges.loadBadgeBundle).toHaveBeenCalledOnce();
+    sinks[0]!.bundle({
+      broadcaster_id: "a",
+      twitch_channel_badges: { badges: [badge("12")] },
+    } as never);
+    expect(s.badges.resolve("subscriber", "12")?.title).toBe("Sub 12");
 
     sinks[0]!.banned({ broadcaster_id: "a" } as never);
     await tick();

@@ -21,9 +21,10 @@ vi.mock("../stores/emoteCardStore", async (importOriginal) => ({
   inspectedAddedBy: () => addedBy(),
   closeEmoteCard: () => close(),
 }));
-vi.mock("../stores/emoteStore", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../stores/emoteStore")>()),
-  emoteScope: () => scope(),
+vi.mock("../lib/chatSession", () => ({
+  useSession: () => () => ({
+    emotes: { revision: () => 0, scopeOf: () => scope() },
+  }),
 }));
 vi.mock("../stores/channelStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../stores/channelStore")>()),

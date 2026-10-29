@@ -103,12 +103,3 @@ export function createEmoteStore(): EmoteStore {
     revision,
   };
 }
-
-const defaultStore = createEmoteStore();
-export const loadEmoteBundle = defaultStore.loadBundle;
-export const allEmotes = defaultStore.all;
-export const emoteGroups = defaultStore.groups;
-export const emoteScopeLabel = defaultStore.scopeLabel;
-export const emoteScope = defaultStore.scopeOf;
-export const emoteByCode = defaultStore.byCode;
-export const emoteRevision = defaultStore.revision;

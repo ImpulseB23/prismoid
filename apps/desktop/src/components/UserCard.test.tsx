@@ -62,6 +62,7 @@ vi.mock("../stores/paintStore", async (importOriginal) => ({
 }));
 
 const { default: UserCard } = await import("./UserCard");
+const { createBadgeStore } = await import("../stores/badgeStore");
 const { isUserHighlighted } = await import("../stores/settingsStore");
 const { setAuthStatus } = await import("../stores/authStore");
 const { clearModLog, recordModAction } = await import("../stores/modLogStore");
@@ -82,6 +83,7 @@ describe("UserCard", () => {
     render(() => (
       <UserCard
         chat={chat}
+        badges={createBadgeStore()}
         login="me"
         onClose={() => {}}
         onMention={() => {}}
@@ -106,6 +108,7 @@ describe("UserCard", () => {
     render(() => (
       <UserCard
         chat={chat}
+        badges={createBadgeStore()}
         login="me"
         onClose={() => {}}
         onMention={() => {}}
@@ -123,6 +126,7 @@ describe("UserCard", () => {
     render(() => (
       <UserCard
         chat={chat}
+        badges={createBadgeStore()}
         login="me"
         onClose={() => {}}
         onMention={() => {}}
@@ -138,6 +142,7 @@ describe("UserCard", () => {
     render(() => (
       <UserCard
         chat={chat}
+        badges={createBadgeStore()}
         login="me"
         onClose={() => {}}
         onMention={() => {}}
@@ -170,6 +175,7 @@ describe("UserCard follow age", () => {
     render(() => (
       <UserCard
         chat={chat}
+        badges={createBadgeStore()}
         login="viewer"
         onClose={() => {}}
         onMention={() => {}}
@@ -193,6 +199,7 @@ describe("UserCard follow age", () => {
     render(() => (
       <UserCard
         chat={chat}
+        badges={createBadgeStore()}
         login="me"
         onClose={() => {}}
         onMention={() => {}}
@@ -226,6 +233,7 @@ describe("UserCard moderation", () => {
     render(() => (
       <UserCard
         chat={chat}
+        badges={createBadgeStore()}
         login="streamer"
         onClose={() => {}}
         onMention={onMention}
@@ -280,6 +288,7 @@ describe("UserCard moderation", () => {
     render(() => (
       <UserCard
         chat={chat}
+        badges={createBadgeStore()}
         login="streamer"
         onClose={() => {}}
         onMention={() => {}}
@@ -322,6 +331,7 @@ describe("UserCard mod history", () => {
     render(() => (
       <UserCard
         chat={chat}
+        badges={createBadgeStore()}
         login="me"
         onClose={() => {}}
         onMention={() => {}}

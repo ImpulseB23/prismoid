@@ -6,15 +6,22 @@ vi.mock("../stores/channelStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../stores/channelStore")>()),
   activeChannel: () => ({ id: "c", login: "chan", display_name: "Chan" }),
 }));
-vi.mock("../stores/badgeStore", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../stores/badgeStore")>()),
-  resolveBadge: (set: string) =>
-    set === "subscriber"
+vi.mock("../lib/chatSession", () => ({
+  sessionFor: (id: string | undefined) =>
+    id === "c"
       ? {
-          title: "6-Month Subscriber",
-          url_1x: "s1",
-          url_2x: "s2",
-          url_4x: "s4",
+          badges: {
+            revision: () => 0,
+            resolve: (set: string) =>
+              set === "subscriber"
+                ? {
+                    title: "6-Month Subscriber",
+                    url_1x: "s1",
+                    url_2x: "s2",
+                    url_4x: "s4",
+                  }
+                : undefined,
+          },
         }
       : undefined,
 }));

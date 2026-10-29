@@ -13,7 +13,6 @@ import {
 } from "solid-js";
 import { activeChannel } from "../stores/channelStore";
 import { sessionFor } from "../lib/chatSession";
-import { emoteByCode } from "../stores/emoteStore";
 import { isFirstMessage } from "../stores/firstMessageStore";
 import {
   applySuggestion,
@@ -63,7 +62,7 @@ const ChatSearch: Component<ChatSearchProps> = (props) => {
     s.chat.messageRevision();
     const ctx = {
       isFirst: isFirstMessage,
-      isEmote: (w: string) => emoteByCode(w) !== undefined,
+      isEmote: (w: string) => s.emotes.byCode(w) !== undefined,
     };
     return s.chat.search(
       (m) => m.channel_id === s.channelId && matches(m, q, ctx),
