@@ -11,6 +11,41 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.8.0",
+    headline: "Run your stream from your chat",
+    features: [
+      {
+        title: "Stream manager",
+        body: "The broadcast button in the header drops your stream controls over the chat: title, category, tags, language and content labels. Your chat keeps running underneath.",
+      },
+      {
+        title: "Your stream at a glance",
+        body: "Uptime and viewers up top, and a timeline of the stream so far with ad breaks, markers and polls right where they happened.",
+      },
+      {
+        title: "Quick actions",
+        body: "Add a marker, clip what just happened, shout someone out, send an announcement or switch on Shield Mode in one tap.",
+      },
+      {
+        title: "Ads, polls and predictions",
+        body: "See when the next ad comes, snooze it or run one when it suits you. Start polls and predictions and watch the results live. These are for Twitch Affiliates and Partners.",
+      },
+      {
+        title: "Chat manager",
+        body: "The tab on the right edge of the chat is now the chat manager. Tap room modes on and off, with the AutoMod queue and mod log in tabs.",
+      },
+      {
+        title: "Only asks when you need it",
+        body: "Prismoid asks Twitch for stream permissions only when you turn a part of the stream manager on, so viewers and mods never see the prompt.",
+      },
+    ],
+    fixes: [
+      "Settings no longer slips under the window buttons in fullscreen.",
+      "Chat modes no longer get stuck on Loading after switching channels.",
+      "Opening a channel says whose chat it is.",
+    ],
+  },
+  {
     version: "0.7.0",
     headline: "A fresh coat of prism",
     features: [
