@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { displayVersion } from "./version";
+import { compareVersions, displayVersion } from "./version";
 
 describe("displayVersion", () => {
   it("drops a zero patch", () => {
@@ -17,5 +17,14 @@ describe("displayVersion", () => {
     expect(displayVersion("1.3.0-beta.1")).toBe("1.3.0-beta.1");
     expect(displayVersion("1.3")).toBe("1.3");
     expect(displayVersion("")).toBe("");
+  });
+});
+
+describe("compareVersions", () => {
+  it("orders by number, not by text", () => {
+    expect(compareVersions("0.10.0", "0.9.0")).toBeGreaterThan(0);
+    expect(compareVersions("0.8.1", "0.8.0")).toBeGreaterThan(0);
+    expect(compareVersions("0.8.0", "1.0.0")).toBeLessThan(0);
+    expect(compareVersions("0.8.0", "0.8.0")).toBe(0);
   });
 });

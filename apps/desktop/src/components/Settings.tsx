@@ -45,7 +45,7 @@ import {
 } from "../stores/updateStore";
 import TwitchReconnect from "./TwitchReconnect";
 import { showPatchNotes } from "../stores/whatsNewStore";
-import { notesFor } from "../releaseNotes";
+import { notesSince } from "../releaseNotes";
 import { FOLLOWER_CHOICES, SLOW_CHOICES } from "../lib/chatModes";
 import { startTour, tourStep } from "../stores/tourStore";
 import { chromeShown, customChrome, fullscreen } from "../stores/windowStore";
@@ -153,7 +153,7 @@ const UpdateRow: Component = () => {
         </span>
         <span class="settings__hint">{status()}</span>
       </div>
-      <Show when={notesFor(version())}>
+      <Show when={notesSince("0.0.0", version())}>
         {(n) => (
           <button
             type="button"

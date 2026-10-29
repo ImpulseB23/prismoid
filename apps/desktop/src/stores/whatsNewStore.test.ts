@@ -42,7 +42,7 @@ describe("whatsNewStore", () => {
     const store = createWhatsNewStore(
       memStorage({ "prismoid.lastVersion": "0.5.0" }),
       async () => "0.6.0",
-      (v) => (v === "0.6.0" ? note : undefined),
+      (from, to) => (from === "0.5.0" && to === "0.6.0" ? note : undefined),
     );
     await store.init();
     expect(store.notes()).toBe(note);
