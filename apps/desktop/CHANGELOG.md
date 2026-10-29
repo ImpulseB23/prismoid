@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/ImpulseB23/prismoid/compare/v0.8.1...v0.8.2) (2026-10-29)
+
+
+### Bug Fixes
+
+* returning users from before 0.6 no longer get the first-run tour ([#287](https://github.com/ImpulseB23/prismoid/issues/287)) ([8935d68](https://github.com/ImpulseB23/prismoid/commit/8935d68a52402c917a1738aeb5de75e284e2b986))
+
 ## [0.8.1](https://github.com/ImpulseB23/prismoid/compare/v0.8.0...v0.8.1) (2026-10-29)
 
 
