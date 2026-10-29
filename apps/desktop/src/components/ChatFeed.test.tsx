@@ -247,6 +247,7 @@ describe("ChatFeed", () => {
         color: null,
         badges: [],
       },
+      zoom: 1,
     });
   });
 

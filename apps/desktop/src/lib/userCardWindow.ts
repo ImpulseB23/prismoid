@@ -35,10 +35,12 @@ export function isUserCardError(e: unknown): e is UserCardError {
 
 /**
  * Opens `user`'s card at the mouse. The unpinned card is reused if there is
- * one; pinned cards are left alone.
+ * one; pinned cards are left alone. `zoom` is the zoom setting, so the
+ * window is sized to hold the card at that zoom on whichever display it
+ * opens on.
  */
-export function openUserCard(user: CardUser): Promise<void> {
-  return invoke("user_card_open", { user });
+export function openUserCard(user: CardUser, zoom: number): Promise<void> {
+  return invoke("user_card_open", { user, zoom });
 }
 
 /** The user this card window shows; null once the card is closed. */

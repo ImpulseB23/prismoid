@@ -78,6 +78,14 @@ const App: Component = () => {
   createRenderEffect(() => {
     document.documentElement.dataset.theme = palette();
   });
+  // Message lists outside the feed (cards, mentions, search) read the chat
+  // text size from here.
+  createRenderEffect(() => {
+    document.documentElement.style.setProperty(
+      "--chat-text",
+      `${settings().textSize}px`,
+    );
+  });
 
   onMount(async () => {
     let status: AuthStatus;
