@@ -48,7 +48,13 @@ import {
   insertRequest,
   replyTarget,
 } from "../stores/composerStore";
-import { allEmotes, emoteRevision } from "../stores/emoteStore";
+import { allEmotes, emoteByCode, emoteRevision } from "../stores/emoteStore";
+import { scanEmotes } from "../lib/emoteSpans";
+import {
+  ownBadges,
+  ownColor,
+  ownDisplayName,
+} from "../stores/ownIdentityStore";
 import { currentUserId, moderationNeedsReconnect } from "../stores/authStore";
 import { chatSettings } from "../stores/chatSettingsStore";
 import { modActionsFor } from "../stores/modLogStore";
@@ -307,11 +313,21 @@ const MessageInput: Component<Props> = (props) => {
 
     const reply = replyTarget();
     clearReply();
+    const me = currentUserId();
     const optimistic = buildOptimisticMessage({
       platform: "Twitch",
       login: props.login,
       text: payload,
       channelId: channel.id,
+      look: me
+        ? {
+            userId: me,
+            displayName: ownDisplayName(channel.id),
+            color: ownColor(),
+            badges: ownBadges(channel.id),
+            emoteSpans: scanEmotes(payload, emoteByCode),
+          }
+        : undefined,
     });
     if (reply) {
       optimistic.reply_to = reply.message_id;

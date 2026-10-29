@@ -1156,6 +1156,56 @@ pub async fn twitch_follow_since(
     .await
 }
 
+#[derive(Deserialize)]
+struct ChatColorRow {
+    color: String,
+}
+
+#[derive(Deserialize)]
+struct ChatColorResponse {
+    data: Vec<ChatColorRow>,
+}
+
+/// The color `user_id` picked for their name in chat, from Helix
+/// `GET /chat/color`; `None` when they never picked one.
+pub async fn fetch_chat_color(
+    http: &reqwest::Client,
+    helix_base: &str,
+    access_token: &str,
+    user_id: &str,
+) -> Result<Option<String>, ChannelError> {
+    let page: ChatColorResponse = helix_get(
+        http,
+        format!("{helix_base}/chat/color"),
+        &[("user_id", user_id)],
+        access_token,
+    )
+    .await?;
+    Ok(page
+        .data
+        .into_iter()
+        .next()
+        .map(|r| r.color)
+        .filter(|c| !c.is_empty()))
+}
+
+/// The signed-in user's own name color, so a message shows in it while it
+/// is still being sent.
+#[tauri::command]
+pub async fn twitch_own_chat_color(
+    auth: State<'_, AuthState>,
+    channels: State<'_, ChannelState>,
+) -> Result<Option<String>, ChannelError> {
+    let tokens = auth.manager.load_or_refresh().await?;
+    fetch_chat_color(
+        auth.manager.http_client(),
+        &channels.helix_base,
+        &tokens.access_token,
+        &tokens.user_id,
+    )
+    .await
+}
+
 /// Public profile fields from Helix `GET /users`, for the account insight
 /// shown on chatters: how old the account is and what it looks like.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1522,6 +1572,42 @@ mod tests {
         assert_eq!(big.calls(), 1);
         assert_eq!(got[0].login, "jynsmall");
         assert!(got[0].followed);
+    }
+
+    #[tokio::test]
+    async fn chat_color_reads_the_color_or_none_when_unset() {
+        let server = MockServer::start_async().await;
+        let set = server.mock(|when, then| {
+            when.method(GET)
+                .path("/chat/color")
+                .query_param("user_id", "1");
+            then.status(200).json_body(serde_json::json!({
+                "data": [{"user_id": "1", "user_login": "a", "user_name": "A", "color": "#9146FF"}]
+            }));
+        });
+        let unset = server.mock(|when, then| {
+            when.method(GET)
+                .path("/chat/color")
+                .query_param("user_id", "2");
+            then.status(200).json_body(serde_json::json!({
+                "data": [{"user_id": "2", "user_login": "b", "user_name": "B", "color": ""}]
+            }));
+        });
+        let http = reqwest::Client::new();
+        let base = server.base_url();
+        assert_eq!(
+            fetch_chat_color(&http, &base, "tok", "1")
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("#9146FF")
+        );
+        assert_eq!(
+            fetch_chat_color(&http, &base, "tok", "2").await.unwrap(),
+            None
+        );
+        assert_eq!(set.calls(), 1);
+        assert_eq!(unset.calls(), 1);
     }
 
     #[tokio::test]

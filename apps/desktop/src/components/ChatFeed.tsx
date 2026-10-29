@@ -61,7 +61,7 @@ import {
   type SendMessageError,
 } from "../lib/twitchAuth";
 import { openModPopover } from "../stores/modPopoverStore";
-import { noteOwnBadges } from "../stores/ownBadgeStore";
+import { noteOwnMessage } from "../stores/ownIdentityStore";
 import { currentUserId } from "../stores/authStore";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { formatSeconds } from "../lib/slashCommands";
@@ -270,7 +270,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
   const history = createHistoryGate((batch) => {
     addMessages(batch);
     const me = currentUserId();
-    if (me) for (const m of batch) noteOwnBadges(m, me);
+    if (me) for (const m of batch) noteOwnMessage(m, me);
   });
   onCleanup(() => history.cancel());
 
@@ -583,7 +583,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
         if (m.platform === "Twitch" && !m.notice && m.platform_user_id) {
           recordPulse(m.channel_id, m.platform_user_id, m.arrival_time);
         }
-        if (me) noteOwnBadges(m, me);
+        if (me) noteOwnMessage(m, me);
         if (m.platform === "Twitch" && !isForChannel(m, id) && !m.notice) {
           noteUnread(m.channel_id);
         }

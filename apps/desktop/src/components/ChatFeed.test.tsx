@@ -69,7 +69,7 @@ const { clearJump, jumpRequest, jumpToMessage } =
   await import("../stores/jumpStore");
 const { focusChannel } = await import("../stores/channelStore");
 const { notice } = await import("../stores/noticeStore");
-const { ownBadges } = await import("../stores/ownBadgeStore");
+const { ownBadges } = await import("../stores/ownIdentityStore");
 const { closeContextMenu, contextMenu } =
   await import("../stores/contextMenuStore");
 const { closeModPopover, modPopover } =
