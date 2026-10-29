@@ -832,3 +832,44 @@ func TestSession_AccessTokenConcurrent(t *testing.T) {
 		t.Errorf("expected rotated, got %q", got)
 	}
 }
+
+func TestSessionFeedSwitchesDeleteAndRestoreTheirSubscriptions(t *testing.T) {
+	helix, rec := acceptingHelix(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := newTestSession(ctx, idleSocket(t, "sess-feeds"), helix.URL, make(chan []byte, 16), nil)
+	s.SetFeed(FeedBroadcaster, false)
+	s.Join("user-1", nil)
+	waitFor(t, "chat and moderation without the stream manager feeds", func() bool { return rec.postCount() == 8 })
+	time.Sleep(100 * time.Millisecond)
+	if rec.postCount() != 8 {
+		t.Fatalf("broadcaster feeds must wait, got %d subscriptions", rec.postCount())
+	}
+
+	s.SetFeed(FeedModeration, false)
+	waitFor(t, "moderation and automod deleted", func() bool { return len(rec.deleted()) == 3 })
+
+	s.SetFeed(FeedBroadcaster, true)
+	s.SetFeed(FeedModeration, true)
+	waitFor(t, "both feeds back", func() bool { return rec.postCount() == 8+8+3 })
+	s.SetFeed(FeedModeration, true)
+	time.Sleep(100 * time.Millisecond)
+	if rec.postCount() != 19 || len(rec.deleted()) != 3 {
+		t.Fatalf("a repeated switch must change nothing, got %d posts and %d deletes", rec.postCount(), len(rec.deleted()))
+	}
+}
+
+func TestSessionDeletesWhatLandsAfterItsFeedWasSwitchedOff(t *testing.T) {
+	block := make(chan struct{})
+	helix, g := grantingHelix(t, block)
+	g.granted.Store(true)
+	g.automod.Store(true)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := newTestSession(ctx, idleSocket(t, "sess-late"), helix.URL, make(chan []byte, 16), nil)
+	s.Join("a", nil)
+	waitFor(t, "moderation request held", func() bool { return g.blocked.Load() })
+	s.SetFeed(FeedModeration, false)
+	close(block)
+	waitFor(t, "moderation and automod deleted on arrival", func() bool { return len(g.deleted()) == 3 })
+}

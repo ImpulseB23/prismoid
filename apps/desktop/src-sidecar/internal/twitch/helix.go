@@ -276,6 +276,8 @@ func SubscribeModeration(ctx context.Context, client *HelixClient, sessionID, br
 	return subscribeAsModerator(ctx, client, "channel.moderate", sessionID, broadcasterID, moderatorID)
 }
 
+var automodTypes = []string{"automod.message.hold", "automod.message.update"}
+
 // SubscribeAutoMod creates the automod.message.hold and .update v2
 // subscriptions: messages AutoMod holds for review, and their outcome once
 // a mod acts or they expire. Both need moderator:manage:automod, which
@@ -283,8 +285,8 @@ func SubscribeModeration(ctx context.Context, client *HelixClient, sessionID, br
 // `have` are skipped; the ids made come back by type, alongside the error
 // when one fails part-way.
 func SubscribeAutoMod(ctx context.Context, client *HelixClient, sessionID, broadcasterID, moderatorID string, have map[string]string) (map[string]string, error) {
-	made := make(map[string]string, 2)
-	for _, subType := range []string{"automod.message.hold", "automod.message.update"} {
+	made := make(map[string]string, len(automodTypes))
+	for _, subType := range automodTypes {
 		if _, ok := have[subType]; ok {
 			continue
 		}

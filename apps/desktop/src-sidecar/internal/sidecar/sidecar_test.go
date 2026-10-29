@@ -355,6 +355,26 @@ func TestDispatchCommand_RoutesResubscribe(t *testing.T) {
 	}
 }
 
+func TestDispatchCommand_RoutesTwitchFeed(t *testing.T) {
+	session := idleSession(t)
+	var logs bytes.Buffer
+	logger := zerolog.New(&logs)
+	dispatch := func(feed string) {
+		cmd := control.Command{Cmd: "twitch_feed", Feed: feed, Enabled: false}
+		DispatchCommand(context.Background(), cmd, map[string]context.CancelFunc{}, session, idleFirsts(), idleCosmetics(t), make(chan []byte, 1), func(string, any) {}, logger)
+	}
+
+	dispatch("broadcaster")
+	dispatch("moderation")
+	if logs.Len() != 0 {
+		t.Fatalf("known feeds should switch quietly, logged %s", logs.String())
+	}
+	dispatch("chat")
+	if !strings.Contains(logs.String(), "unknown twitch_feed") {
+		t.Fatalf("an unknown feed should be refused, logged %q", logs.String())
+	}
+}
+
 func TestHandleTwitchResubscribe_EmptyTokenIgnored(t *testing.T) {
 	session := idleSession(t)
 	session.Configure("u", "orig", "cid")

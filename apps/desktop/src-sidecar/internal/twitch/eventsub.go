@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"sync"
 	"time"
 
@@ -56,6 +57,33 @@ type Session struct {
 	// die with the socket.
 	sessionID string
 	running   bool
+	// off holds the feeds the user switched off with their feature.
+	off map[Feed]bool
+}
+
+// Feed is a group of subscriptions serving one feature the user can switch
+// off. Chat itself always runs.
+type Feed string
+
+const (
+	// FeedModeration is channel.moderate and the AutoMod queue.
+	FeedModeration Feed = "moderation"
+	// FeedBroadcaster is polls, predictions and ad breaks on the user's
+	// own channel, for the stream manager.
+	FeedBroadcaster Feed = "broadcaster"
+)
+
+// feedOf names the feed a subscription type belongs to, "" for chat.
+func feedOf(subType string) Feed {
+	if subType == "channel.moderate" || slices.Contains(automodTypes, subType) {
+		return FeedModeration
+	}
+	for _, group := range broadcasterFeeds {
+		if slices.Contains(group, subType) {
+			return FeedBroadcaster
+		}
+	}
+	return ""
 }
 
 // channelSubs is one joined channel: its live subscription ids by type and
@@ -86,6 +114,39 @@ func NewSession(ctx context.Context, out chan<- []byte, log zerolog.Logger, noti
 		Notify:   notify,
 		ctx:      ctx,
 		channels: make(map[string]*channelSubs),
+		off:      make(map[Feed]bool),
+	}
+}
+
+// SetFeed switches a feed on or off for every joined channel. Off deletes
+// its subscriptions and stops new ones; on adds them back on the live
+// socket.
+func (s *Session) SetFeed(feed Feed, on bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.off[feed] == !on {
+		return
+	}
+	s.off[feed] = !on
+	if on {
+		if s.sessionID != "" {
+			for id := range s.channels {
+				s.startSubscribe(id)
+			}
+		}
+		return
+	}
+	var ids []string
+	for _, subs := range s.channels {
+		for subType, id := range subs.ids {
+			if feedOf(subType) == feed {
+				ids = append(ids, id)
+				delete(subs.ids, subType)
+			}
+		}
+	}
+	if len(ids) > 0 {
+		go s.deleteSubscriptions(ids)
 	}
 }
 
@@ -217,10 +278,11 @@ func (s *Session) subscribeMissing(sessionID, broadcasterID string) (string, boo
 	if subs, ok := s.channels[broadcasterID]; ok {
 		maps.Copy(have, subs.ids)
 	}
+	off := maps.Clone(s.off)
 	s.mu.Unlock()
 
 	made, err := Subscribe(s.ctx, s.helix(), sessionID, broadcasterID, userID, have)
-	if err == nil {
+	if err == nil && !off[FeedModeration] {
 		if _, ok := have["channel.moderate"]; !ok {
 			// Twitch only grants channel.moderate to the broadcaster and
 			// their moderators, so a refusal here is the normal case in
@@ -243,6 +305,8 @@ func (s *Session) subscribeMissing(sessionID, broadcasterID string) (string, boo
 				s.Log.Info().Err(amErr).Str("broadcaster", broadcasterID).Msg("automod queue unavailable; moderator:manage:automod likely missing")
 			}
 		}
+	}
+	if err == nil && !off[FeedBroadcaster] {
 		// Polls, predictions and ad breaks only exist for the user's own
 		// channel. A refusal there means the grant predates the stream
 		// manager scopes; the resubscribe after a reconnect fills them in.
@@ -258,8 +322,16 @@ func (s *Session) subscribeMissing(sessionID, broadcasterID string) (string, boo
 	s.mu.Lock()
 	subs, ok := s.channels[broadcasterID]
 	stale := s.sessionID != sessionID
+	// A feed switched off while these were being made is deleted again.
+	var switchedOff []string
 	if ok && !stale {
-		maps.Copy(subs.ids, made)
+		for subType, id := range made {
+			if s.off[feedOf(subType)] {
+				switchedOff = append(switchedOff, id)
+			} else {
+				subs.ids[subType] = id
+			}
+		}
 	}
 	next, again := "", false
 	if ok {
@@ -272,6 +344,9 @@ func (s *Session) subscribeMissing(sessionID, broadcasterID string) (string, boo
 		}
 	}
 	s.mu.Unlock()
+	if len(switchedOff) > 0 {
+		go s.deleteSubscriptions(switchedOff)
+	}
 	if !ok || stale {
 		ids := make([]string, 0, len(made))
 		for _, id := range made {

@@ -280,44 +280,46 @@ const Header: Component<HeaderProps> = (props) => {
 
         <span class="header__spacer" data-tauri-drag-region />
 
-        <button
-          type="button"
-          class="icon-btn"
-          classList={{ "icon-btn--active": streamManagerOpen() }}
-          aria-label="Stream manager"
-          data-stream-manager-toggle
-          data-tour="stream-manager"
-          aria-expanded={streamManagerOpen()}
-          title="Stream manager"
-          onClick={(e) => {
-            animateIcon(
-              e,
-              [
-                { transform: "scale(1)" },
-                { transform: "scale(1.18)", offset: 0.4 },
-                { transform: "scale(1)" },
-              ],
-              360,
-            );
-            toggleStreamManager();
-          }}
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            aria-hidden="true"
+        <Show when={settings().streamManager}>
+          <button
+            type="button"
+            class="icon-btn"
+            classList={{ "icon-btn--active": streamManagerOpen() }}
+            aria-label="Stream manager"
+            data-stream-manager-toggle
+            data-tour="stream-manager"
+            aria-expanded={streamManagerOpen()}
+            title="Stream manager"
+            onClick={(e) => {
+              animateIcon(
+                e,
+                [
+                  { transform: "scale(1)" },
+                  { transform: "scale(1.18)", offset: 0.4 },
+                  { transform: "scale(1)" },
+                ],
+                360,
+              );
+              toggleStreamManager();
+            }}
           >
-            <circle cx="8" cy="8" r="1.6" fill="currentColor" />
-            <path
-              d="M5.2 10.8a4 4 0 0 1 0-5.6M10.8 5.2a4 4 0 0 1 0 5.6M3.1 12.9a7 7 0 0 1 0-9.8M12.9 3.1a7 7 0 0 1 0 9.8"
-              stroke="currentColor"
-              stroke-width="1.4"
-              stroke-linecap="round"
-            />
-          </svg>
-        </button>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+            >
+              <circle cx="8" cy="8" r="1.6" fill="currentColor" />
+              <path
+                d="M5.2 10.8a4 4 0 0 1 0-5.6M10.8 5.2a4 4 0 0 1 0 5.6M3.1 12.9a7 7 0 0 1 0-9.8M12.9 3.1a7 7 0 0 1 0 9.8"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+        </Show>
 
         <button
           type="button"
