@@ -139,11 +139,11 @@ export const PENDING_SCAN_TAIL = 64;
 export interface ChatStore {
   viewport: () => Viewport;
   /**
-   * Increments whenever an existing message in the ring is mutated in
-   * place (pending reconcile, fail, or retry). Renderers that cache
-   * per-message state (e.g. prepared layout) should subscribe and
-   * invalidate when this changes; pure append paths bump the viewport
-   * signal instead.
+   * Increments when messages already in the ring change (reconcile, fail,
+   * retry, deletion). A change replaces the message with a new object
+   * rather than editing it, so a renderer caching per-message work can
+   * redo just the entries whose object differs from the one it cached.
+   * Pure appends bump the viewport signal instead.
    */
   messageRevision: () => number;
   addMessages: (batch: ChatMessage[]) => void;
@@ -350,6 +350,12 @@ export function createChatStore(maxMessages = DEFAULT_MAX_MESSAGES): ChatStore {
     return { monoIndex, msg };
   }
 
+  // Messages in the ring are never edited: a change puts a new object in
+  // the slot, which is how renderers spot exactly what changed.
+  function replace(monoIndex: number, next: ChatMessage): void {
+    ring[monoIndex % maxMessages] = next;
+  }
+
   function tryReconcile(incoming: ChatMessage): boolean {
     if (pendingByLocalId.size === 0) return false;
     const tailStart = Math.max(oldestLive(), writeIndex - PENDING_SCAN_TAIL);
@@ -370,38 +376,41 @@ export function createChatStore(maxMessages = DEFAULT_MAX_MESSAGES): ChatStore {
           PENDING_FINGERPRINT_WINDOW_MS;
       if (!idMatch && !fingerprintMatch) continue;
       const localId = entry.local_id;
-      reconcileEntry(entry, incoming);
+      replace(mono, reconciled(entry, incoming));
       if (localId) pendingByLocalId.delete(localId);
       return true;
     }
     return false;
   }
 
-  function reconcileEntry(entry: ChatMessage, incoming: ChatMessage): void {
+  function reconciled(entry: ChatMessage, incoming: ChatMessage): ChatMessage {
     // Adopt authoritative identity and rendering data, but keep the
     // optimistic position (arrival_seq) so the row doesn't jump. The
     // entry is no longer optimistic after this, so drop status,
     // local_id, and any prior error string.
-    entry.id = incoming.id;
-    entry.timestamp = incoming.timestamp;
-    entry.arrival_time = incoming.arrival_time;
-    entry.effective_ts = incoming.effective_ts;
-    entry.username = incoming.username;
-    entry.display_name = incoming.display_name;
-    entry.platform_user_id = incoming.platform_user_id;
-    entry.message_text = incoming.message_text;
-    entry.badges = incoming.badges;
-    entry.is_mod = incoming.is_mod;
-    entry.is_subscriber = incoming.is_subscriber;
-    entry.is_broadcaster = incoming.is_broadcaster;
-    entry.color = incoming.color;
-    entry.reply_to = incoming.reply_to;
-    entry.reply_parent = incoming.reply_parent;
-    entry.notice = incoming.notice;
-    entry.emote_spans = incoming.emote_spans;
-    entry.status = undefined;
-    entry.error_message = undefined;
-    entry.local_id = undefined;
+    return {
+      ...entry,
+      id: incoming.id,
+      timestamp: incoming.timestamp,
+      arrival_time: incoming.arrival_time,
+      effective_ts: incoming.effective_ts,
+      username: incoming.username,
+      display_name: incoming.display_name,
+      platform_user_id: incoming.platform_user_id,
+      message_text: incoming.message_text,
+      badges: incoming.badges,
+      is_mod: incoming.is_mod,
+      is_subscriber: incoming.is_subscriber,
+      is_broadcaster: incoming.is_broadcaster,
+      color: incoming.color,
+      reply_to: incoming.reply_to,
+      reply_parent: incoming.reply_parent,
+      notice: incoming.notice,
+      emote_spans: incoming.emote_spans,
+      status: undefined,
+      error_message: undefined,
+      local_id: undefined,
+    };
   }
 
   function addMessages(batch: ChatMessage[]): void {
@@ -425,8 +434,7 @@ export function createChatStore(maxMessages = DEFAULT_MAX_MESSAGES): ChatStore {
     if (!msg.local_id) {
       throw new Error("insertPending requires msg.local_id");
     }
-    msg.status = "pending";
-    ring[writeIndex % maxMessages] = msg;
+    ring[writeIndex % maxMessages] = { ...msg, status: "pending" };
     pendingByLocalId.set(msg.local_id, writeIndex);
     writeIndex++;
     scheduleViewportUpdate();
@@ -435,25 +443,31 @@ export function createChatStore(maxMessages = DEFAULT_MAX_MESSAGES): ChatStore {
   function confirmPendingId(localId: string, messageId: string): void {
     const found = lookupPendingEntry(localId);
     if (!found || messageId.length === 0) return;
-    found.msg.id = messageId;
-    // No revision bump: id swap is invisible to renderers and the entry
-    // is still pending. The reconcile-by-id path will pick it up when
-    // the echo arrives.
+    replace(found.monoIndex, { ...found.msg, id: messageId });
+    // No revision bump: the id is invisible to renderers and the entry is
+    // still pending. The reconcile-by-id path picks it up when the echo
+    // arrives.
   }
 
   function failPending(localId: string, errorMessage: string): void {
     const found = lookupPendingEntry(localId);
     if (!found) return;
-    found.msg.status = "failed";
-    found.msg.error_message = errorMessage;
+    replace(found.monoIndex, {
+      ...found.msg,
+      status: "failed",
+      error_message: errorMessage,
+    });
     bumpMessageRevision();
   }
 
   function retryPending(localId: string): string | undefined {
     const found = lookupPendingEntry(localId);
     if (!found || found.msg.status !== "failed") return undefined;
-    found.msg.status = "pending";
-    found.msg.error_message = undefined;
+    replace(found.monoIndex, {
+      ...found.msg,
+      status: "pending",
+      error_message: undefined,
+    });
     bumpMessageRevision();
     return found.msg.message_text;
   }
@@ -549,7 +563,7 @@ export function createChatStore(maxMessages = DEFAULT_MAX_MESSAGES): ChatStore {
       const msg = ring[mono % maxMessages];
       if (!msg || msg.deleted || msg.status !== undefined) continue;
       if (pred(msg)) {
-        msg.deleted = true;
+        replace(mono, { ...msg, deleted: true });
         changed = true;
       }
     }

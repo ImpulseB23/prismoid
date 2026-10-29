@@ -324,6 +324,21 @@ describe("chatStore optimistic send", () => {
     expect(store.getMessage(0)?.status).toBe("pending");
   });
 
+  it("replaces a changed message and leaves the rest untouched", () => {
+    const store = createChatStore(10);
+    const a = { ...makeMsg("a"), platform_user_id: "7" };
+    const b = makeMsg("b");
+    store.addMessages([a, b]);
+    vi.runAllTimers();
+    store.markUserCleared("7");
+    vi.runAllTimers();
+    // Renderers cache by object: the deleted one is new, the other is not.
+    expect(store.getMessage(0)).not.toBe(a);
+    expect(store.getMessage(0)?.deleted).toBe(true);
+    expect(a.deleted).toBeUndefined();
+    expect(store.getMessage(1)).toBe(b);
+  });
+
   it("failPending stamps error and bumps messageRevision", () => {
     const store = createChatStore(10);
     const pending = buildOptimisticMessage({
