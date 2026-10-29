@@ -32,6 +32,8 @@ import {
   canSplitPane,
   togglePaneVideo,
   setPaneVideo,
+  collapsePanes,
+  clearPaneVideo,
   TAB_DRAG_TYPE,
 } from "../stores/layoutStore";
 import ChatPane from "./ChatPane";
@@ -40,10 +42,12 @@ import CommandCenter from "./CommandCenter";
 import MessageInput from "./MessageInput";
 import StreamVideo from "./StreamVideo";
 import {
+  closeVideoWindows,
   followVideoWindows,
   isPoppedOut,
   openVideoWindow,
 } from "../lib/videoWindow";
+import { settings } from "../stores/settingsStore";
 
 const report = (what: string) => (err: unknown) => console.error(what, err);
 
@@ -86,6 +90,17 @@ const SplitView: Component<{ login: string }> = (props) => {
       disposed = true;
       stop?.();
     });
+  });
+
+  // A feature switched off takes its extra panes, previews and windows
+  // with it.
+  createEffect(() => {
+    if (!settings().splitView) collapsePanes();
+  });
+  createEffect(() => {
+    if (settings().streamVideo) return;
+    clearPaneVideo();
+    void closeVideoWindows().catch(report("close video windows"));
   });
 
   // Once the saved tabs are back, panes of channels that did not come

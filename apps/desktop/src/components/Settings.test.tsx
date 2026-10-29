@@ -222,4 +222,31 @@ describe("Settings", () => {
     const install = screen.getByRole("button", { name: "Restart to update" });
     expect(install.classList.contains("btn--primary")).toBe(true);
   });
+
+  it("switches whole features off from Features", async () => {
+    render(() => (
+      <Settings
+        open
+        login="me"
+        attentions={[]}
+        onClose={() => {}}
+        onSignOut={() => {}}
+      />
+    ));
+    fireEvent.click(screen.getByRole("button", { name: "Features" }));
+    for (const [name, key] of [
+      [/Split view/, "splitView"],
+      [/Stream video/, "streamVideo"],
+      [/Mention alerts/, "mentionAlerts"],
+    ] as const) {
+      fireEvent.click(screen.getByRole("checkbox", { name }));
+      await vi.waitFor(() => expect(settings()[key]).toBe(false));
+      fireEvent.click(screen.getByRole("checkbox", { name }));
+      await vi.waitFor(() => expect(settings()[key]).toBe(true));
+    }
+    expect(screen.getByText("Load earlier messages")).toBeTruthy();
+    expect(
+      screen.getByRole("checkbox", { name: /Follow my browser/ }),
+    ).toBeTruthy();
+  });
 });

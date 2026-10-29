@@ -48,6 +48,11 @@ export const TOUR_STEPS: TourStep[] = [
     body: "The broadcast button drops your stream controls over the chat: title, category, tags, ads, polls and quick actions. Anything Twitch keeps for Affiliates tells you so.",
   },
   {
+    section: "features",
+    title: "Keep what you use",
+    body: "Switch off whole features you don't need, like split view or stream video. Off means gone from the window and not running in the background.",
+  },
+  {
     section: "appearance",
     title: "Make it yours",
     body: "Pick a theme, zoom and text size, row shading and 7TV paints. The gear by the chat box has timestamps, readable colors, pause and animated emotes.",
@@ -55,12 +60,12 @@ export const TOUR_STEPS: TourStep[] = [
   {
     section: "chat",
     title: "How chat runs",
-    body: "Load earlier messages when you open a channel, follow the channel in your browser, and pick what the stream bar shows.",
+    body: "Pick what the stream bar shows above the chat.",
   },
   {
     section: "highlights",
     title: "Choose what stands out",
-    body: "Ping when you're mentioned, highlight words, people and badges, mark first-time chatters, and hide anyone you'd rather not see.",
+    body: "Tune the mention chime, highlight words, people and badges, mark first-time chatters, and hide anyone you'd rather not see.",
   },
   {
     section: "moderation",
