@@ -42,8 +42,11 @@ use tauri_plugin_window_state::StateFlags;
 
 /// Visibility is decided at launch (shown, or left in the tray for a
 /// sign-in start), never restored: quitting from the tray would otherwise
-/// bring the next launch up hidden.
-const WINDOW_STATE: StateFlags = StateFlags::all().difference(StateFlags::VISIBLE);
+/// bring the next launch up hidden. Fullscreen is not restored either; a
+/// launch always opens as a normal window.
+const WINDOW_STATE: StateFlags = StateFlags::all()
+    .difference(StateFlags::VISIBLE)
+    .difference(StateFlags::FULLSCREEN);
 
 #[tauri::command]
 fn get_platform() -> &'static str {
