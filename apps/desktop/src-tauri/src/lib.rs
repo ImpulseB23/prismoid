@@ -24,6 +24,7 @@ pub mod twitch_irc;
 pub mod twitch_polls;
 pub mod twitch_quick_actions;
 mod uninstall;
+mod user_card;
 pub mod youtube_auth;
 
 pub mod emote_index;
@@ -37,7 +38,7 @@ pub use host::parse_batch;
 #[doc(hidden)]
 pub use message::UnifiedMessage;
 
-use tauri::{Manager, Runtime};
+use tauri::{Manager, Runtime, Window, WindowEvent};
 use tauri_plugin_window_state::StateFlags;
 
 /// Visibility is decided at launch (shown, or left in the tray for a
@@ -82,12 +83,15 @@ pub fn run() {
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(WINDOW_STATE)
+                // Cards always open at the mouse.
+                .with_filter(|label| !user_card::is_card(label))
                 .build(),
         )
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .manage(tray::CloseToTray::default())
-        .on_window_event(tray::on_window_event)
+        .manage(user_card::UserCards::default())
+        .on_window_event(on_window_event)
         .invoke_handler(tauri::generate_handler![
             get_platform,
             logging::support_bundle,
@@ -134,9 +138,16 @@ pub fn run() {
             sidecar_supervisor::current_emote_bundle,
             sidecar_supervisor::current_sidecar_status,
             seventv_paints::current_seventv_paints,
+            seventv_paints::seventv_user_paint,
             seventv_paints::set_seventv_paints,
             seventv_users::seventv_users,
             chat_history::chat_history,
+            chat_history::chat_history_user,
+            user_card::user_card_open,
+            user_card::user_card_current,
+            user_card::user_card_ready,
+            user_card::user_card_set_pinned,
+            user_card::user_card_close,
             twitch_chat_settings::twitch_get_chat_settings,
             twitch_chat_settings::twitch_update_chat_settings,
             twitch_channel_info::twitch_get_channel_info,
@@ -168,6 +179,13 @@ pub fn run() {
         .setup(setup)
         .run(tauri::generate_context!())
         .expect("failed to run prismoid");
+}
+
+fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
+    tray::on_window_event(window, event);
+    if window.label() == "main" && matches!(event, WindowEvent::Destroyed) {
+        user_card::close_all(window.app_handle());
+    }
 }
 
 /// Tauri setup hook. Builds the shared `AuthManager` + wakeup notifier,

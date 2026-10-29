@@ -63,15 +63,16 @@ pub fn show_main<R: Runtime>(app: &AppHandle<R>) {
 
 pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
     if let WindowEvent::CloseRequested { api, .. } = event {
-        if hides_on_close(window.state::<CloseToTray>().inner()) {
+        if hides_on_close(window.label(), window.state::<CloseToTray>().inner()) {
             api.prevent_close();
             let _ = window.hide();
         }
     }
 }
 
-fn hides_on_close(state: &CloseToTray) -> bool {
-    state.0.load(Ordering::Relaxed)
+/// Only the main window goes to the tray; user cards always close.
+fn hides_on_close(label: &str, state: &CloseToTray) -> bool {
+    label == "main" && state.0.load(Ordering::Relaxed)
 }
 
 #[cfg(test)]
@@ -90,8 +91,9 @@ mod tests {
     #[test]
     fn close_hides_only_when_enabled() {
         let state = CloseToTray::default();
-        assert!(!hides_on_close(&state));
+        assert!(!hides_on_close("main", &state));
         state.0.store(true, Ordering::Relaxed);
-        assert!(hides_on_close(&state));
+        assert!(hides_on_close("main", &state));
+        assert!(!hides_on_close("user-card-1", &state));
     }
 }

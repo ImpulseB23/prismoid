@@ -190,6 +190,13 @@ impl PaintState {
         }
     }
 
+    /// The paint `user_id` wears, when its definition has arrived.
+    pub fn user_paint(&self, user_id: &str) -> Option<Paint> {
+        let inner = self.0.lock().expect("paint state poisoned");
+        let wearer = inner.users.get(user_id)?;
+        inner.paints.get(&wearer.paint_id).cloned()
+    }
+
     pub fn snapshot(&self) -> PaintSnapshot {
         let inner = self.0.lock().expect("paint state poisoned");
         PaintSnapshot {
@@ -222,6 +229,12 @@ impl Inner {
 #[tauri::command]
 pub fn current_seventv_paints(state: State<'_, PaintState>) -> PaintSnapshot {
     state.snapshot()
+}
+
+/// One user's paint, for a window that shows a single chatter.
+#[tauri::command]
+pub fn seventv_user_paint(state: State<'_, PaintState>, user_id: String) -> Option<Paint> {
+    state.user_paint(&user_id)
 }
 
 /// Whether the sidecar may talk to 7TV at all. On by default, matching the
@@ -343,6 +356,16 @@ mod tests {
             user_id: user.into(),
             paint_id: paint.map(Into::into),
         }]
+    }
+
+    #[test]
+    fn user_paint_needs_both_the_assignment_and_the_definition() {
+        let state = PaintState::default();
+        state.apply(entitlement(EntitlementAction::Create, "u1", "s1", "p1"));
+        assert_eq!(state.user_paint("u1"), None);
+        state.add_paint(&paint("p1"));
+        assert_eq!(state.user_paint("u1"), Some(paint("p1")));
+        assert_eq!(state.user_paint("u2"), None);
     }
 
     #[test]
