@@ -15,8 +15,15 @@ export interface WhatsNewStore {
   updatedTo: () => string | null;
   /** True until Settings has been opened after an update. */
   unseen: () => boolean;
-  /** Compares the running version with the one that ran last. */
-  init: () => Promise<void>;
+  /**
+   * Compares the running version with the one that ran last. Call once at
+   * startup, after the sign-in check: someone already signed in has run
+   * Prismoid before even when no version was recorded, since versions before
+   * 0.6.0 did not record one. `firstRun` is settled before this awaits.
+   */
+  init: (signedInAtStart: boolean) => Promise<void>;
+  /** True on a first install, so the setup tour can offer itself. */
+  firstRun: () => boolean;
   markSeen: () => void;
   /** Patch notes on screen, if any. */
   notes: () => ReleaseNote | null;
@@ -32,14 +39,17 @@ export function createWhatsNewStore(
   const [updatedTo, setUpdatedTo] = createSignal<string | null>(null);
   const [unseen, setUnseen] = createSignal(false);
   const [notes, setNotes] = createSignal<ReleaseNote | null>(null);
+  const [firstRun, setFirstRun] = createSignal(false);
 
-  async function init(): Promise<void> {
-    const current = await version();
+  async function init(signedInAtStart: boolean): Promise<void> {
     const last = read(storage);
+    const returning = last !== null || signedInAtStart;
+    setFirstRun(!returning);
+    const current = await version();
     // A first install has nothing to announce.
-    if (last !== null && last !== current) {
+    if (returning && last !== current) {
       setUpdatedTo(current);
-      const note = lookup(last, current);
+      const note = lookup(last ?? "0.0.0", current);
       if (note) setNotes(note);
       else setUnseen(true);
     }
@@ -50,6 +60,7 @@ export function createWhatsNewStore(
     updatedTo,
     unseen,
     init,
+    firstRun,
     markSeen: () => setUnseen(false),
     notes,
     showNotes: setNotes,
@@ -89,6 +100,7 @@ const defaultStore = createWhatsNewStore();
 export const updatedTo = defaultStore.updatedTo;
 export const whatsNewUnseen = defaultStore.unseen;
 export const initWhatsNew = defaultStore.init;
+export const whatsNewFirstRun = defaultStore.firstRun;
 export const markWhatsNewSeen = defaultStore.markSeen;
 export const patchNotes = defaultStore.notes;
 export const showPatchNotes = defaultStore.showNotes;

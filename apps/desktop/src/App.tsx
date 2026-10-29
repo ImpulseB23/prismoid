@@ -24,7 +24,7 @@ import { logo, palette } from "./stores/themeStore";
 import SignIn from "./components/SignIn";
 import UpdateNotice from "./components/UpdateNotice";
 import UpdateScreen, { screenFor } from "./components/UpdateScreen";
-import { getAuthStatus, logout } from "./lib/twitchAuth";
+import { getAuthStatus, logout, type AuthStatus } from "./lib/twitchAuth";
 import {
   authStatus,
   moderationNeedsReconnect,
@@ -74,23 +74,26 @@ const App: Component = () => {
   });
 
   onMount(async () => {
+    let status: AuthStatus;
     try {
-      setAuthStatus(await getAuthStatus());
+      status = await getAuthStatus();
     } catch {
       // Treat any error from the status command as logged-out; the
       // SignIn flow surfaces a real error message if the underlying
       // keychain is broken.
-      setAuthStatus({ state: "logged_out" });
+      status = { state: "logged_out" };
     }
+    // Before the chat mounts, so the setup tour knows a returning user.
+    initWhatsNew(status.state === "logged_in").catch((err: unknown) =>
+      console.error("whats new", err),
+    );
+    setAuthStatus(status);
   });
 
   // Runs for the whole session, sign-in screen included, so a release that
   // fixes a sign-in bug still reaches whoever is stuck there.
   onMount(() => onCleanup(scheduleUpdateChecks()));
   onMount(() => onCleanup(installContextMenus()));
-  onMount(() => {
-    initWhatsNew().catch((err: unknown) => console.error("whats new", err));
-  });
   // The listener resolves after an await, outside the owner, so the stop
   // function is kept and released from a cleanup registered up front.
   let stopChrome: (() => void) | undefined;

@@ -26,7 +26,7 @@ function store(done = false, fresh = true) {
     () => isDone,
     markDone,
     settingsOpen,
-    fresh,
+    () => fresh,
   );
   return { tour, markDone, settingsOpen };
 }
