@@ -183,6 +183,10 @@ func twitchEmotesFromResponse(r twitchEmoteResponse) []Emote {
 		if em.URL1x == "" {
 			continue
 		}
+		if animated {
+			em.Static1x = twitchEmoteURL(r.Template, e.ID, "static", mode, "1.0")
+			em.Static2x = twitchEmoteURL(r.Template, e.ID, "static", mode, "2.0")
+		}
 		out = append(out, em)
 	}
 	return out

@@ -33,6 +33,8 @@ export interface Settings {
   readableColors: boolean;
   /** What else besides scrolling up holds the feed still. */
   pauseChat: PauseChat;
+  /** Play animated emotes; off shows their first frame. */
+  animatedEmotes: boolean;
   /** Hide the live viewer count in the stream bar. */
   hideViewers: boolean;
   hideUptime: boolean;
@@ -115,6 +117,7 @@ export const DEFAULT_SETTINGS: Settings = {
   alternateRows: false,
   readableColors: true,
   pauseChat: "scroll",
+  animatedEmotes: true,
   hideViewers: false,
   hideUptime: false,
   hideChatRate: false,
@@ -313,6 +316,10 @@ function readSettings(storage: StorageLike | null): Settings {
         PAUSE_CHAT.includes(p.pauseChat as PauseChat)
           ? (p.pauseChat as PauseChat)
           : DEFAULT_SETTINGS.pauseChat,
+      animatedEmotes:
+        typeof p.animatedEmotes === "boolean"
+          ? p.animatedEmotes
+          : DEFAULT_SETTINGS.animatedEmotes,
       hideViewers:
         typeof p.hideViewers === "boolean"
           ? p.hideViewers

@@ -62,6 +62,11 @@ pub struct EmoteMeta {
     pub height: u16,
     #[serde(default)]
     pub animated: bool,
+    /// Still frames of an animated emote, for when animation is off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub static_1x: Option<Box<str>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub static_2x: Option<Box<str>>,
     #[serde(default)]
     pub zero_width: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -438,6 +443,8 @@ mod tests {
             width: 28,
             height: 28,
             animated: false,
+            static_1x: None,
+            static_2x: None,
             zero_width: false,
             owner: None,
             added_at: None,
@@ -610,6 +617,7 @@ mod tests {
             "width": 32,
             "height": 32,
             "animated": true,
+            "static_1x": "https://cdn.7tv.app/emote/60a/1x_static.webp",
             "zero_width": true
         }"#;
         let got: EmoteMeta = serde_json::from_str(raw).unwrap();
@@ -618,6 +626,12 @@ mod tests {
         assert!(got.animated && got.zero_width);
         assert_eq!(got.width, 32);
         assert_eq!(got.owner, None);
+        let out = serde_json::to_value(&got).unwrap();
+        assert_eq!(
+            out["static_1x"],
+            "https://cdn.7tv.app/emote/60a/1x_static.webp"
+        );
+        assert!(out.get("static_2x").is_none());
     }
 
     #[test]

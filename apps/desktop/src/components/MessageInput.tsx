@@ -56,6 +56,7 @@ import { formatSeconds } from "../lib/slashCommands";
 import EmotePicker from "./EmotePicker";
 import ChatSettingsMenu from "./ChatSettingsMenu";
 import GearIcon from "./GearIcon";
+import { emoteImages } from "../lib/emoteImage";
 
 interface Props {
   /** Current Twitch login of the signed-in user. Used as both the
@@ -452,7 +453,7 @@ const MessageInput: Component<Props> = (props) => {
                 >
                   {(ec) => (
                     <img
-                      src={ec().emote.url_1x}
+                      src={emoteImages(ec().emote).x1}
                       alt=""
                       width={24}
                       height={24}

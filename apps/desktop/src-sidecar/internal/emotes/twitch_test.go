@@ -43,9 +43,16 @@ func TestTwitch_FetchGlobalEmotes(t *testing.T) {
 	if !strings.Contains(kappa.URL1x, "/25/static/dark/1.0") {
 		t.Errorf("kappa URL1x = %q", kappa.URL1x)
 	}
+	if kappa.Static1x != "" {
+		t.Errorf("still emote got Static1x %q", kappa.Static1x)
+	}
 	anim := set.Emotes[1]
 	if !anim.Animated || !strings.Contains(anim.URL1x, "/88/animated/dark/1.0") {
 		t.Errorf("anim: %+v", anim)
+	}
+	if !strings.Contains(anim.Static1x, "/88/static/dark/1.0") ||
+		!strings.Contains(anim.Static2x, "/88/static/dark/2.0") {
+		t.Errorf("anim statics: %q %q", anim.Static1x, anim.Static2x)
 	}
 }
 

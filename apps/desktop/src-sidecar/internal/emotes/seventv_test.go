@@ -77,6 +77,10 @@ func TestSevenTV_FetchGlobal(t *testing.T) {
 	if e.URL1x != "https://cdn.7tv.app/emote/60ae958e229664e8667aea38/1x.webp" {
 		t.Errorf("URL1x = %q", e.URL1x)
 	}
+	if e.Static1x != "https://cdn.7tv.app/emote/60ae958e229664e8667aea38/1x_static.webp" ||
+		e.Static2x != "https://cdn.7tv.app/emote/60ae958e229664e8667aea38/2x_static.webp" {
+		t.Errorf("statics = %q %q", e.Static1x, e.Static2x)
+	}
 	if e.URL4x == "" {
 		t.Error("URL4x missing")
 	}
