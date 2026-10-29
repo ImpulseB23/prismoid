@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.4](https://github.com/ImpulseB23/prismoid/compare/v0.8.3...v0.8.4) (2026-10-29)
+
+
+### Bug Fixes
+
+* account settings, reconnect and sign out from your avatar ([#304](https://github.com/ImpulseB23/prismoid/issues/304)) ([02eb6d7](https://github.com/ImpulseB23/prismoid/commit/02eb6d766162e35d6b262f033a45dbf4fe30a3fa))
+* always open as a normal window, never fullscreen ([#303](https://github.com/ImpulseB23/prismoid/issues/303)) ([919b822](https://github.com/ImpulseB23/prismoid/commit/919b822da4fc67c6dae7f33f91691f839a8f6906))
+* avatar and card keep your badges per channel across restarts ([#302](https://github.com/ImpulseB23/prismoid/issues/302)) ([c690ebc](https://github.com/ImpulseB23/prismoid/commit/c690ebca18f01c6ac6893525deba26eab2b88144))
+* avatar opens its own account panel, sign out asks first ([#307](https://github.com/ImpulseB23/prismoid/issues/307)) ([7cf13b8](https://github.com/ImpulseB23/prismoid/commit/7cf13b896b266ce6cb59582f6b783d9e58c3e22f))
+* chat search filters work like discord's ([#308](https://github.com/ImpulseB23/prismoid/issues/308)) ([c5eb102](https://github.com/ImpulseB23/prismoid/commit/c5eb102de04c6796358908f1c47db58955856f88))
+* jump to a message from anywhere messages are listed ([#309](https://github.com/ImpulseB23/prismoid/issues/309)) ([2efd0c3](https://github.com/ImpulseB23/prismoid/commit/2efd0c3bfc97f6455f59f17a9516458c8e40c5fb))
+* user card sections keep their height instead of clipping ([#305](https://github.com/ImpulseB23/prismoid/issues/305)) ([73f8c30](https://github.com/ImpulseB23/prismoid/commit/73f8c30979230d56d0cf31f3d7e66b87fdff5df1))
+* user card shows follow age instead of session messages ([#306](https://github.com/ImpulseB23/prismoid/issues/306)) ([e0f0183](https://github.com/ImpulseB23/prismoid/commit/e0f01837c3f9e22b4a5a22c2277b1c15bd844151))
+
 ## [0.8.3](https://github.com/ImpulseB23/prismoid/compare/v0.8.2...v0.8.3) (2026-10-29)
 
 
