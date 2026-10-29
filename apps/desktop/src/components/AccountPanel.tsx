@@ -1,15 +1,17 @@
 // Your account, opened from the avatar: who you are signed in as, the
 // platforms the feed connects to, your badges in the open channel, and
-// the way to Settings or out.
+// the way into Settings, which lands on whatever needs you, or out.
 
 import { Component, For, Show, createEffect } from "solid-js";
 import { createConfirmTap } from "../lib/confirmTap";
+import type { Attention } from "../lib/settingsAttention";
 import { UPCOMING_PLATFORMS } from "../lib/platforms";
 import { sessionFor } from "../lib/chatSession";
 import { activeChannel } from "../stores/channelStore";
 import type { ChatMessage } from "../stores/chatStore";
 import { reconnectScopes } from "../stores/roleStore";
 import { openSettings } from "../stores/settingsPanelStore";
+import GearIcon from "./GearIcon";
 import PaletteClose from "./PaletteClose";
 import TwitchReconnect from "./TwitchReconnect";
 
@@ -19,6 +21,8 @@ export interface AccountPanelProps {
   displayName: string;
   picture: string | undefined;
   badges: ChatMessage["badges"];
+  /** The most urgent thing in Settings waiting on the user. */
+  attention: Attention | null;
   onClose: () => void;
   onSignOut: () => void;
 }
@@ -144,16 +148,25 @@ const AccountPanel: Component<AccountPanelProps> = (props) => {
             </For>
           </div>
 
+          <Show when={props.attention}>
+            {(a) => (
+              <p class="account__attention">
+                <span class="account__attention-dot" aria-hidden="true" />
+                {a().text}
+              </p>
+            )}
+          </Show>
           <div class="account__actions">
             <button
               type="button"
-              class="btn btn--outline"
+              class="btn btn--outline account__settings"
               onClick={() => {
-                openSettings("account");
+                openSettings(props.attention?.section);
                 props.onClose();
               }}
             >
-              Account settings
+              <GearIcon size={14} />
+              Settings
             </button>
             <button
               type="button"

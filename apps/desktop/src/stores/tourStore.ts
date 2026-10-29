@@ -50,7 +50,7 @@ export const TOUR_STEPS: TourStep[] = [
   {
     section: "appearance",
     title: "Make it yours",
-    body: "Pick a theme, zoom and text size, and how chat looks: timestamps, row shading and 7TV paints.",
+    body: "Pick a theme, zoom and text size, row shading and 7TV paints. The gear by the chat box has timestamps, readable colors, pause and animated emotes.",
   },
   {
     section: "chat",
@@ -74,7 +74,7 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     title: "You're set",
-    body: "Everything here is in Settings, and you can run this setup again from Help.",
+    body: "Settings are under your picture in the top right, and you can run this setup again from Help.",
   },
 ];
 

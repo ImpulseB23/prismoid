@@ -24,10 +24,25 @@ describe("AccountAvatar", () => {
   afterEach(cleanup);
 
   it("stays in the header with no channel open, until signed out", () => {
-    render(() => <AccountAvatar login="viewer" onSignOut={() => {}} />);
+    const [attention, setAttention] = createSignal<{ text: string } | null>(
+      null,
+    );
+    render(() => (
+      <AccountAvatar
+        login="viewer"
+        attention={attention()}
+        onSignOut={() => {}}
+      />
+    ));
     expect(
       screen.getByRole("button", { name: "Your account, chatting as viewer" }),
     ).toBeTruthy();
+    expect(document.querySelector(".avatar__dot")).toBeNull();
+    setAttention({ text: "Twitch needs new permissions" });
+    expect(document.querySelector(".avatar__dot")).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: /Settings needs you/ }).title,
+    ).toContain("Twitch needs new permissions");
     setMe(null);
     expect(screen.queryByRole("button")).toBeNull();
   });
