@@ -7,7 +7,7 @@ import type { ChatMessage } from "../stores/chatStore";
 import { messageRevision, recentMessagesByUser } from "../stores/chatStore";
 import { activeChannel } from "../stores/channelStore";
 import { currentUserId } from "../stores/authStore";
-import { ownBadges } from "../stores/ownBadgeStore";
+import { ownBadges } from "../stores/ownIdentityStore";
 import { canModerate } from "../stores/roleStore";
 import { badgeRevision, resolveBadge } from "../stores/badgeStore";
 import { accountOpen, setAccountOpen } from "../stores/accountPanelStore";

@@ -226,6 +226,18 @@ export interface OptimisticInput {
   text: string;
   /** Active channel the message is being sent to. */
   channelId: string;
+  /**
+   * How the user looks in this channel, so the message shows the same way
+   * while it is sent as once Twitch echoes it back. Missing parts fall back
+   * to the login, no color and no badges.
+   */
+  look?: {
+    userId: string;
+    displayName?: string;
+    color: string | null;
+    badges?: ChatMessage["badges"];
+    emoteSpans?: EmoteSpan[];
+  };
 }
 
 /**
@@ -246,19 +258,19 @@ export function buildOptimisticMessage(input: OptimisticInput): ChatMessage {
     effective_ts: now,
     arrival_seq: nextOptimisticSeq++,
     username: input.login,
-    display_name: input.login,
-    platform_user_id: "",
+    display_name: input.look?.displayName ?? input.login,
+    platform_user_id: input.look?.userId ?? "",
     channel_id: input.channelId,
     message_text: input.text,
-    badges: [],
+    badges: input.look?.badges ?? [],
     is_mod: false,
     is_subscriber: false,
     is_broadcaster: false,
-    color: null,
+    color: input.look?.color ?? null,
     reply_to: null,
     reply_parent: null,
     notice: null,
-    emote_spans: [],
+    emote_spans: input.look?.emoteSpans ?? [],
     status: "pending",
     local_id: localId,
   };

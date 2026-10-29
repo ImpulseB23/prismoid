@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createOwnBadgeStore } from "./ownBadgeStore";
+import { createOwnIdentityStore } from "./ownIdentityStore";
 import type { ChatMessage } from "./chatStore";
 import type { StorageLike } from "./channelStore";
 
@@ -44,9 +44,21 @@ function msg(over: Partial<ChatMessage>): ChatMessage {
   };
 }
 
-describe("ownBadgeStore", () => {
+describe("ownIdentityStore", () => {
+  it("keeps the display name per channel and the color for the account", () => {
+    const storage = memStorage();
+    const store = createOwnIdentityStore(storage);
+    store.note(msg({ display_name: "Me", color: "#00ff00" }), "1");
+    expect(store.displayName("chan")).toBe("Me");
+    expect(store.color()).toBe("#00ff00");
+    store.setColor("#0000ff");
+    const later = createOwnIdentityStore(storage);
+    expect(later.color()).toBe("#0000ff");
+    expect(later.displayName("chan")).toBe("Me");
+  });
+
   it("keeps the badges from the user's newest message per channel", () => {
-    const store = createOwnBadgeStore(memStorage());
+    const store = createOwnIdentityStore(memStorage());
     store.note(msg({ timestamp: 200 }), "1");
     store.note(msg({ timestamp: 100, badges: vip }), "1");
     expect(store.badges("chan")).toEqual(sub);
@@ -56,7 +68,7 @@ describe("ownBadgeStore", () => {
   });
 
   it("ignores other people, notices and unsent messages", () => {
-    const store = createOwnBadgeStore(memStorage());
+    const store = createOwnIdentityStore(memStorage());
     store.note(msg({ platform_user_id: "2" }), "1");
     store.note(
       msg({ notice: { notice_type: "resub", system_message: "x" } }),
@@ -68,8 +80,8 @@ describe("ownBadgeStore", () => {
 
   it("remembers them across restarts and drops malformed data", () => {
     const storage = memStorage();
-    createOwnBadgeStore(storage).note(msg({}), "1");
-    expect(createOwnBadgeStore(storage).badges("chan")).toEqual(sub);
+    createOwnIdentityStore(storage).note(msg({}), "1");
+    expect(createOwnIdentityStore(storage).badges("chan")).toEqual(sub);
 
     const broken = memStorage({
       "prismoid.ownBadges": JSON.stringify({
@@ -77,13 +89,13 @@ describe("ownBadgeStore", () => {
         ok: { badges: vip, at: 1 },
       }),
     });
-    const store = createOwnBadgeStore(broken);
+    const store = createOwnIdentityStore(broken);
     expect(store.badges("chan")).toBeUndefined();
     expect(store.badges("ok")).toEqual(vip);
     expect(
-      createOwnBadgeStore(memStorage({ "prismoid.ownBadges": "{nope" })).badges(
-        "ok",
-      ),
+      createOwnIdentityStore(
+        memStorage({ "prismoid.ownBadges": "{nope" }),
+      ).badges("ok"),
     ).toBeUndefined();
   });
 });

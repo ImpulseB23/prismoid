@@ -201,6 +201,22 @@ describe("chatStore optimistic send", () => {
     expect(msg.effective_ts).toBe(msg.arrival_time);
   });
 
+  it("buildOptimisticMessage shows the user as they look in the channel", () => {
+    const badges = [{ set_id: "subscriber", id: "6" }];
+    const msg = buildOptimisticMessage({
+      platform: "Twitch",
+      login: "alice",
+      text: "hi",
+      channelId: "chan",
+      look: { userId: "7", displayName: "Alice", color: "#ff0000", badges },
+    });
+    expect(msg.display_name).toBe("Alice");
+    expect(msg.platform_user_id).toBe("7");
+    expect(msg.color).toBe("#ff0000");
+    expect(msg.badges).toEqual(badges);
+    expect(msg.emote_spans).toEqual([]);
+  });
+
   it("insertPending appends to ring and bumps viewport", () => {
     const store = createChatStore(10);
     const pending = buildOptimisticMessage({

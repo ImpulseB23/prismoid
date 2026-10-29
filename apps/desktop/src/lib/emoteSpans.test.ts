@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { splitMessage, sizeEmote } from "./emoteSpans";
+import { scanEmotes, splitMessage, sizeEmote } from "./emoteSpans";
 import type { EmoteMeta, EmoteSpan } from "../stores/chatStore";
 
 function emote(overrides: Partial<EmoteMeta> = {}): EmoteMeta {
@@ -138,6 +138,35 @@ describe("splitMessage", () => {
       expect(pieces[0]!.primary.emote.code).toBe("A");
     if (pieces[1]!.kind === "emote")
       expect(pieces[1]!.primary.emote.code).toBe("B");
+  });
+});
+
+describe("scanEmotes", () => {
+  const known = new Map([
+    ["Kappa", emote()],
+    ["???", emote({ id: "q", code: "???", provider: "7tv" })],
+  ]);
+  const lookup = (code: string) => known.get(code);
+
+  it("finds whole-word codes with UTF-8 byte offsets, like the host", () => {
+    const spans = scanEmotes("é Kappa	??? Kappa123 kappa", lookup);
+    expect(spans.map((s) => [s.start, s.end, s.emote.code])).toEqual([
+      [3, 8, "Kappa"],
+      [9, 12, "???"],
+    ]);
+  });
+
+  it("renders the same pieces as host-scanned text", () => {
+    const text = "hi ??? there";
+    expect(splitMessage(text, scanEmotes(text, lookup), OPTS)).toEqual(
+      splitMessage(
+        text,
+        [span(3, 6, { id: "q", code: "???", provider: "7tv" })],
+        OPTS,
+      ),
+    );
+    expect(scanEmotes("", lookup)).toEqual([]);
+    expect(scanEmotes("   ", lookup)).toEqual([]);
   });
 });
 

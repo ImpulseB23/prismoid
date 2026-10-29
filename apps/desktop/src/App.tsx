@@ -49,6 +49,7 @@ import {
 } from "./stores/mentionsStore";
 import { clearRoles, loadModeratedChannels } from "./stores/roleStore";
 import { trackActiveStream } from "./stores/streamStore";
+import { loadOwnColor } from "./stores/ownIdentityStore";
 import { initWhatsNew } from "./stores/whatsNewStore";
 import { trackWindowChrome } from "./stores/windowStore";
 import TitleBar from "./components/TitleBar";
@@ -231,6 +232,9 @@ const ChatShell: Component<{ login: string; onSignOut: () => void }> = (
     // picker, so nothing to handle here.
     void restoreChannels(props.login);
     offerTour();
+    // Your name color for messages still being sent; your own messages
+    // keep it current after this.
+    loadOwnColor().catch((err: unknown) => console.error("own color", err));
 
     // The host reports the channel open in the front browser window while
     // "Follow my browser" is on. Registration is async, so a disposal that

@@ -52,6 +52,33 @@ export function sizeEmote(
   };
 }
 
+// ASCII whitespace, the token boundary the host's scanner uses.
+const isSpace = (b: number) =>
+  b === 0x20 || b === 0x09 || b === 0x0a || b === 0x0c || b === 0x0d;
+
+/**
+ * Emote spans for text the host has not scanned yet, such as a message
+ * still being sent: every whole word, between ASCII whitespace, that is an
+ * emote code. Offsets are UTF-8 bytes, like the host's.
+ */
+export function scanEmotes(
+  text: string,
+  lookup: (code: string) => EmoteMeta | undefined,
+): EmoteSpan[] {
+  const bytes = utf8Encoder.encode(text);
+  const spans: EmoteSpan[] = [];
+  let i = 0;
+  while (i < bytes.length) {
+    while (i < bytes.length && isSpace(bytes[i]!)) i++;
+    const start = i;
+    while (i < bytes.length && !isSpace(bytes[i]!)) i++;
+    if (i === start) break;
+    const emote = lookup(utf8Decoder.decode(bytes.subarray(start, i)));
+    if (emote) spans.push({ start, end: i, emote });
+  }
+  return spans;
+}
+
 export function splitMessage(
   text: string,
   spans: EmoteSpan[],
