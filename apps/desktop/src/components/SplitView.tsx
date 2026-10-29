@@ -30,7 +30,6 @@ import {
   showInPane,
   splitPane,
   canSplitPane,
-  togglePaneVideo,
   setPaneVideo,
   collapsePanes,
   clearPaneVideo,
@@ -157,23 +156,22 @@ const SplitView: Component<{ login: string }> = (props) => {
               <div class="chat-area">
                 <ChatFeed login={props.login} />
                 <Show
-                  when={
-                    slot().video && !isPoppedOut(channel()?.login ?? "")
-                      ? channel()
-                      : null
-                  }
+                  when={(() => {
+                    const v = channelOf(slot().videoChannelId);
+                    return v && !isPoppedOut(v.login) ? v : null;
+                  })()}
                 >
                   {(c) => (
                     <StreamVideo
                       login={c().login}
                       name={c().display_name}
-                      onClose={() => togglePaneVideo(slotId)}
+                      onClose={() => setPaneVideo(slotId, false)}
                       // The window takes over, so the stream never plays
                       // twice.
                       onPopOut={() => {
                         // Read before closing the preview unmounts it.
                         const { login, display_name } = c();
-                        togglePaneVideo(slotId);
+                        setPaneVideo(slotId, false);
                         openVideoWindow(
                           login,
                           `${display_name}'s stream`,
