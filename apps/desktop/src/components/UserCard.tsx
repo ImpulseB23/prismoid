@@ -64,9 +64,6 @@ import {
   userInfoRevision,
 } from "../stores/userInfoStore";
 import MessageRow from "./MessageRow";
-import TwitchReconnect from "./TwitchReconnect";
-import { reconnectScopes } from "../stores/roleStore";
-import { openSettings } from "../stores/settingsPanelStore";
 import PaletteClose from "./PaletteClose";
 
 export interface CardUser {
@@ -84,7 +81,6 @@ export interface UserCardProps {
   /** Signed-in login, so messages that mention it are highlighted. */
   login: string;
   onClose: () => void;
-  onSignOut: () => void;
 }
 
 const RECENT_LIMIT = 20;
@@ -102,78 +98,6 @@ const UserCard: Component<UserCardProps> = (props) => {
   let dialogRef: HTMLDivElement | undefined;
 
   const isSelf = () => props.user?.platform_user_id === currentUserId();
-
-  // On your own card the actions are about your account, not a chatter.
-  const AccountActions = () => (
-    <>
-      <Show when={reconnectScopes().length > 0}>
-        <div class="user-card__reconnect">
-          <TwitchReconnect
-            title="Twitch needs new permissions"
-            hint="Reconnect once to turn on what was added since you signed in."
-          />
-        </div>
-      </Show>
-      <div class="user-card__actions user-card__actions--account">
-        <button
-          type="button"
-          class="user-card__action"
-          onClick={() => {
-            openSettings("account");
-            close();
-          }}
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 16 16"
-            fill="none"
-            aria-hidden="true"
-          >
-            <circle
-              cx="8"
-              cy="5.5"
-              r="2.7"
-              stroke="currentColor"
-              stroke-width="1.4"
-            />
-            <path
-              d="M2.8 14c.6-2.7 2.7-4.3 5.2-4.3s4.6 1.6 5.2 4.3"
-              stroke="currentColor"
-              stroke-width="1.4"
-              stroke-linecap="round"
-            />
-          </svg>
-          Account settings
-        </button>
-        <button
-          type="button"
-          class="user-card__action"
-          onClick={() => {
-            close();
-            props.onSignOut();
-          }}
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 16 16"
-            fill="none"
-            aria-hidden="true"
-          >
-            <path
-              d="M6 2.5H3.5v11H6M10.5 5l3 3-3 3M13.3 8H6.5"
-              stroke="currentColor"
-              stroke-width="1.4"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-          Sign out
-        </button>
-      </div>
-    </>
-  );
 
   // A new person starts fresh: their messages, no leftover notice or reason.
   createEffect(
@@ -397,7 +321,8 @@ const UserCard: Component<UserCardProps> = (props) => {
               </Show>
             </dl>
 
-            <Show when={!isSelf()} fallback={<AccountActions />}>
+            {/* Mention, highlight and ignore are about someone else. */}
+            <Show when={!isSelf()}>
               <div class="user-card__actions">
                 <button
                   type="button"

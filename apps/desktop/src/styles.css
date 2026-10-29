@@ -778,6 +778,121 @@ option::checkmark {
   width: min(560px, 100%);
 }
 
+/* Account panel (from the header avatar) */
+
+.account {
+  width: min(380px, 100%);
+}
+
+.account__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 10px 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.account__picture {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.account__picture--initial {
+  display: grid;
+  place-items: center;
+  background: var(--bg-surface);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.account__who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.account__name {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account__login,
+.account__hint {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.account__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.account__label {
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.account__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+}
+
+.account__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.account__platform {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.account__platform-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.account__platform--soon .account__platform-name {
+  color: var(--text-muted);
+}
+
+.account__reconnect {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.account__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 14px 16px 16px;
+}
+
+.account__actions .btn {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
 .palette__head {
   display: flex;
   align-items: center;
@@ -1309,16 +1424,6 @@ option::checkmark {
   grid-template-columns: repeat(4, 1fr);
   gap: 6px;
   padding: 0 16px 14px;
-}
-
-.user-card__actions--account {
-  grid-template-columns: repeat(2, 1fr);
-}
-
-.user-card__reconnect {
-  margin: 0 16px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
 }
 
 .user-card__action {

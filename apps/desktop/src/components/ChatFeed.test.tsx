@@ -132,7 +132,7 @@ describe("ChatFeed", () => {
 
   it("opens the timeout picker and the warn box from a mod's hover bar", async () => {
     role.mod = true;
-    render(() => <ChatFeed login="me" onSignOut={() => {}} />);
+    render(() => <ChatFeed login="me" />);
     await tick();
     emit("chat_messages", [msg("rude")]);
     await tick();
@@ -162,9 +162,7 @@ describe("ChatFeed", () => {
 
   it("opens both from the right-click menu at the pointer", async () => {
     role.mod = true;
-    const { container } = render(() => (
-      <ChatFeed login="me" onSignOut={() => {}} />
-    ));
+    const { container } = render(() => <ChatFeed login="me" />);
     await tick();
     emit("chat_messages", [msg("menu")]);
     await tick();
@@ -194,7 +192,7 @@ describe("ChatFeed", () => {
       missing_scopes: [],
       enabled_scope_groups: [],
     });
-    render(() => <ChatFeed login="viewer" onSignOut={() => {}} />);
+    render(() => <ChatFeed login="viewer" />);
     await tick();
     emit("chat_messages", [
       { ...msg("mine"), badges: [{ set_id: "subscriber", id: "6" }] },
@@ -205,7 +203,7 @@ describe("ChatFeed", () => {
   });
 
   it("hides the mod buttons from viewers", async () => {
-    render(() => <ChatFeed login="me" onSignOut={() => {}} />);
+    render(() => <ChatFeed login="me" />);
     await tick();
     emit("chat_messages", [msg("calm")]);
     await tick();
@@ -214,9 +212,7 @@ describe("ChatFeed", () => {
   });
 
   it("marks a row whether the flag lands before or after it", async () => {
-    const { container } = render(() => (
-      <ChatFeed login="me" onSignOut={() => {}} />
-    ));
+    const { container } = render(() => <ChatFeed login="me" />);
     await tick();
 
     emit("chat_messages", [msg("late"), msg("plain")]);
@@ -234,9 +230,7 @@ describe("ChatFeed", () => {
   });
 
   it("marks rows that carry the saved flag", async () => {
-    const { container } = render(() => (
-      <ChatFeed login="me" onSignOut={() => {}} />
-    ));
+    const { container } = render(() => <ChatFeed login="me" />);
     await tick();
 
     emit("chat_messages", [{ ...msg("saved"), first_message: true }]);
@@ -245,9 +239,7 @@ describe("ChatFeed", () => {
   });
 
   it("hides the mark while the setting is off", async () => {
-    const { container } = render(() => (
-      <ChatFeed login="me" onSignOut={() => {}} />
-    ));
+    const { container } = render(() => <ChatFeed login="me" />);
     await tick();
 
     emit("first_message", { channel_id: "chan", message_id: "off" });
@@ -261,9 +253,7 @@ describe("ChatFeed", () => {
   });
 
   it("gilds raids and gift bombs but not other notices", async () => {
-    const { container } = render(() => (
-      <ChatFeed login="me" onSignOut={() => {}} />
-    ));
+    const { container } = render(() => <ChatFeed login="me" />);
     await tick();
 
     const noticed = (id: string, notice_type: string) => ({

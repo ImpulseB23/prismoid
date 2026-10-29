@@ -41,7 +41,7 @@ import {
   setMentionsOpen,
   unreadMentions,
 } from "../stores/mentionsStore";
-import { cardLoading, cardOrigin, cardUser } from "../stores/userCardStore";
+import { accountOpen } from "../stores/accountPanelStore";
 import { tourStep } from "../stores/tourStore";
 import {
   chromeShown,
@@ -248,8 +248,7 @@ const Header: Component<HeaderProps> = (props) => {
         streamManagerOpen() ||
         searchOpen() ||
         mentionsOpen() ||
-        cardLoading() === "self" ||
-        (cardUser() !== null && cardOrigin() === "self"),
+        accountOpen(),
     ),
   );
 
@@ -467,7 +466,7 @@ const Header: Component<HeaderProps> = (props) => {
           </svg>
         </button>
 
-        <AccountAvatar login={props.login} />
+        <AccountAvatar login={props.login} onSignOut={props.onSignOut} />
 
         {/* Shows once an update has downloaded in the background, so the
             click is just the restart. */}
