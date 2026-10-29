@@ -49,23 +49,28 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     section: "appearance",
-    title: "Make it comfortable",
-    body: "Pick a theme and the text and window size that read well from where you sit.",
+    title: "Make it yours",
+    body: "Pick a theme, zoom and text size, and how chat looks: timestamps, row shading and 7TV paints.",
   },
   {
     section: "chat",
+    title: "How chat runs",
+    body: "Load earlier messages when you open a channel, follow the channel in your browser, and pick what the stream bar shows.",
+  },
+  {
+    section: "highlights",
     title: "Choose what stands out",
-    body: "Highlight words or people, ping when you're mentioned, mark first-time chatters, show 7TV paints.",
+    body: "Ping when you're mentioned, highlight words, people and badges, mark first-time chatters, and hide anyone you'd rather not see.",
   },
   {
     section: "moderation",
     title: "Your moderation defaults",
-    body: "The slow mode, followers-only and timeout lengths your buttons use.",
+    body: "Flag new accounts, plus the slow mode, followers-only and timeout lengths your buttons use.",
   },
   {
     section: "window",
     title: "How the window behaves",
-    body: "Keep it above your game, follow the channel in your browser, live in the tray, start with Windows.",
+    body: "Keep it above your game, live in the tray, start with Windows.",
   },
   {
     title: "You're set",

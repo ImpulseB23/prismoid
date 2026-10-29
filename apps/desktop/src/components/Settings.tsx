@@ -87,7 +87,7 @@ const SECTION_LABELS: Record<SettingsSection, string> = {
   account: "Account",
   appearance: "Appearance",
   chat: "Chat",
-  notifications: "Notifications",
+  highlights: "Mentions & highlights",
   moderation: "Moderation",
   window: "Window",
   updates: "Updates",
@@ -402,40 +402,6 @@ const Settings: Component<SettingsProps> = (props) => {
             </div>
             <div class="settings__row">
               <div class="settings__text">
-                <span class="settings__name">Chat text size</span>
-                <span class="settings__hint">
-                  Ctrl + scroll, or Ctrl with + − 0
-                </span>
-              </div>
-              <div class="settings__zoom">
-                <button
-                  type="button"
-                  class="icon-btn"
-                  aria-label="Smaller text"
-                  onClick={() => run(textSmaller())}
-                >
-                  −
-                </button>
-                <button
-                  type="button"
-                  class="settings__zoom-value"
-                  title="Reset text size"
-                  onClick={() => run(textReset())}
-                >
-                  {Math.round((settings().textSize / DEFAULT_TEXT_SIZE) * 100)}%
-                </button>
-                <button
-                  type="button"
-                  class="icon-btn"
-                  aria-label="Bigger text"
-                  onClick={() => run(textBigger())}
-                >
-                  +
-                </button>
-              </div>
-            </div>
-            <div class="settings__row">
-              <div class="settings__text">
                 <span class="settings__name">Zoom</span>
                 <span class="settings__hint">
                   Makes the whole window bigger
@@ -463,6 +429,40 @@ const Settings: Component<SettingsProps> = (props) => {
                   class="icon-btn"
                   aria-label="Zoom in"
                   onClick={() => run(zoomIn())}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+            <div class="settings__row">
+              <div class="settings__text">
+                <span class="settings__name">Chat text size</span>
+                <span class="settings__hint">
+                  Ctrl + scroll, or Ctrl with + − 0
+                </span>
+              </div>
+              <div class="settings__zoom">
+                <button
+                  type="button"
+                  class="icon-btn"
+                  aria-label="Smaller text"
+                  onClick={() => run(textSmaller())}
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  class="settings__zoom-value"
+                  title="Reset text size"
+                  onClick={() => run(textReset())}
+                >
+                  {Math.round((settings().textSize / DEFAULT_TEXT_SIZE) * 100)}%
+                </button>
+                <button
+                  type="button"
+                  class="icon-btn"
+                  aria-label="Bigger text"
+                  onClick={() => run(textBigger())}
                 >
                   +
                 </button>
@@ -500,6 +500,72 @@ const Settings: Component<SettingsProps> = (props) => {
                 onChange={(e) =>
                   run(
                     updateSettings({ alternateRows: e.currentTarget.checked }),
+                  )
+                }
+              />
+            </label>
+            <label class="settings__row settings__row--toggle">
+              <div class="settings__text">
+                <span class="settings__name">Show 7TV name paints</span>
+                <span class="settings__hint">
+                  Fill names with the gradient or image a chatter picked on 7TV.
+                  Connects to 7TV while on
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                class="switch"
+                checked={settings().showPaints}
+                onChange={(e) =>
+                  run(updateSettings({ showPaints: e.currentTarget.checked }))
+                }
+              />
+            </label>
+          </Show>
+          <Show when={settingsSection() === "chat"}>
+            <label class="settings__row settings__row--toggle">
+              <div class="settings__text">
+                <span class="settings__name">Load earlier messages</span>
+                <span class="settings__hint">
+                  When you open a channel, fetch what was said before you joined
+                  from{" "}
+                  <button
+                    type="button"
+                    class="settings__link"
+                    onClick={() =>
+                      void openUrl(RECENT_MESSAGES_URL).catch((err: unknown) =>
+                        console.error("failed to open link:", err),
+                      )
+                    }
+                  >
+                    recent-messages.robotty.de
+                  </button>
+                  , a community service that logs Twitch chat
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                class="switch"
+                checked={settings().chatBacklog}
+                onChange={(e) =>
+                  run(updateSettings({ chatBacklog: e.currentTarget.checked }))
+                }
+              />
+            </label>
+            <label class="settings__row settings__row--toggle">
+              <div class="settings__text">
+                <span class="settings__name">Follow my browser</span>
+                <span class="settings__hint">
+                  Open the Twitch channel showing in the front browser window
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                class="switch"
+                checked={settings().followBrowser}
+                onChange={(e) =>
+                  run(
+                    updateSettings({ followBrowser: e.currentTarget.checked }),
                   )
                 }
               />
@@ -571,204 +637,8 @@ const Settings: Component<SettingsProps> = (props) => {
                 }
               />
             </label>
-            <label class="settings__row settings__row--toggle">
-              <div class="settings__text">
-                <span class="settings__name">Show 7TV name paints</span>
-                <span class="settings__hint">
-                  Fill names with the gradient or image a chatter picked on 7TV.
-                  Connects to 7TV while on
-                </span>
-              </div>
-              <input
-                type="checkbox"
-                class="switch"
-                checked={settings().showPaints}
-                onChange={(e) =>
-                  run(updateSettings({ showPaints: e.currentTarget.checked }))
-                }
-              />
-            </label>
           </Show>
-          <Show when={settingsSection() === "chat"}>
-            <label class="settings__row settings__row--toggle">
-              <div class="settings__text">
-                <span class="settings__name">Load earlier messages</span>
-                <span class="settings__hint">
-                  When you open a channel, fetch what was said before you joined
-                  from{" "}
-                  <button
-                    type="button"
-                    class="settings__link"
-                    onClick={() =>
-                      void openUrl(RECENT_MESSAGES_URL).catch((err: unknown) =>
-                        console.error("failed to open link:", err),
-                      )
-                    }
-                  >
-                    recent-messages.robotty.de
-                  </button>
-                  , a community service that logs Twitch chat
-                </span>
-              </div>
-              <input
-                type="checkbox"
-                class="switch"
-                checked={settings().chatBacklog}
-                onChange={(e) =>
-                  run(updateSettings({ chatBacklog: e.currentTarget.checked }))
-                }
-              />
-            </label>
-            <label class="settings__row settings__row--stack">
-              <div class="settings__text">
-                <span class="settings__name">Highlighted users</span>
-                <span class="settings__hint">
-                  Comma separated logins. Everything they say stands out.
-                </span>
-              </div>
-              <input
-                type="text"
-                class="settings__input"
-                placeholder="bestfriend, cohost"
-                value={settings().highlightUsers.join(", ")}
-                onChange={(e) =>
-                  run(
-                    updateSettings({
-                      highlightUsers: parseList(e.currentTarget.value, true),
-                    }),
-                  )
-                }
-              />
-            </label>
-            <div class="settings__row settings__row--stack">
-              <div class="settings__text">
-                <span class="settings__name">Highlight by badge</span>
-                <span class="settings__hint">
-                  Make every message from people with these badges stand out,
-                  like a mention
-                </span>
-              </div>
-              <div
-                class="settings__chips"
-                role="group"
-                aria-label="Highlight by badge"
-              >
-                <For each={HIGHLIGHT_BADGES}>
-                  {(b) => {
-                    const on = () => settings().highlightBadges.includes(b);
-                    return (
-                      <button
-                        type="button"
-                        class="modbar__chip"
-                        classList={{ "modbar__chip--on": on() }}
-                        aria-pressed={on()}
-                        onClick={() =>
-                          run(
-                            updateSettings({
-                              highlightBadges: on()
-                                ? settings().highlightBadges.filter(
-                                    (x) => x !== b,
-                                  )
-                                : [...settings().highlightBadges, b],
-                            }),
-                          )
-                        }
-                      >
-                        {BADGE_LABELS[b]}
-                      </button>
-                    );
-                  }}
-                </For>
-              </div>
-            </div>
-            <label class="settings__row settings__row--stack">
-              <div class="settings__text">
-                <span class="settings__name">Highlight phrases</span>
-                <span class="settings__hint">
-                  Comma separated. Messages containing one light up like a
-                  mention.
-                </span>
-              </div>
-              <input
-                type="text"
-                class="settings__input"
-                placeholder="prismoid, gg"
-                value={settings().highlightPhrases.join(", ")}
-                onChange={(e) =>
-                  run(
-                    updateSettings({
-                      highlightPhrases: parseList(e.currentTarget.value),
-                    }),
-                  )
-                }
-              />
-            </label>
-            <label class="settings__row settings__row--stack">
-              <div class="settings__text">
-                <span class="settings__name">Ignored users</span>
-                <span class="settings__hint">
-                  Comma separated logins. Their messages never show.
-                </span>
-              </div>
-              <input
-                type="text"
-                class="settings__input"
-                placeholder="somebot, spammer"
-                value={settings().ignoredLogins.join(", ")}
-                onChange={(e) =>
-                  run(
-                    updateSettings({
-                      ignoredLogins: parseList(e.currentTarget.value, true),
-                    }),
-                  )
-                }
-              />
-            </label>
-            <label class="settings__row settings__row--toggle">
-              <div class="settings__text">
-                <span class="settings__name">Flag new accounts</span>
-                <span class="settings__hint">
-                  Mark messages from accounts created in the last week
-                </span>
-              </div>
-              <input
-                type="checkbox"
-                class="switch"
-                checked={settings().flagNewAccounts}
-                onChange={(e) =>
-                  run(
-                    updateSettings({
-                      flagNewAccounts: e.currentTarget.checked,
-                    }),
-                  )
-                }
-              />
-            </label>
-            <label class="settings__row settings__row--toggle">
-              <div class="settings__text">
-                <span class="settings__name">
-                  Highlight first-time chatters
-                </span>
-                <span class="settings__hint">
-                  Mark someone's first message in a channel. Uses a separate
-                  read-only connection to Twitch chat
-                </span>
-              </div>
-              <input
-                type="checkbox"
-                class="switch"
-                checked={settings().highlightFirstMessages}
-                onChange={(e) =>
-                  run(
-                    updateSettings({
-                      highlightFirstMessages: e.currentTarget.checked,
-                    }),
-                  )
-                }
-              />
-            </label>
-          </Show>
-          <Show when={settingsSection() === "notifications"}>
+          <Show when={settingsSection() === "highlights"}>
             <label class="settings__row settings__row--toggle">
               <div class="settings__text">
                 <span class="settings__name">Ping when mentioned</span>
@@ -839,8 +709,158 @@ const Settings: Component<SettingsProps> = (props) => {
                 </button>
               </div>
             </Show>
+            <div class="settings__group-label">Highlights</div>
+            <label class="settings__row settings__row--stack">
+              <div class="settings__text">
+                <span class="settings__name">Highlight phrases</span>
+                <span class="settings__hint">
+                  Comma separated. Messages containing one light up like a
+                  mention.
+                </span>
+              </div>
+              <input
+                type="text"
+                class="settings__input"
+                placeholder="prismoid, gg"
+                value={settings().highlightPhrases.join(", ")}
+                onChange={(e) =>
+                  run(
+                    updateSettings({
+                      highlightPhrases: parseList(e.currentTarget.value),
+                    }),
+                  )
+                }
+              />
+            </label>
+            <label class="settings__row settings__row--stack">
+              <div class="settings__text">
+                <span class="settings__name">Highlighted users</span>
+                <span class="settings__hint">
+                  Comma separated logins. Everything they say stands out.
+                </span>
+              </div>
+              <input
+                type="text"
+                class="settings__input"
+                placeholder="bestfriend, cohost"
+                value={settings().highlightUsers.join(", ")}
+                onChange={(e) =>
+                  run(
+                    updateSettings({
+                      highlightUsers: parseList(e.currentTarget.value, true),
+                    }),
+                  )
+                }
+              />
+            </label>
+            <div class="settings__row settings__row--stack">
+              <div class="settings__text">
+                <span class="settings__name">Highlight by badge</span>
+                <span class="settings__hint">
+                  Make every message from people with these badges stand out,
+                  like a mention
+                </span>
+              </div>
+              <div
+                class="settings__chips"
+                role="group"
+                aria-label="Highlight by badge"
+              >
+                <For each={HIGHLIGHT_BADGES}>
+                  {(b) => {
+                    const on = () => settings().highlightBadges.includes(b);
+                    return (
+                      <button
+                        type="button"
+                        class="modbar__chip"
+                        classList={{ "modbar__chip--on": on() }}
+                        aria-pressed={on()}
+                        onClick={() =>
+                          run(
+                            updateSettings({
+                              highlightBadges: on()
+                                ? settings().highlightBadges.filter(
+                                    (x) => x !== b,
+                                  )
+                                : [...settings().highlightBadges, b],
+                            }),
+                          )
+                        }
+                      >
+                        {BADGE_LABELS[b]}
+                      </button>
+                    );
+                  }}
+                </For>
+              </div>
+            </div>
+            <label class="settings__row settings__row--toggle">
+              <div class="settings__text">
+                <span class="settings__name">
+                  Highlight first-time chatters
+                </span>
+                <span class="settings__hint">
+                  Mark someone's first message in a channel. Uses a separate
+                  read-only connection to Twitch chat
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                class="switch"
+                checked={settings().highlightFirstMessages}
+                onChange={(e) =>
+                  run(
+                    updateSettings({
+                      highlightFirstMessages: e.currentTarget.checked,
+                    }),
+                  )
+                }
+              />
+            </label>
+            <div class="settings__group-label">Hidden from chat</div>
+            <label class="settings__row settings__row--stack">
+              <div class="settings__text">
+                <span class="settings__name">Ignored users</span>
+                <span class="settings__hint">
+                  Comma separated logins. Their messages never show.
+                </span>
+              </div>
+              <input
+                type="text"
+                class="settings__input"
+                placeholder="somebot, spammer"
+                value={settings().ignoredLogins.join(", ")}
+                onChange={(e) =>
+                  run(
+                    updateSettings({
+                      ignoredLogins: parseList(e.currentTarget.value, true),
+                    }),
+                  )
+                }
+              />
+            </label>
           </Show>
           <Show when={settingsSection() === "moderation"}>
+            <label class="settings__row settings__row--toggle">
+              <div class="settings__text">
+                <span class="settings__name">Flag new accounts</span>
+                <span class="settings__hint">
+                  Mark messages from accounts created in the last week
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                class="switch"
+                checked={settings().flagNewAccounts}
+                onChange={(e) =>
+                  run(
+                    updateSettings({
+                      flagNewAccounts: e.currentTarget.checked,
+                    }),
+                  )
+                }
+              />
+            </label>
             <label class="settings__row">
               <div class="settings__text">
                 <span class="settings__name">Slow mode</span>
@@ -946,24 +966,6 @@ const Settings: Component<SettingsProps> = (props) => {
                 checked={settings().alwaysOnTop}
                 onChange={(e) =>
                   run(updateSettings({ alwaysOnTop: e.currentTarget.checked }))
-                }
-              />
-            </label>
-            <label class="settings__row settings__row--toggle">
-              <div class="settings__text">
-                <span class="settings__name">Follow my browser</span>
-                <span class="settings__hint">
-                  Open the Twitch channel showing in the front browser window
-                </span>
-              </div>
-              <input
-                type="checkbox"
-                class="switch"
-                checked={settings().followBrowser}
-                onChange={(e) =>
-                  run(
-                    updateSettings({ followBrowser: e.currentTarget.checked }),
-                  )
                 }
               />
             </label>
