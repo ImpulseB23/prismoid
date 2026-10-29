@@ -6,10 +6,12 @@ import {
   findMessageById,
   messageRevision,
   searchMessages,
+  type ChatMessage,
 } from "../stores/chatStore";
 import { closeThread, threadRoot, threadRootOf } from "../stores/threadStore";
 import { requestReply } from "../stores/composerStore";
 import MessageRow from "./MessageRow";
+import { jumpToMessage } from "../stores/jumpStore";
 import PaletteClose from "./PaletteClose";
 
 export const MAX_REPLIES = 200;
@@ -20,6 +22,11 @@ const Thread: Component = () => {
   createEffect(() => {
     if (threadRoot()) queueMicrotask(() => dialogRef?.focus());
   });
+
+  const jump = (m: ChatMessage) => {
+    closeThread();
+    jumpToMessage(m.channel_id, m.id);
+  };
 
   const thread = createMemo(() => {
     messageRevision();
@@ -99,10 +106,12 @@ const Thread: Component = () => {
                   </Show>
                 }
               >
-                {(origin) => <MessageRow msg={origin()} />}
+                {(origin) => (
+                  <MessageRow msg={origin()} onClick={() => jump(origin())} />
+                )}
               </Show>
               <For each={t().replies}>
-                {(m) => <MessageRow msg={m} reply />}
+                {(m) => <MessageRow msg={m} reply onClick={() => jump(m)} />}
               </For>
             </ol>
             <div class="palette__actions">

@@ -25,6 +25,7 @@ import {
   getMessage,
   markAllMessagesDeleted,
   markMessageDeleted,
+  messageMono,
   markUserMessagesCleared,
   messageRevision,
   retryPending,
@@ -37,10 +38,12 @@ import {
   channelBanned,
   channelTabs,
   channelStatus,
+  focusChannel,
   markChannelBanned,
   noteUnread,
   rejoinChannel,
 } from "../stores/channelStore";
+import { clearJump, jumpRequest } from "../stores/jumpStore";
 import { isIgnored, setIgnored, settings } from "../stores/settingsStore";
 import { isHighlighted, isSpotlit } from "../lib/highlight";
 import { createMentionAlert, playChime } from "../lib/mentionAlert";
@@ -486,6 +489,51 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       containerRef.scrollTop = target;
       setScrollTop(target);
     }
+  });
+
+  // A jump from Mentions, search or a card: open the message's channel if
+  // it is another one, wait for its history, then bring the message to the
+  // upper third of the view and flash it.
+  const [flashId, setFlashId] = createSignal<string | null>(null);
+  let flashTimer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(flashTimer));
+  let focusedFor: string | null = null;
+  createEffect(() => {
+    const j = jumpRequest();
+    if (!j) return;
+    if (activeChannel()?.id !== j.channel_id) {
+      if (focusedFor !== j.message_id) {
+        focusedFor = j.message_id;
+        void focusChannel(j.channel_id).catch((err: unknown) =>
+          console.error("jump to channel", err),
+        );
+      }
+      return;
+    }
+    if (history.loading()) return;
+    const { byMono } = layout();
+    const mono = messageMono(j.message_id);
+    if (mono === undefined) {
+      notify("That message is no longer in the loaded chat");
+      focusedFor = null;
+      clearJump();
+      return;
+    }
+    const row = byMono.get(mono);
+    const vh = viewportHeight();
+    if (!row || !containerRef || vh === 0) return;
+    const target = Math.max(0, row.top - vh / 3);
+    setStickToBottom(false);
+    containerRef.scrollTop = target;
+    setScrollTop(target);
+    anchor = anchorAt(target);
+    const v = viewport();
+    setReadUpTo(v.start + v.count);
+    setFlashId(j.message_id);
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => setFlashId(null), 2000);
+    focusedFor = null;
+    clearJump();
   });
 
   // Closed tabs stop counting toward the pulse.
@@ -940,6 +988,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                         settings().highlightBadges,
                       ),
                     "msg--first": row().reserve > 0,
+                    "msg--jumped": flashId() === row().msg.id,
                   }}
                   style={{
                     transform: `translateY(${row().top}px)`,

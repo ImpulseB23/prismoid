@@ -150,6 +150,8 @@ export interface ChatStore {
   getMessage: (monoIndex: number) => ChatMessage | undefined;
   /** Newest live message with this platform id, if it is still in the ring. */
   findById: (id: string) => ChatMessage | undefined;
+  /** Ring index of a confirmed message, if it is still loaded. */
+  monoOf: (id: string) => number | undefined;
   /**
    * Inserts a locally-authored message in pending state. The caller
    * supplies a `local_id`; later calls to `confirmPendingId`,
@@ -519,6 +521,15 @@ export function createChatStore(maxMessages = DEFAULT_MAX_MESSAGES): ChatStore {
     return undefined;
   }
 
+  function monoOf(id: string): number | undefined {
+    const stop = oldestLive();
+    for (let mono = writeIndex - 1; mono >= stop; mono--) {
+      const msg = ring[mono % maxMessages];
+      if (msg && msg.id === id && msg.status === undefined) return mono;
+    }
+    return undefined;
+  }
+
   function markWhere(pred: (msg: ChatMessage) => boolean): void {
     let changed = false;
     const stop = oldestLive();
@@ -551,6 +562,7 @@ export function createChatStore(maxMessages = DEFAULT_MAX_MESSAGES): ChatStore {
     addMessages,
     getMessage,
     findById,
+    monoOf,
     insertPending,
     confirmPendingId,
     failPending,
@@ -572,6 +584,7 @@ export const messageRevision = defaultStore.messageRevision;
 export const addMessages = defaultStore.addMessages;
 export const getMessage = defaultStore.getMessage;
 export const findMessageById = defaultStore.findById;
+export const messageMono = defaultStore.monoOf;
 export const insertPending = defaultStore.insertPending;
 export const confirmPendingId = defaultStore.confirmPendingId;
 export const failPending = defaultStore.failPending;

@@ -1032,6 +1032,17 @@ option::checkmark {
   cursor: pointer;
 }
 
+.msg-row__hit {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.msg-row__hit:focus-visible {
+  outline: 2px solid var(--select-border);
+  outline-offset: -2px;
+}
+
 .msg-row--action:hover {
   background: var(--bg-surface);
 }
@@ -1110,6 +1121,7 @@ option::checkmark {
 
 .msg-row__trailing {
   position: absolute;
+  z-index: 1;
   top: 6px;
   right: 6px;
   opacity: 0;
@@ -2889,6 +2901,18 @@ option::checkmark {
 
 .msg--new-account {
   border-left-color: var(--color-amber);
+}
+
+/* Where a jump from Mentions, search or a card landed. */
+.msg--jumped {
+  animation: msg-jumped 2s ease-out;
+}
+
+@keyframes msg-jumped {
+  0%,
+  40% {
+    background: var(--select-tint);
+  }
 }
 
 .msg--spotlight {

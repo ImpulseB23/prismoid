@@ -2,15 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import type { ChatMessage } from "../stores/chatStore";
 
-const focus = vi.fn<(id: string) => Promise<void>>(async () => {});
 vi.mock("../stores/channelStore", () => ({
   channelTabs: () => [{ id: "1", display_name: "Chan" }],
-  focusChannel: (id: string) => focus(id),
 }));
 
 const { recordMention, setMentionsOpen, mentionsOpen, mentions } =
   await import("../stores/mentionsStore");
 const { default: Mentions } = await import("./Mentions");
+const { jumpRequest } = await import("../stores/jumpStore");
 
 const said = {
   id: "m1",
@@ -25,15 +24,15 @@ const said = {
 describe("Mentions", () => {
   afterEach(cleanup);
 
-  it("lists mentions and jumps to the channel", () => {
+  it("lists mentions and jumps to the message", () => {
     render(() => <Mentions />);
     setMentionsOpen(true);
     expect(screen.getByRole("dialog").textContent).toContain("No mentions yet");
     recordMention(said);
     const row = screen.getByRole("button", { name: /Viewer/ });
-    expect(row.textContent).toContain("Chan");
+    expect(row.closest("li")?.textContent).toContain("Chan");
     fireEvent.click(row);
-    expect(focus).toHaveBeenCalledWith("1");
+    expect(jumpRequest()).toEqual({ channel_id: "1", message_id: "m1" });
     expect(mentionsOpen()).toBe(false);
   });
 

@@ -1,9 +1,10 @@
 // One chat message in a list outside the feed (search, mentions, threads,
 // the user card): who said it and when on top, the message underneath.
-// Renders as a list item for an `ol.msg-list`; clickable rows are buttons.
+// Renders as a list item for an `ol.msg-list`. A clickable row gets a
+// button stretched over it, so trailing buttons can sit on top of it
+// without nesting one button in another.
 
 import { Component, JSX, Show } from "solid-js";
-import { Dynamic } from "solid-js/web";
 import type { ChatMessage } from "../stores/chatStore";
 import { isLight } from "../stores/themeStore";
 import { formatTimestamp, normalizeUserColor } from "../lib/messageStyle";
@@ -32,17 +33,24 @@ const MessageRow: Component<MessageRowProps> = (props) => (
     class="msg-list__item"
     classList={{ "msg-list__item--reply": props.reply === true }}
   >
-    <Dynamic
-      component={props.onClick ? "button" : "div"}
-      type={props.onClick ? "button" : undefined}
+    <div
       class="msg-row"
       classList={{
         "msg-row--action": props.onClick !== undefined,
         "msg-row--mention": props.mention === true,
         "msg-row--deleted": props.msg.deleted === true,
       }}
-      onClick={props.onClick}
     >
+      <Show when={props.onClick}>
+        {(click) => (
+          <button
+            type="button"
+            class="msg-row__hit"
+            aria-label={`Jump to ${props.msg.display_name}'s message`}
+            onClick={() => click()()}
+          />
+        )}
+      </Show>
       <Show when={props.lead}>
         <span class="msg-row__lead">{props.lead}</span>
       </Show>
@@ -78,7 +86,7 @@ const MessageRow: Component<MessageRowProps> = (props) => (
       <Show when={props.trailing}>
         <span class="msg-row__trailing">{props.trailing}</span>
       </Show>
-    </Dynamic>
+    </div>
   </li>
 );
 

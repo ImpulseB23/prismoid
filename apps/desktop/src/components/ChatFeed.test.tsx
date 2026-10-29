@@ -28,6 +28,7 @@ vi.mock("../stores/channelStore", () => ({
   channelTabs: () => [],
   channelStatus: () => "connected",
   markChannelBanned: vi.fn(),
+  focusChannel: vi.fn(async () => {}),
   noteUnread: vi.fn(),
   rejoinChannel: vi.fn(),
 }));
@@ -64,6 +65,10 @@ vi.mock("../lib/messageLayout", async (importOriginal) => ({
 const { clearMessages } = await import("../stores/chatStore");
 const { invoke } = await import("@tauri-apps/api/core");
 const { setAuthStatus } = await import("../stores/authStore");
+const { clearJump, jumpRequest, jumpToMessage } =
+  await import("../stores/jumpStore");
+const { focusChannel } = await import("../stores/channelStore");
+const { notice } = await import("../stores/noticeStore");
 const { ownBadges } = await import("../stores/ownBadgeStore");
 const { closeContextMenu, contextMenu } =
   await import("../stores/contextMenuStore");
@@ -128,6 +133,7 @@ describe("ChatFeed", () => {
     await updateSettings({ highlightFirstMessages: true });
     role.mod = false;
     closeModPopover();
+    clearJump();
   });
 
   it("opens the timeout picker and the warn box from a mod's hover bar", async () => {
@@ -200,6 +206,30 @@ describe("ChatFeed", () => {
     await tick();
     expect(ownBadges("chan")).toEqual([{ set_id: "subscriber", id: "6" }]);
     setAuthStatus(null);
+  });
+
+  it("jumps to a loaded message and flashes it", async () => {
+    const { container } = render(() => <ChatFeed login="me" />);
+    await tick();
+    emit("chat_messages", [msg("old"), msg("new")]);
+    await tick();
+    jumpToMessage("chan", "old");
+    await tick();
+    expect(rowFor(container, "old").classList).toContain("msg--jumped");
+    expect(jumpRequest()).toBeNull();
+  });
+
+  it("says when the message is gone, and opens another channel first", async () => {
+    render(() => <ChatFeed login="me" />);
+    await tick();
+    jumpToMessage("chan", "missing");
+    await tick();
+    expect(notice()).toBe("That message is no longer in the loaded chat");
+
+    jumpToMessage("elsewhere", "m1");
+    await tick();
+    expect(focusChannel).toHaveBeenCalledWith("elsewhere");
+    expect(jumpRequest()).not.toBeNull();
   });
 
   it("hides the mod buttons from viewers", async () => {
