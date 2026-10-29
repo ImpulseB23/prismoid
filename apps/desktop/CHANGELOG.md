@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.5](https://github.com/ImpulseB23/prismoid/compare/v0.8.4...v0.8.5) (2026-10-29)
+
+
+### Bug Fixes
+
+* 0.8.5 what's new notes ([2962f7e](https://github.com/ImpulseB23/prismoid/commit/2962f7eed897525cf2aa13adaa33d77a06db61d2))
+* mentions marks only unread ones, with a thin line under the message ([3ffe8d6](https://github.com/ImpulseB23/prismoid/commit/3ffe8d6306b8dd7562082190fa9c0912f15e8cb8))
+* sent messages show your color, badges and emotes right away ([3b257ee](https://github.com/ImpulseB23/prismoid/commit/3b257eebcdeac3ab16e1bf21f217973e5a184e48))
+* user card windows scale with your zoom and chat text size ([1945657](https://github.com/ImpulseB23/prismoid/commit/19456573a95cf43150dbb6abeabd3804d41374e4))
+* user card windows use your zoom and a compact message list ([edf7cec](https://github.com/ImpulseB23/prismoid/commit/edf7cec6900b2b4b5ba2a91e1a3cdb9e1d27bd3e))
+* user card windows, host side ([#242](https://github.com/ImpulseB23/prismoid/issues/242)) ([d4f90cc](https://github.com/ImpulseB23/prismoid/commit/d4f90cc98e97003a21c72162cf9bb37e59a05f74))
+* user cards open in their own windows ([59a5250](https://github.com/ImpulseB23/prismoid/commit/59a5250bc78a7ac98bf355cf3038b2a8aebaeb78))
+
 ## [0.8.4](https://github.com/ImpulseB23/prismoid/compare/v0.8.3...v0.8.4) (2026-10-29)
 
 
