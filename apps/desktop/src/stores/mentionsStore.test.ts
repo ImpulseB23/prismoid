@@ -79,6 +79,31 @@ describe("mentionsStore", () => {
     expect(later.unread()).toBe(1);
   });
 
+  it("keeps what was new marked for as long as the list is open", () => {
+    const clock = { t: 1_000 };
+    const s = store(memStorage(), undefined, clock);
+    s.record(msg("old", 500));
+    s.setOpen(true);
+    s.setOpen(false);
+    clock.t = 2_000;
+    s.record(msg("new", 1_500));
+    s.setOpen(true);
+    expect(s.unread()).toBe(0);
+    const isNew = (id: string) =>
+      s.isNew(s.mentions().find((m) => m.id === id)!);
+    expect(isNew("new")).toBe(true);
+    expect(isNew("old")).toBe(false);
+    clock.t = 2_600;
+    s.record(msg("live", 2_500));
+    expect(isNew("live")).toBe(true);
+
+    s.setOpen(false);
+    clock.t = 3_000;
+    s.setOpen(true);
+    expect(isNew("new")).toBe(false);
+    expect(isNew("live")).toBe(false);
+  });
+
   it("finds mentions in each channel's history once", async () => {
     const load = vi.fn(async (id: string) => [
       msg(`${id}-1`, 100),
