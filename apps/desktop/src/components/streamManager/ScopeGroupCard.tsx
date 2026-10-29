@@ -17,6 +17,10 @@ import TwitchReconnect from "../TwitchReconnect";
 import { authErrorMessage, isAuthError } from "../SignIn";
 
 const COPY: Record<ScopeGroup, { title: string; body: string }> = {
+  stream: {
+    title: "Manage your stream from here",
+    body: "Change your title, category and tags, add markers, and run polls and predictions. Prismoid asks Twitch for access to your channel once you turn this on.",
+  },
   ads: {
     title: "Run your ads from here",
     body: "See when the next ad comes, snooze it, and start a break when it suits you. Prismoid asks Twitch for access to your ads once you turn this on.",

@@ -7,7 +7,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 export type AuthStatusState = "logged_out" | "logged_in";
 
 /** Optional stream manager sections whose scopes are asked for only once on. */
-export type ScopeGroup = "ads" | "live_actions";
+export type ScopeGroup = "stream" | "ads" | "live_actions";
 
 // Discriminated union: when state is logged_in, login is guaranteed by
 // the backend (twitch_auth::commands::twitch_auth_status). Modeling it

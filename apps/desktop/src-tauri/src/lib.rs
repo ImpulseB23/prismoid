@@ -240,12 +240,6 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
             .scope(Scope::ModeratorReadVips)
             // Held AutoMod messages: both EventSub feeds and allow/deny.
             .scope(Scope::ModeratorManageAutoMod)
-            // Stream manager on the user's own channel: title and category,
-            // polls and predictions. The manage scopes also cover reading
-            // them and their EventSub feeds.
-            .scope(Scope::ChannelManageBroadcast)
-            .scope(Scope::ChannelManagePolls)
-            .scope(Scope::ChannelManagePredictions)
             .scope_groups(scope_groups)
             .build(KeychainStore, http_client),
     );

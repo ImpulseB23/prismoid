@@ -32,15 +32,18 @@ const { ownChannelMonetized, setStreamManagerOpen, setStreamManagerTab } =
   await import("../../stores/streamManagerPanelStore");
 const { settings, updateSettings } = await import("../../stores/settingsStore");
 
-const signIn = (over: Partial<AuthStatus> = {}) =>
+// Signed in with the stream manager turned on, plus any other groups asked for.
+const signIn = (
+  over: Partial<Extract<AuthStatus, { state: "logged_in" }>> = {},
+) =>
   setAuthStatus({
     state: "logged_in",
     login: "me",
     user_id: "7",
     missing_scopes: [],
-    enabled_scope_groups: [],
     ...over,
-  } as AuthStatus);
+    enabled_scope_groups: ["stream", ...(over.enabled_scope_groups ?? [])],
+  });
 
 const curtain = () => screen.queryByRole("region", { name: "Stream manager" });
 const handle = () =>
@@ -253,13 +256,29 @@ describe("StreamManager", () => {
     setStreamManagerTab("live");
   });
 
-  it("asks for a reconnect when the grant predates it", () => {
+  it("asks to turn the stream manager on before asking Twitch for anything", () => {
+    setAuthStatus({
+      state: "logged_in",
+      login: "me",
+      user_id: "7",
+      missing_scopes: [],
+      enabled_scope_groups: [],
+    });
+    render(() => <StreamManager />);
+    setStreamManagerOpen(true);
+    expect(screen.getByText("Manage your stream from here")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Turn on" })).toBeTruthy();
+    expect(invoke).not.toHaveBeenCalledWith(
+      "twitch_get_channel_info",
+      undefined,
+    );
+  });
+
+  it("asks for a reconnect once turned on when the grant predates it", () => {
     signIn({ missing_scopes: ["channel:manage:broadcast"] });
     render(() => <StreamManager />);
     setStreamManagerOpen(true);
-    expect(
-      screen.getByText("The stream manager needs a new Twitch permission"),
-    ).toBeTruthy();
+    expect(screen.getByText("One more step on Twitch")).toBeTruthy();
     expect(invoke).not.toHaveBeenCalledWith(
       "twitch_get_channel_info",
       undefined,
