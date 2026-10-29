@@ -246,6 +246,18 @@ export interface UserInfo {
   broadcaster_type: "partner" | "affiliate" | "";
 }
 
+/**
+ * When `userId` followed `channelId`, or null when they don't. Twitch only
+ * answers this for the user themselves, or for the channel's own streamer
+ * and moderators.
+ */
+export function getFollowSince(
+  channelId: string,
+  userId: string,
+): Promise<string | null> {
+  return invoke("twitch_follow_since", { channelId, userId });
+}
+
 /** Public profiles for up to a few hundred user ids; batched on the host. */
 export function getUsersInfo(ids: string[]): Promise<UserInfo[]> {
   return invoke("twitch_users_info", { ids });

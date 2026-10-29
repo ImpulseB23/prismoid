@@ -113,14 +113,23 @@ export function isMonetized(info: UserInfo | undefined): boolean | undefined {
   return info === undefined ? undefined : info.broadcaster_type !== "";
 }
 
+/** "today", "3 days ago", "Mar 2019". */
+export function formatSince(at: string, now: number): string {
+  const days = accountAgeDays(at, now);
+  if (days === null) return "";
+  if (days === 0) return "today";
+  if (days < 30) return `${days} ${days === 1 ? "day" : "days"} ago`;
+  const date = new Date(at);
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    year: "numeric",
+  });
+}
+
 /** "Joined today", "Joined 3 days ago", "Joined Mar 2019". */
 export function formatJoined(createdAt: string, now: number): string {
-  const days = accountAgeDays(createdAt, now);
-  if (days === null) return "";
-  if (days === 0) return "Joined today";
-  if (days < 30) return `Joined ${days} ${days === 1 ? "day" : "days"} ago`;
-  const date = new Date(createdAt);
-  return `Joined ${date.toLocaleDateString(undefined, { month: "short", year: "numeric" })}`;
+  const since = formatSince(createdAt, now);
+  return since && `Joined ${since}`;
 }
 
 const defaultStore = createUserInfoStore();

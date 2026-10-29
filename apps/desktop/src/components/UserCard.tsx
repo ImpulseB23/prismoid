@@ -8,9 +8,12 @@ import {
   Show,
   createEffect,
   createMemo,
+  createResource,
   createSignal,
   on,
 } from "solid-js";
+
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   banUser,
@@ -33,8 +36,13 @@ import {
   type ChatMessage,
 } from "../stores/chatStore";
 import { requestMention } from "../stores/composerStore";
-import { currentUserId, moderationNeedsReconnect } from "../stores/authStore";
-import { chatterStats } from "../stores/chatterStore";
+import {
+  FOLLOWERS_SCOPE,
+  currentUserId,
+  missingScopes,
+  moderationNeedsReconnect,
+} from "../stores/authStore";
+import { getFollowSince } from "../lib/twitchChannel";
 import { modActionsFor, modLogRevision } from "../stores/modLogStore";
 import { describeModAction } from "../lib/modActions";
 import { formatSeconds } from "../lib/slashCommands";
@@ -50,6 +58,7 @@ import { isHighlighted } from "../lib/highlight";
 import {
   ensureUserInfo,
   formatJoined,
+  formatSince,
   isNewAccount,
   userInfo,
   userInfoRevision,
@@ -225,11 +234,19 @@ const UserCard: Component<UserCardProps> = (props) => {
     return userInfo(u.platform_user_id);
   };
 
-  const stats = () => {
-    viewport();
-    const u = props.user;
-    return u ? chatterStats(u.platform_user_id) : undefined;
-  };
+  // Twitch tells you your own follow, and anyone's in a channel you
+  // moderate once the followers scope is granted; elsewhere it says nothing,
+  // so the stat stays off rather than guessing.
+  const [following] = createResource(
+    () => {
+      const u = props.user;
+      if (!u) return false;
+      const own = u.platform_user_id === currentUserId();
+      const mod = canModerate() && !missingScopes().includes(FOLLOWERS_SCOPE);
+      return own || mod ? ([u.channel_id, u.platform_user_id] as const) : false;
+    },
+    ([channel, user]) => getFollowSince(channel, user),
+  );
 
   const history = () => {
     modLogRevision();
@@ -362,13 +379,16 @@ const UserCard: Component<UserCardProps> = (props) => {
                   </div>
                 )}
               </Show>
-              <div class="user-card__stat">
-                <dt>This session</dt>
-                <dd>
-                  {stats()?.messages ?? 0}{" "}
-                  {(stats()?.messages ?? 0) === 1 ? "message" : "messages"}
-                </dd>
-              </div>
+              <Show when={following.state === "ready"}>
+                <div class="user-card__stat">
+                  <dt>Following</dt>
+                  <dd>
+                    {following()
+                      ? capitalize(formatSince(following()!, Date.now()))
+                      : "Not following"}
+                  </dd>
+                </div>
+              </Show>
               <Show when={history().length > 0}>
                 <div class="user-card__stat">
                   <dt>Mod actions</dt>

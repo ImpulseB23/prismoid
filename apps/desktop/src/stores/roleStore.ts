@@ -10,6 +10,7 @@ import {
 } from "../lib/twitchChannel";
 import { activeChannel } from "./channelStore";
 import {
+  FOLLOWERS_SCOPE,
   WARN_SCOPE,
   currentUserId,
   missingScopes,
@@ -68,16 +69,19 @@ export const loadModeratedChannels = defaultStore.load;
 export const noteModerator = defaultStore.noteModerator;
 export const clearRoles = defaultStore.clear;
 
+// Scopes only moderators get anything out of.
+const MOD_ONLY_SCOPES = [WARN_SCOPE, FOLLOWERS_SCOPE];
+
 /**
- * Missing scopes worth a reconnect prompt. Warn's scope is only asked of
- * people who moderate someone else's chat; a streamer moderating just
- * their own is asked the first time they warn.
+ * Missing scopes worth a reconnect prompt. Moderator-only scopes are only
+ * asked of people who moderate someone else's chat; a streamer moderating
+ * just their own is asked where the feature is first used.
  */
 export function reconnectScopes(): string[] {
   const missing = missingScopes();
   return defaultStore.moderatesAny()
     ? missing
-    : missing.filter((s) => s !== WARN_SCOPE);
+    : missing.filter((s) => !MOD_ONLY_SCOPES.includes(s));
 }
 
 /**
