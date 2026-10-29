@@ -157,6 +157,24 @@ describe("Settings", () => {
     expect(chime).toHaveBeenCalledWith(0.5);
   });
 
+  it("asks before signing out", () => {
+    const onSignOut = vi.fn();
+    render(() => (
+      <Settings
+        open
+        login="me"
+        attentions={[]}
+        onClose={() => {}}
+        onSignOut={onSignOut}
+      />
+    ));
+    fireEvent.click(screen.getByRole("button", { name: "Account" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    expect(onSignOut).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Sign out?" }));
+    expect(onSignOut).toHaveBeenCalledOnce();
+  });
+
   it("counts the update notes seen once Updates is left", () => {
     markSeen.mockClear();
     render(() => (

@@ -45,6 +45,8 @@ import {
   updateState,
 } from "../stores/updateStore";
 import TwitchReconnect from "./TwitchReconnect";
+import { createConfirmTap } from "../lib/confirmTap";
+import { UPCOMING_PLATFORMS } from "../lib/platforms";
 import { playChime } from "../lib/mentionAlert";
 import { markWhatsNewSeen, showPatchNotes } from "../stores/whatsNewStore";
 import type { Attention, AttentionRow } from "../lib/settingsAttention";
@@ -93,19 +95,6 @@ const SECTION_LABELS: Record<SettingsSection, string> = {
   updates: "Updates",
   help: "Help",
 };
-
-// Platforms the merged feed is growing toward; shown so people know they
-// are on the way, with no sign-in yet.
-const UPCOMING_PLATFORMS = [
-  {
-    name: "YouTube",
-    hint: "Sign in to bring your YouTube live chat into the same feed",
-  },
-  {
-    name: "Kick",
-    hint: "Sign in to bring your Kick chat into the same feed",
-  },
-];
 
 const RECENT_MESSAGES_URL = "https://recent-messages.robotty.de/";
 const PRIVACY_URL = "https://prismoid.org/privacy";
@@ -253,6 +242,10 @@ const Settings: Component<SettingsProps> = (props) => {
     if (tourStep() === null) props.onClose();
   };
 
+  // Signing out drops the session and every open tab, so it takes a
+  // second click.
+  const signOutTap = createConfirmTap();
+
   const sectionMarked = (s: SettingsSection) =>
     props.attentions.some((a) => a.section === s);
   const rowMarked = (r: AttentionRow) =>
@@ -350,9 +343,11 @@ const Settings: Component<SettingsProps> = (props) => {
               <button
                 type="button"
                 class="btn btn--outline btn--danger"
-                onClick={props.onSignOut}
+                onClick={() => {
+                  if (signOutTap.tap()) props.onSignOut();
+                }}
               >
-                Sign out
+                {signOutTap.armed() ? "Sign out?" : "Sign out"}
               </button>
             </div>
             <Show when={reconnectScopes().length > 0}>
