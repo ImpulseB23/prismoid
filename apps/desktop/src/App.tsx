@@ -54,6 +54,7 @@ import { initWhatsNew } from "./stores/whatsNewStore";
 import { trackWindowChrome } from "./stores/windowStore";
 import TitleBar from "./components/TitleBar";
 import ContextMenu from "./components/ContextMenu";
+import ModPopover from "./components/ModPopover";
 import { installContextMenus } from "./lib/appContextMenu";
 import { settingsOpen } from "./stores/settingsPanelStore";
 import {
@@ -162,6 +163,7 @@ const App: Component = () => {
         </Match>
       </Switch>
       <ContextMenu />
+      <ModPopover />
       <UpdateScreen
         state={updateState}
         onRetry={() => void installUpdate()}

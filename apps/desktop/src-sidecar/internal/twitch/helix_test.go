@@ -350,6 +350,42 @@ func TestTimeoutUserRejectsOutOfRange(t *testing.T) {
 	}
 }
 
+func TestWarnUser(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/moderation/warnings" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		q := r.URL.Query()
+		if q.Get("broadcaster_id") != "b1" || q.Get("moderator_id") != "m1" {
+			t.Fatalf("unexpected query: %s", r.URL.RawQuery)
+		}
+		var req warnUserRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if req.Data.UserID != "u1" || req.Data.Reason != "no spoilers" {
+			t.Fatalf("unexpected body: %+v", req)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := &HelixClient{BaseURL: srv.URL, ClientID: "cid", AccessToken: "tok"}
+	if err := c.WarnUser(context.Background(), "b1", "m1", "u1", "no spoilers"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestWarnUserRejectsBadReason(t *testing.T) {
+	c := &HelixClient{ClientID: "cid", AccessToken: "tok"}
+	if err := c.WarnUser(context.Background(), "b1", "m1", "u1", ""); err == nil {
+		t.Fatal("expected error for empty reason")
+	}
+	if err := c.WarnUser(context.Background(), "b1", "m1", "u1", strings.Repeat("é", MaxWarningReasonChars+1)); err == nil {
+		t.Fatal("expected error for long reason")
+	}
+}
+
 func TestUnbanUser(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {

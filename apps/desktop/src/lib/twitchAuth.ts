@@ -162,6 +162,14 @@ export function timeoutUser(
   });
 }
 
+export function warnUser(
+  channelId: string,
+  targetUserId: string,
+  reason: string,
+): Promise<void> {
+  return invoke("twitch_warn_user", { channelId, targetUserId, reason });
+}
+
 export function deleteMessage(
   channelId: string,
   messageId: string,

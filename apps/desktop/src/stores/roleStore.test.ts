@@ -2,7 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
-import { createRoleStore } from "./roleStore";
+import {
+  clearRoles,
+  createRoleStore,
+  noteModerator,
+  reconnectScopes,
+} from "./roleStore";
+import { setAuthStatus } from "./authStore";
 
 const channel = (id: string) => ({
   broadcaster_id: id,
@@ -33,10 +39,30 @@ describe("roleStore", () => {
     expect(store.isModeratorOf("1")).toBe(true);
   });
 
+  it("asks for the warn scope only from people who moderate a channel", () => {
+    setAuthStatus({
+      state: "logged_in",
+      login: "me",
+      user_id: "1",
+      missing_scopes: ["moderator:manage:warnings", "user:read:follows"],
+      enabled_scope_groups: [],
+    });
+    expect(reconnectScopes()).toEqual(["user:read:follows"]);
+    noteModerator("9");
+    expect(reconnectScopes()).toEqual([
+      "moderator:manage:warnings",
+      "user:read:follows",
+    ]);
+    clearRoles();
+    setAuthStatus(null);
+  });
+
   it("records a role observed live and clears on sign out", async () => {
     const store = createRoleStore(async () => []);
     await store.load();
+    expect(store.moderatesAny()).toBe(false);
     store.noteModerator("9");
+    expect(store.moderatesAny()).toBe(true);
     expect(store.isModeratorOf("9")).toBe(true);
     store.clear();
     expect(store.isModeratorOf("9")).toBe(false);

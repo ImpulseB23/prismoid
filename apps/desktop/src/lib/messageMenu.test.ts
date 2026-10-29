@@ -38,6 +38,8 @@ function actions(): MessageMenuActions {
     toggleIgnore: vi.fn(),
     deleteMessage: vi.fn(),
     timeout: vi.fn(),
+    customTimeout: vi.fn(),
+    warn: vi.fn(),
     ban: vi.fn(),
     unban: vi.fn(),
   };
@@ -82,7 +84,16 @@ describe("messageMenuItems", () => {
       "Timeout 10m",
       "Timeout 1h",
     ]);
-    expect(got.slice(-2)).toEqual(["Ban", "Unban"]);
+    expect(got.slice(got.indexOf("Delete message"))).toEqual([
+      "Delete message",
+      "Warn…",
+      "Timeout 1m",
+      "Timeout 10m",
+      "Timeout 1h",
+      "Custom timeout…",
+      "Ban",
+      "Unban",
+    ]);
     const tenMinutes = items.find(
       (i) => i.kind === "item" && i.label === "Timeout 10m",
     );
@@ -100,7 +111,8 @@ describe("messageMenuItems", () => {
     );
     expect(got).toContain("Delete message");
     expect(got).not.toContain("Ban");
-    expect(got.some((l) => l.startsWith("Timeout"))).toBe(false);
+    expect(got).not.toContain("Warn…");
+    expect(got.some((l) => l.includes("imeout"))).toBe(false);
     expect(got).not.toContain("Ignore");
     expect(got).toContain("Copy message");
   });

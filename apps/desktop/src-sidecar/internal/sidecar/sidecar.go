@@ -299,6 +299,8 @@ func DispatchCommand(ctx context.Context, cmd control.Command, clients map[strin
 		HandleUnbanUser(ctx, cmd, notify, logger)
 	case "timeout_user":
 		HandleTimeoutUser(ctx, cmd, notify, logger)
+	case "warn_user":
+		HandleWarnUser(ctx, cmd, notify, logger)
 	case "delete_message":
 		HandleDeleteMessage(ctx, cmd, notify, logger)
 	case "clear_chat":
@@ -427,6 +429,28 @@ func HandleTimeoutUser(ctx context.Context, cmd control.Command, notify twitch.N
 	err := newTwitchHelixClient(cmd).TimeoutUser(ctx, cmd.BroadcasterID, cmd.UserID, cmd.TargetUserID, cmd.DurationSeconds, cmd.Reason)
 	if err != nil {
 		logger.Warn().Err(err).Str("broadcaster", cmd.BroadcasterID).Str("target", cmd.TargetUserID).Msg("timeout_user failed")
+	}
+	reply(err)
+}
+
+func HandleWarnUser(ctx context.Context, cmd control.Command, notify twitch.Notify, logger zerolog.Logger) {
+	reply := modReply(cmd, notify)
+	if msg := validateModAuth(cmd); msg != "" {
+		reply(errors.New(msg))
+		return
+	}
+	if cmd.TargetUserID == "" || cmd.Reason == "" {
+		logger.Warn().
+			Str("cmd", cmd.Cmd).
+			Str("broadcaster", cmd.BroadcasterID).
+			Str("target", cmd.TargetUserID).
+			Msg("warn_user missing required field; ignoring")
+		reply(errors.New("missing target_user_id or reason"))
+		return
+	}
+	err := newTwitchHelixClient(cmd).WarnUser(ctx, cmd.BroadcasterID, cmd.UserID, cmd.TargetUserID, cmd.Reason)
+	if err != nil {
+		logger.Warn().Err(err).Str("broadcaster", cmd.BroadcasterID).Str("target", cmd.TargetUserID).Msg("warn_user failed")
 	}
 	reply(err)
 }

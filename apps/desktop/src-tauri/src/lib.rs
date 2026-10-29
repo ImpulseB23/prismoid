@@ -107,6 +107,7 @@ pub fn run() {
             sidecar_commands::twitch_ban_user,
             sidecar_commands::twitch_unban_user,
             sidecar_commands::twitch_timeout_user,
+            sidecar_commands::twitch_warn_user,
             sidecar_commands::twitch_delete_message,
             sidecar_commands::twitch_clear_chat,
             sidecar_commands::twitch_manage_held_message,
@@ -227,6 +228,7 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
             .scope(Scope::UserReadFollows)
             .scope(Scope::ModeratorManageBannedUsers)
             .scope(Scope::ModeratorManageChatMessages)
+            .scope(Scope::ModeratorManageWarnings)
             // Chat settings are read and changed from the chat modes panel.
             // The remaining read scopes are what channel.moderate v2 asks
             // for, so moderators see every action in the channel with

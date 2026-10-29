@@ -26,6 +26,13 @@ const MODERATION_SCOPES = [
   "moderator:manage:chat_messages",
 ];
 
+export const WARN_SCOPE = "moderator:manage:warnings";
+
+/** Warn waits on its own reconnect so the other mod tools keep working. */
+export function warnNeedsReconnect(): boolean {
+  return missingScopes().includes(WARN_SCOPE);
+}
+
 /** True when moderation calls would fail until the user signs in again. */
 export function moderationNeedsReconnect(): boolean {
   const missing = missingScopes();

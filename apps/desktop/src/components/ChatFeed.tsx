@@ -54,8 +54,10 @@ import {
   sendMessage,
   timeoutUser,
   unbanUser,
+  warnUser,
   type SendMessageError,
 } from "../lib/twitchAuth";
+import { openModPopover } from "../stores/modPopoverStore";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { formatSeconds } from "../lib/slashCommands";
 import { messageMenuItems } from "../lib/messageMenu";
@@ -712,6 +714,30 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       () => timeoutUser(msg.channel_id, msg.platform_user_id, seconds),
     );
 
+  const modWarn = (msg: ChatMessage, reason: string) =>
+    runModAction(`Warned ${msg.display_name}`, () =>
+      warnUser(msg.channel_id, msg.platform_user_id, reason),
+    );
+
+  const askTimeout = (msg: ChatMessage, x: number, y: number) =>
+    openModPopover({
+      kind: "timeout",
+      x,
+      y,
+      target: msg.display_name,
+      presets: settings().timeoutPresets,
+      submit: (seconds) => modTimeout(msg, seconds),
+    });
+
+  const askWarn = (msg: ChatMessage, x: number, y: number) =>
+    openModPopover({
+      kind: "warn",
+      x,
+      y,
+      target: msg.display_name,
+      submit: (reason) => modWarn(msg, reason),
+    });
+
   const modBan = (msg: ChatMessage) =>
     runModAction(`Banned ${msg.display_name}`, () =>
       banUser(msg.channel_id, msg.platform_user_id),
@@ -723,7 +749,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       markMessageDeleted(msg.id);
     });
 
-  // Hover icons for moderators: delete, the first timeout preset, ban.
+  // Hover icons for moderators: delete, the timeout picker, warn, ban.
   // Mods can delete any message, their own included; timeouts and bans
   // never target themselves.
   const canDelete = (msg: ChatMessage) =>
@@ -787,6 +813,8 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
             ),
           deleteMessage: () => modDelete(msg),
           timeout: (seconds) => modTimeout(msg, seconds),
+          customTimeout: () => askTimeout(msg, e.clientX, e.clientY),
+          warn: () => askWarn(msg, e.clientX, e.clientY),
           ban: () => modBan(msg),
           unban: () =>
             run(`Unbanned ${msg.display_name}`, () =>
@@ -1034,22 +1062,80 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                         </button>
                       </Show>
                       <Show when={showModIcons(row().msg)}>
-                        <Show when={settings().timeoutPresets[0]}>
-                          {(seconds) => (
-                            <button
-                              type="button"
-                              class="msg__action msg__action--text"
-                              title={`Timeout ${formatSeconds(seconds())}`}
-                              aria-label={`Timeout ${formatSeconds(seconds())}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                modTimeout(row().msg, seconds());
-                              }}
-                            >
-                              {formatSeconds(seconds())}
-                            </button>
-                          )}
-                        </Show>
+                        <button
+                          type="button"
+                          class="msg__action"
+                          title="Timeout"
+                          aria-label="Timeout"
+                          aria-haspopup="dialog"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const r = e.currentTarget.getBoundingClientRect();
+                            askTimeout(row().msg, r.left, r.bottom + 4);
+                          }}
+                        >
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            aria-hidden="true"
+                          >
+                            <circle
+                              cx="6"
+                              cy="6"
+                              r="4.6"
+                              stroke="currentColor"
+                              stroke-width="1.3"
+                            />
+                            <path
+                              d="M6 3.4V6l1.8 1.2"
+                              stroke="currentColor"
+                              stroke-width="1.3"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          class="msg__action"
+                          title="Warn"
+                          aria-label="Warn"
+                          aria-haspopup="dialog"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const r = e.currentTarget.getBoundingClientRect();
+                            askWarn(row().msg, r.left, r.bottom + 4);
+                          }}
+                        >
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            aria-hidden="true"
+                          >
+                            <path
+                              d="M6 1.6 10.8 10H1.2L6 1.6Z"
+                              stroke="currentColor"
+                              stroke-width="1.2"
+                              stroke-linejoin="round"
+                            />
+                            <path
+                              d="M6 4.8v2.4"
+                              stroke="currentColor"
+                              stroke-width="1.3"
+                              stroke-linecap="round"
+                            />
+                            <circle
+                              cx="6"
+                              cy="8.6"
+                              r="0.7"
+                              fill="currentColor"
+                            />
+                          </svg>
+                        </button>
                         <button
                           type="button"
                           class="msg__action msg__action--danger"

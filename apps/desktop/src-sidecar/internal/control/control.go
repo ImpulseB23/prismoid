@@ -55,7 +55,7 @@ type Command struct {
 	ChatroomID int `json:"chatroom_id,omitempty"`
 
 	// Mod action fields. Only set by ban_user / unban_user / timeout_user /
-	// delete_message commands.
+	// warn_user / delete_message commands.
 	TargetUserID    string `json:"target_user_id,omitempty"`
 	DurationSeconds int    `json:"duration_seconds,omitempty"`
 	Reason          string `json:"reason,omitempty"`

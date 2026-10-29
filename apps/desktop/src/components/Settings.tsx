@@ -11,7 +11,7 @@ import {
   on,
   onMount,
 } from "solid-js";
-import { missingScopes } from "../stores/authStore";
+import { reconnectScopes } from "../stores/roleStore";
 import {
   HIGHLIGHT_BADGES,
   THEMES,
@@ -349,7 +349,7 @@ const Settings: Component<SettingsProps> = (props) => {
                 Sign out
               </button>
             </div>
-            <Show when={missingScopes().length > 0}>
+            <Show when={reconnectScopes().length > 0}>
               <TwitchReconnect
                 marked={rowMarked("reconnect")}
                 title="Twitch needs new permissions"
