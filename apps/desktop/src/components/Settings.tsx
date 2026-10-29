@@ -131,6 +131,8 @@ const UpdateRow: Component<{ marked: boolean }> = (props) => {
         return "You're on the latest version";
       case "available":
         return `Version ${displayVersion(s.version)} is available`;
+      case "downloaded":
+        return `Version ${displayVersion(s.version)} is ready to install`;
       case "downloading":
         return s.total
           ? `Downloading ${Math.round((s.received / s.total) * 100)}%`
@@ -142,9 +144,15 @@ const UpdateRow: Component<{ marked: boolean }> = (props) => {
     }
   };
 
+  const installable = () => {
+    const kind = updateState().kind;
+    return kind === "available" || kind === "downloaded";
+  };
+
   const action = () => {
     const kind = updateState().kind;
     if (kind === "available") return "Install and restart";
+    if (kind === "downloaded") return "Restart to update";
     if (kind === "checking" || kind === "downloading" || kind === "ready")
       return null;
     return "Check for updates";
@@ -178,13 +186,11 @@ const UpdateRow: Component<{ marked: boolean }> = (props) => {
             type="button"
             class="btn"
             classList={{
-              "btn--primary": updateState().kind === "available",
-              "btn--outline": updateState().kind !== "available",
+              "btn--primary": installable(),
+              "btn--outline": !installable(),
             }}
             onClick={() =>
-              void (updateState().kind === "available"
-                ? installUpdate()
-                : checkForUpdates(true))
+              void (installable() ? installUpdate() : checkForUpdates(true))
             }
           >
             {label()}

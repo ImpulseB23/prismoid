@@ -1,7 +1,7 @@
 // App updates through the Tauri updater: a check at launch that installs
-// on its own if it finds something, a check every half hour and whenever
-// the window comes back into focus that only nudges, a manual check from Settings, and an install that restarts the
-// app. The plugin calls are injected so the store runs without a runtime.
+// on its own if it finds something, and checks every half hour, on focus
+// and from Settings that download quietly and then offer a restart. The
+// plugin calls are injected so the store runs without a runtime.
 
 import { createSignal } from "solid-js";
 import { check, type Update } from "@tauri-apps/plugin-updater";
@@ -19,6 +19,8 @@ export type UpdateState =
   | { kind: "checking" }
   | { kind: "none"; checkedAt: number }
   | { kind: "available"; version: string; notes: string | null }
+  /** Fetched in the background; installing only needs the restart. */
+  | { kind: "downloaded"; version: string; notes: string | null }
   | {
       kind: "downloading";
       version: string;
@@ -32,9 +34,9 @@ export type UpdateState =
 export interface PendingUpdate {
   version: string;
   body?: string;
-  downloadAndInstall: (
-    onEvent?: (event: DownloadEvent) => void,
-  ) => Promise<void>;
+  download: (onEvent?: (event: DownloadEvent) => void) => Promise<void>;
+  /** Runs the downloaded installer; only after download resolves. */
+  install: () => Promise<void>;
 }
 
 export type DownloadEvent =
@@ -46,7 +48,8 @@ export interface UpdateStore {
   state: () => UpdateState;
   /** Looks for a newer version. Errors are shown only for a manual check. */
   check: (manual: boolean) => Promise<void>;
-  /** Downloads and installs the available update, then restarts. */
+  /** Installs the found update, downloading it first if the background
+   * download has not finished, then restarts. */
   install: () => Promise<void>;
   /** Puts a failed install back to "available" so the nudge stays. */
   dismiss: () => void;
@@ -66,6 +69,47 @@ export function createUpdateStore(
   let generation = 0;
   let launchedAt = 0;
   let lastCheckAt = 0;
+  // The quiet download of `pending`, with its progress so far. Installing
+  // while it runs waits on it instead of fetching the file twice.
+  let quiet: Promise<void> | null = null;
+  let fetched = false;
+  let received = 0;
+  let total: number | null = null;
+  let onProgress: (() => void) | null = null;
+
+  function startFetch(update: PendingUpdate): Promise<void> {
+    fetched = false;
+    received = 0;
+    total = null;
+    const run = update
+      .download((event) => {
+        if (event.event === "Started") {
+          total = event.data.contentLength ?? null;
+        } else if (event.event === "Progress") {
+          received += event.data.chunkLength;
+        }
+        onProgress?.();
+      })
+      .then(() => {
+        if (pending !== update) return;
+        fetched = true;
+        if (state().kind === "available") {
+          setState({
+            kind: "downloaded",
+            version: update.version,
+            notes: update.body ?? null,
+          });
+        }
+      });
+    quiet = run;
+    // A failed quiet download leaves the update "available"; installing
+    // starts a fresh download and shows that one's error.
+    run.catch((err: unknown) => {
+      if (quiet === run) quiet = null;
+      console.error("update download", err);
+    });
+    return run;
+  }
 
   async function runCheck(manual: boolean, atLaunch = false): Promise<void> {
     const current = state().kind;
@@ -77,15 +121,28 @@ export function createUpdateStore(
       const update = await lookup();
       if (gen !== generation) return;
       if (update) {
+        if (pending?.version === update.version && quiet) {
+          if (manual) {
+            setState({
+              kind: fetched ? "downloaded" : "available",
+              version: update.version,
+              notes: update.body ?? null,
+            });
+          }
+          return;
+        }
         pending = update;
+        quiet = null;
         setState({
           kind: "available",
           version: update.version,
           notes: update.body ?? null,
         });
         if (atLaunch && now() - launchedAt <= LAUNCH_WINDOW_MS) void install();
+        else void startFetch(update);
       } else {
         pending = null;
+        quiet = null;
         setState({ kind: "none", checkedAt: now() });
       }
     } catch (err) {
@@ -101,32 +158,36 @@ export function createUpdateStore(
     const update = pending;
     if (!update) return;
     const gen = ++generation;
-    let received = 0;
-    let total: number | null = null;
-    setState({ kind: "downloading", version: update.version, received, total });
-    try {
-      await update.downloadAndInstall((event) => {
-        if (gen !== generation) return;
-        if (event.event === "Started") {
-          total = event.data.contentLength ?? null;
-        } else if (event.event === "Progress") {
-          received += event.data.chunkLength;
-        }
-        setState({
-          kind: "downloading",
-          version: update.version,
-          received,
-          total,
-        });
-      });
+    const show = () => {
       if (gen !== generation) return;
-      pending = null;
+      setState({
+        kind: "downloading",
+        version: update.version,
+        received,
+        total,
+      });
+    };
+    onProgress = show;
+    try {
+      if (!fetched) {
+        show();
+        await (quiet ?? startFetch(update));
+      }
+      if (gen !== generation) return;
       setState({ kind: "ready", version: update.version });
+      await update.install();
+      pending = null;
       await restart();
     } catch (err) {
       if (gen !== generation) return;
       console.error("update install", err);
+      // The installer may have taken the downloaded bytes; a retry fetches
+      // them again.
+      fetched = false;
+      quiet = null;
       setState({ kind: "error", message: describe(err), during: "install" });
+    } finally {
+      if (onProgress === show) onProgress = null;
     }
   }
 
@@ -168,7 +229,8 @@ async function checkViaPlugin(): Promise<PendingUpdate | null> {
   return {
     version: update.version,
     body: update.body,
-    downloadAndInstall: (onEvent) => update.downloadAndInstall(onEvent),
+    download: (onEvent) => update.download(onEvent),
+    install: () => update.install(),
   };
 }
 
