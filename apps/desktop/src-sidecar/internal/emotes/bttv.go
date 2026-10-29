@@ -107,6 +107,10 @@ func bttvToEmotes(in []bttvEmote) []Emote {
 			Height:   e.Height,
 			Animated: animated,
 		}
+		if animated {
+			em.Static1x = bttvStaticURL(e.ID, "1x")
+			em.Static2x = bttvStaticURL(e.ID, "2x")
+		}
 		if u := e.User; u != nil {
 			em.Owner = newEmoteOwner(u.ID, u.Name, u.DisplayName)
 		}
@@ -120,4 +124,10 @@ func bttvToEmotes(in []bttvEmote) []Emote {
 // available.
 func bttvURL(id, size, ext string) string {
 	return bttvCDN + "/emote/" + id + "/" + size + "." + ext
+}
+
+// bttvStaticURL is the first frame of an animated emote. Not in the API;
+// it is the path BetterTTV's own extension uses (src/utils/cdn.js).
+func bttvStaticURL(id, size string) string {
+	return bttvCDN + "/emote/" + id + "/static/" + size + ".webp"
 }

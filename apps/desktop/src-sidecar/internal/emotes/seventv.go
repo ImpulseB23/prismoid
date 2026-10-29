@@ -183,6 +183,12 @@ func (e sevenTVEmote) toEmote() (Emote, bool) {
 		Animated:  e.Data.Animated,
 		ZeroWidth: e.Data.Flags&sevenTVFlagZeroWidth != 0,
 	}
+	// The host's file list leaves out the still frames, but the CDN serves
+	// them beside each size; BetterTTV's 7TV support uses the same names.
+	if e.Data.Animated {
+		em.Static1x = joinHost(e.Data.Host.URL, "1x_static.webp")
+		em.Static2x = joinHost(e.Data.Host.URL, "2x_static.webp")
+	}
 	if o := e.Data.Owner; o != nil {
 		em.Owner = newEmoteOwner(o.ID, o.Username, o.DisplayName)
 	}

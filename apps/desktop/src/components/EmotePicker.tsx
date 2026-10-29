@@ -23,6 +23,7 @@ import {
 } from "../stores/emoteCardStore";
 import type { EmoteMeta } from "../stores/chatStore";
 import ProviderIcon from "./ProviderIcon";
+import { emoteImages } from "../lib/emoteImage";
 
 export interface EmotePickerProps {
   open: boolean;
@@ -234,7 +235,7 @@ const EmotePicker: Component<EmotePickerProps> = (props) => {
                             onClick={() => props.onPick(e)}
                           >
                             <img
-                              src={e.url_2x || e.url_1x}
+                              src={emoteImages(e).x2 || emoteImages(e).x1}
                               alt=""
                               loading="lazy"
                               draggable={false}

@@ -38,6 +38,10 @@ type Emote struct {
 	Width    int      `json:"width,omitempty"`
 	Height   int      `json:"height,omitempty"`
 	Animated bool     `json:"animated,omitempty"`
+	// Static1x and Static2x are a still frame of an animated emote, shown
+	// when the user turns animated emotes off. Empty for still emotes.
+	Static1x string `json:"static_1x,omitempty"`
+	Static2x string `json:"static_2x,omitempty"`
 	// ZeroWidth is the 7TV/BTTV "overlay" flag. True for emotes like
 	// `cvMask`, `RainTime` that render on top of the previous emote.
 	ZeroWidth bool `json:"zero_width,omitempty"`

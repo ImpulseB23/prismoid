@@ -4,6 +4,7 @@
 import { Component, For } from "solid-js";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { MessagePiece } from "../lib/emoteSpans";
+import { emoteImages } from "../lib/emoteImage";
 import { usePane } from "../lib/pane";
 import {
   endEmoteHover,
@@ -37,6 +38,7 @@ const Piece: Component<{ piece: MessagePiece }> = (props) => {
     );
   }
   const { primary, overlays } = p;
+  const images = () => emoteImages(primary.emote);
   const title = [primary, ...overlays].map((r) => r.emote.code).join(" + ");
   return (
     <span
@@ -74,11 +76,9 @@ const Piece: Component<{ piece: MessagePiece }> = (props) => {
       }}
     >
       <img
-        src={primary.emote.url_1x}
+        src={images().x1}
         srcset={
-          primary.emote.url_2x
-            ? `${primary.emote.url_1x} 1x, ${primary.emote.url_2x} 2x`
-            : undefined
+          images().x2 ? `${images().x1} 1x, ${images().x2} 2x` : undefined
         }
         alt={primary.emote.code}
         width={primary.width}
@@ -89,7 +89,7 @@ const Piece: Component<{ piece: MessagePiece }> = (props) => {
       <For each={overlays}>
         {(overlay) => (
           <img
-            src={overlay.emote.url_1x}
+            src={emoteImages(overlay.emote).x1}
             alt={overlay.emote.code}
             width={overlay.width}
             height={overlay.height}

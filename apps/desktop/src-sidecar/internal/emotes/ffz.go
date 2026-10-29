@@ -133,6 +133,10 @@ func ffzConvertSet(s ffzSet) []Emote {
 			Height:   e.Height,
 			Animated: animated,
 		}
+		if animated {
+			em.Static1x = normalizeFFZURL(e.URLs["1"])
+			em.Static2x = normalizeFFZURL(e.URLs["2"])
+		}
 		if o := e.Owner; o != nil {
 			id := ""
 			if o.ID != 0 {
