@@ -89,7 +89,7 @@ function DownloadNote(props: { platform: Platform | undefined }) {
         }
       >
         <Match when={phone()}>
-          There is no {PLATFORM_NAMES[target()]} app. prismoid is a chat window
+          There is no {PLATFORM_NAMES[target()]} app. prismoid is a desktop app
           for your PC, so open prismoid.org on Windows to download it.
         </Match>
         <Match when={otherDesktop()}>
@@ -297,18 +297,18 @@ export default function Home() {
   const platform = createAsync(() => visitorPlatform(), { deferStream: true });
   return (
     <>
-      <Title>prismoid - Twitch chat, the way it should feel</Title>
+      <Title>prismoid - Twitch chat and your stream, in one window</Title>
       <Meta
         name="description"
-        content="A desktop chat window for Twitch. Tabs, chat history that survives a restart, mod actions you can see, your emotes. Free, open source, ultra lightweight."
+        content="A desktop app for Twitch chat and for running your stream. Tabs, chat history that survives a restart, mod actions you can see, your emotes, and a stream manager for your title, ads, polls and more. Free, open source, ultra lightweight."
       />
       <Meta
         property="og:title"
-        content="prismoid - Twitch chat, the way it should feel"
+        content="prismoid - Twitch chat and your stream, in one window"
       />
       <Meta
         property="og:description"
-        content="Tabs, history, mod actions you can see, your emotes. Free, open source, ultra lightweight."
+        content="Tabs, history, mod actions you can see, your emotes, and a stream manager that drops down over chat. Free, open source, ultra lightweight."
       />
       <Meta property="og:image" content="/icons/icon-512.png" />
       <Meta property="og:url" content="https://prismoid.org" />
@@ -318,15 +318,16 @@ export default function Home() {
         <div class="hero__beam" aria-hidden="true" />
         <div class="hero__copy">
           <h1>
-            Twitch chat,
+            Twitch chat and your stream,
             <br />
-            the way it should feel.
+            in one window.
           </h1>
           <p class="lede">
-            prismoid is a chat window for your desktop. Every channel in a tab,
+            prismoid is Twitch chat for your desktop. Every channel in a tab,
             history that survives a restart, mod actions you can actually see,
-            and your 7TV, BTTV and FFZ emotes. Free, open source, ultra
-            lightweight.
+            and your 7TV, BTTV and FFZ emotes. Streaming? Pull down the stream
+            manager to change your title, run a poll or clip the moment without
+            leaving chat. Free, open source, ultra lightweight.
           </p>
           <div class="hero-actions">
             <Download platform={platform()} />
@@ -442,6 +443,65 @@ export default function Home() {
         </div>
       </section>
 
+      <section class="manager">
+        <h2>Run your stream without leaving chat.</h2>
+        <p class="manager__lede">
+          The stream manager drops down over chat like a curtain from a button
+          in the header. Chat keeps running underneath, and it rolls back up
+          when you are done.
+        </p>
+        <ul class="manager__list">
+          <li>
+            <Icon name="sliders" class="manager__icon" />
+            <p>
+              <strong>Your stream info, right there.</strong> Change the title,
+              category, tags, language, content labels and branded content while
+              chat keeps moving below.
+            </p>
+          </li>
+          <li>
+            <Icon name="history" class="manager__icon" />
+            <p>
+              <strong>The stream so far.</strong> Uptime and viewers at a
+              glance, and a timeline that shows where every ad break, marker and
+              poll landed.
+            </p>
+          </li>
+          <li>
+            <Icon name="bolt" class="manager__icon" />
+            <p>
+              <strong>The buttons you reach for live.</strong> Drop a marker,
+              clip what just happened, shout out a friend, post an announcement
+              or turn on Shield Mode.
+            </p>
+          </li>
+          <li>
+            <Icon name="poll" class="manager__icon" />
+            <p>
+              <strong>Ads, polls and predictions.</strong> See when the next ad
+              is coming, snooze it or run one now. Start a poll or a prediction
+              and watch the votes come in. For Twitch Affiliates and Partners.
+            </p>
+          </li>
+          <li>
+            <Icon name="gavel" class="manager__icon" />
+            <p>
+              <strong>Chat manager for you and your mods.</strong> Room modes as
+              tiles you tap, the AutoMod queue and the mod log, all in one
+              panel.
+            </p>
+          </li>
+          <li>
+            <Icon name="key" class="manager__icon" />
+            <p>
+              <strong>Only asks for what you use.</strong> prismoid asks Twitch
+              for stream permissions when you turn a part of the stream manager
+              on, and not before.
+            </p>
+          </li>
+        </ul>
+      </section>
+
       <section class="roadmap">
         <h2>What is next.</h2>
         <p class="roadmap__lede">
@@ -462,13 +522,6 @@ export default function Home() {
               <strong>Chat on your stream.</strong> Drop it into OBS straight
               from the app, every platform in one feed, no widget service
               needed.
-            </p>
-          </li>
-          <li>
-            <Icon name="sliders" class="roadmap__icon" />
-            <p>
-              <strong>Run the stream from here.</strong> Title, category and
-              going live, from the window you already moderate in.
             </p>
           </li>
           <li>

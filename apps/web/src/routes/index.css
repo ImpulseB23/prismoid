@@ -367,6 +367,7 @@
 }
 
 .why h2,
+.manager h2,
 .roadmap h2,
 .cta h2 {
   font-size: clamp(2rem, 4.2vw, 2.75rem);
@@ -409,12 +410,14 @@
   max-width: 32rem;
 }
 
-/* roadmap */
+/* manager and roadmap share one list layout */
+.manager,
 .roadmap {
   padding: var(--space-4xl) 0;
   border-top: 1px solid var(--border);
 }
 
+.manager__lede,
 .roadmap__lede {
   color: var(--text-faint);
   font-weight: 300;
@@ -424,6 +427,7 @@
   margin: var(--space-md) 0 var(--space-2xl);
 }
 
+.manager__list,
 .roadmap__list {
   list-style: none;
   display: grid;
@@ -432,6 +436,7 @@
   max-width: 58rem;
 }
 
+.manager__list li,
 .roadmap__list li {
   font-size: 1rem;
   font-weight: 300;
@@ -441,6 +446,7 @@
   border-left: 2px solid var(--band-purple);
 }
 
+.manager__list strong,
 .roadmap__list strong {
   color: var(--text);
   font-weight: 600;
@@ -526,6 +532,7 @@
 
   .moments,
   .why__grid,
+  .manager__list,
   .roadmap__list {
     grid-template-columns: 1fr;
   }
@@ -547,6 +554,7 @@
   margin-bottom: var(--space-sm);
 }
 
+.manager__list li,
 .roadmap__list li {
   display: grid;
   grid-template-columns: 22px 1fr;
@@ -554,10 +562,12 @@
   align-items: start;
 }
 
+.manager__list li p,
 .roadmap__list li p {
   margin: 0;
 }
 
+.manager__icon,
 .roadmap__icon {
   width: 22px;
   height: 22px;

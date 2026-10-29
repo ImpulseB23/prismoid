@@ -1,7 +1,7 @@
 {
   "name": "prismoid",
   "short_name": "prismoid",
-  "description": "unified live chat for streamers",
+  "description": "twitch chat and stream manager for your desktop",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0e0e10",

@@ -18,7 +18,9 @@ type Name =
   | "cast"
   | "sliders"
   | "puzzle"
-  | "laptop";
+  | "laptop"
+  | "poll"
+  | "key";
 
 const PATHS: Record<Name, JSX.Element> = {
   feather: (
@@ -117,6 +119,21 @@ const PATHS: Record<Name, JSX.Element> = {
     <>
       <rect x="4" y="5" width="16" height="11" rx="2" />
       <path d="M2 19h20" />
+    </>
+  ),
+  poll: (
+    <>
+      <path d="M5 20v-8" />
+      <path d="M12 20V4" />
+      <path d="M19 20v-12" />
+    </>
+  ),
+  key: (
+    <>
+      <circle cx="7.5" cy="15.5" r="4.5" />
+      <path d="m10.7 12.3 9.3-9.3" />
+      <path d="m16 7 3 3" />
+      <path d="m19 4 2 2" />
     </>
   ),
 };
