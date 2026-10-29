@@ -71,7 +71,7 @@ import {
 } from "../lib/messageLayout";
 import { nameStyle } from "../lib/paint";
 import { shownPaint } from "../stores/paintStore";
-import { isLight, logo } from "../stores/themeStore";
+import { logo, nameContrast } from "../stores/themeStore";
 import MessagePieces from "./MessagePieces";
 import { openUserCard } from "../lib/userCardWindow";
 
@@ -664,7 +664,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                   row().msg.platform === "Twitch"
                     ? shownPaint(row().msg.platform_user_id)
                     : undefined,
-                  isLight(),
+                  nameContrast(),
                 ),
               );
               const onRetry = () => {

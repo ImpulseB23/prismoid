@@ -4,6 +4,7 @@
 // color clears a minimum readable threshold against #0e0e10, matching
 // the behavior the official Twitch web client uses for "Adjust Colors".
 // On the light palette it runs the other way: pale colors are pulled down.
+// With Readable colors off, names keep exactly the color the chatter picked.
 
 const FALLBACK = "#9147ff";
 
@@ -84,14 +85,18 @@ function darkenToReadable(rgb: Rgb): Rgb {
   return { r, g, b };
 }
 
+/** Which way names are adjusted: for the dark or light palette, or not at all. */
+export type NameContrast = "dark" | "light" | "off";
+
 export function normalizeUserColor(
   color: string | null | undefined,
-  onLight = false,
+  contrast: NameContrast = "dark",
 ): string {
   if (!color) return FALLBACK;
   const rgb = parseHex(color);
   if (!rgb) return FALLBACK;
-  if (onLight) return toHex(darkenToReadable(rgb));
+  if (contrast === "off") return toHex(rgb);
+  if (contrast === "light") return toHex(darkenToReadable(rgb));
   if (relativeLuminance(rgb) >= MIN_LUMINANCE) return toHex(rgb);
   return toHex(liftToReadable(rgb));
 }

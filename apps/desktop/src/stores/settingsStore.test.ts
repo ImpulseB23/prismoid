@@ -80,6 +80,7 @@ describe("settingsStore", () => {
       v: 2,
       showTimestamps: false,
       alternateRows: false,
+      readableColors: true,
       hideViewers: false,
       hideUptime: false,
       hideChatRate: false,
@@ -216,6 +217,7 @@ describe("settingsStore", () => {
           chimeVolume: 1.5,
           theme: "neon",
           showPaints: false,
+          readableColors: false,
         }),
       }),
     );
@@ -225,6 +227,7 @@ describe("settingsStore", () => {
       textSize: 20,
       showTimestamps: false,
       alternateRows: false,
+      readableColors: false,
       hideViewers: false,
       hideUptime: false,
       hideChatRate: false,

@@ -29,6 +29,8 @@ export interface Settings {
   showTimestamps: boolean;
   /** Shade every other row so long chats are easier to follow. */
   alternateRows: boolean;
+  /** Lighten or darken names that are hard to read on the background. */
+  readableColors: boolean;
   /** Hide the live viewer count in the stream bar. */
   hideViewers: boolean;
   hideUptime: boolean;
@@ -106,6 +108,7 @@ export const DEFAULT_SETTINGS: Settings = {
   textSize: DEFAULT_TEXT_SIZE,
   showTimestamps: false,
   alternateRows: false,
+  readableColors: true,
   hideViewers: false,
   hideUptime: false,
   hideChatRate: false,
@@ -295,6 +298,10 @@ function readSettings(storage: StorageLike | null): Settings {
         typeof p.alternateRows === "boolean"
           ? p.alternateRows
           : DEFAULT_SETTINGS.alternateRows,
+      readableColors:
+        typeof p.readableColors === "boolean"
+          ? p.readableColors
+          : DEFAULT_SETTINGS.readableColors,
       hideViewers:
         typeof p.hideViewers === "boolean"
           ? p.hideViewers
