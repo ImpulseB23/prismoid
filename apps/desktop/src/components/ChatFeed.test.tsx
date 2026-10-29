@@ -156,4 +156,29 @@ describe("ChatFeed first messages", () => {
     await tick();
     expect(rowFor(container, "off").classList).not.toContain("msg--first");
   });
+
+  it("gilds raids and gift bombs but not other notices", async () => {
+    const { container } = render(() => <ChatFeed login="me" />);
+    await tick();
+
+    const noticed = (id: string, notice_type: string) => ({
+      ...msg(id),
+      notice: { notice_type, system_message: "" },
+    });
+    emit("chat_messages", [
+      noticed("raid", "raid"),
+      noticed("bomb", "shared_chat_community_sub_gift"),
+      noticed("resub", "resub"),
+      msg("chat"),
+    ]);
+    await tick();
+    expect(rowFor(container, "raid").classList).toContain("msg--celebration");
+    expect(rowFor(container, "bomb").classList).toContain("msg--celebration");
+    expect(rowFor(container, "resub").classList).not.toContain(
+      "msg--celebration",
+    );
+    expect(rowFor(container, "chat").classList).not.toContain(
+      "msg--celebration",
+    );
+  });
 });
