@@ -2124,6 +2124,11 @@ option::checkmark {
   cursor: pointer;
 }
 
+.settings__range {
+  width: 140px;
+  accent-color: var(--select);
+}
+
 .settings__row--toggle:hover {
   background: var(--bg-surface);
 }

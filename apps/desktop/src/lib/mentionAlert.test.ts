@@ -1,13 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { ALERT_GAP_MS, createMentionAlert, playChime } from "./mentionAlert";
 
-function setup(focused = false) {
+function setup(focused = false, always = false) {
   let t = 0;
   let isFocused = focused;
   const chime = vi.fn();
   const flash = vi.fn(async () => {});
   const alert = createMentionAlert({
     focused: () => isFocused,
+    chimeWhenFocused: () => always,
     flash,
     chime,
     now: () => t,
@@ -42,10 +43,18 @@ describe("mentionAlert", () => {
     expect(s.chime).toHaveBeenCalledOnce();
   });
 
+  it("chimes in the foreground when asked, without flashing", () => {
+    const s = setup(true, true);
+    s.alert.notify();
+    expect(s.chime).toHaveBeenCalledOnce();
+    expect(s.flash).not.toHaveBeenCalled();
+  });
+
   it("logs a flash that fails", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const alert = createMentionAlert({
       focused: () => false,
+      chimeWhenFocused: () => false,
       chime: () => {},
       flash: async () => {
         throw new Error("denied");
@@ -83,8 +92,14 @@ describe("playChime", () => {
       }),
       createGain: () => ({ gain: ramp(), connect: (node: unknown) => node }),
     } as unknown as AudioContext;
-    playChime(ctx);
+    playChime(1, ctx);
     expect(started).toEqual([10, 10.11]);
     expect(freqs).toEqual([880, 1320]);
+  });
+
+  it("plays nothing at zero volume", () => {
+    const createOscillator = vi.fn();
+    playChime(0, { createOscillator } as unknown as AudioContext);
+    expect(createOscillator).not.toHaveBeenCalled();
   });
 });

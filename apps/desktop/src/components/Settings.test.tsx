@@ -26,6 +26,11 @@ vi.mock("../stores/whatsNewStore", async (importOriginal) => ({
   markWhatsNewSeen: () => markSeen(),
 }));
 
+const chime = vi.fn();
+vi.mock("../lib/mentionAlert", () => ({
+  playChime: (volume: number) => chime(volume),
+}));
+
 const { default: Settings } = await import("./Settings");
 const { settings } = await import("../stores/settingsStore");
 const { check } = await import("@tauri-apps/plugin-updater");
@@ -125,6 +130,25 @@ describe("Settings", () => {
     fireEvent.click(tab("Help, needs attention"));
     const setup = screen.getByText("Setup").closest(".settings__row")!;
     expect(setup.classList).toContain("settings__row--attention");
+  });
+
+  it("previews the mention chime at the chosen volume", async () => {
+    render(() => (
+      <Settings
+        open
+        login="me"
+        attentions={[]}
+        onClose={() => {}}
+        onSignOut={() => {}}
+      />
+    ));
+    fireEvent.click(screen.getByRole("button", { name: "Notifications" }));
+    fireEvent.change(screen.getByRole("slider", { name: "Chime volume" }), {
+      target: { value: "0.5" },
+    });
+    await vi.waitFor(() => expect(settings().chimeVolume).toBe(0.5));
+    fireEvent.click(screen.getByRole("button", { name: "Play" }));
+    expect(chime).toHaveBeenCalledWith(0.5);
   });
 
   it("counts the update notes seen once Updates is left", () => {

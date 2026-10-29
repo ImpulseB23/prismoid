@@ -200,7 +200,8 @@ export interface ChatFeedProps {
 const ChatFeed: Component<ChatFeedProps> = (props) => {
   const mentionAlert = createMentionAlert({
     focused: () => document.hasFocus(),
-    chime: playChime,
+    chimeWhenFocused: () => settings().chimeAlways,
+    chime: () => playChime(settings().chimeVolume),
     flash: () =>
       getCurrentWindow().requestUserAttention(UserAttentionType.Informational),
   });

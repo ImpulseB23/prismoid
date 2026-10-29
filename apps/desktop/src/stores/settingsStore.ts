@@ -66,6 +66,10 @@ export interface Settings {
   setupDone: boolean;
   /** Chime and flash the taskbar when mentioned in the background. */
   mentionAlerts: boolean;
+  /** Chime for mentions while Prismoid has focus too, not only behind. */
+  chimeAlways: boolean;
+  /** Mention chime loudness, 0 to 1. */
+  chimeVolume: number;
   theme: Theme;
   /** Share of the space under the header the stream manager covers. */
   streamManagerHeight: number;
@@ -121,6 +125,8 @@ export const DEFAULT_SETTINGS: Settings = {
   highlightFirstMessages: true,
   setupDone: false,
   mentionAlerts: true,
+  chimeAlways: false,
+  chimeVolume: 1,
   theme: "dark",
   streamManagerHeight: 0.58,
 };
@@ -344,6 +350,16 @@ function readSettings(storage: StorageLike | null): Settings {
         typeof p.mentionAlerts === "boolean"
           ? p.mentionAlerts
           : DEFAULT_SETTINGS.mentionAlerts,
+      chimeAlways:
+        typeof p.chimeAlways === "boolean"
+          ? p.chimeAlways
+          : DEFAULT_SETTINGS.chimeAlways,
+      chimeVolume:
+        typeof p.chimeVolume === "number" &&
+        p.chimeVolume >= 0 &&
+        p.chimeVolume <= 1
+          ? p.chimeVolume
+          : DEFAULT_SETTINGS.chimeVolume,
       theme:
         typeof p.theme === "string" && THEMES.includes(p.theme as Theme)
           ? (p.theme as Theme)
