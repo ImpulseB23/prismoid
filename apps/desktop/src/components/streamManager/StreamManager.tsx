@@ -91,6 +91,21 @@ const StreamManager: Component = () => {
   window.addEventListener("keydown", onKey);
   onCleanup(() => window.removeEventListener("keydown", onKey));
 
+  // A click anywhere else rolls it up. Pickers open in the top layer outside
+  // the curtain's box, and the header button toggles it by itself.
+  const onDown = (e: PointerEvent) => {
+    if (!streamManagerOpen() || !(e.target instanceof Element)) return;
+    if (
+      e.target.closest(
+        "[data-stream-manager], [data-stream-manager-toggle], select, option",
+      )
+    )
+      return;
+    setStreamManagerOpen(false);
+  };
+  document.addEventListener("pointerdown", onDown);
+  onCleanup(() => document.removeEventListener("pointerdown", onDown));
+
   return (
     <Show when={shown()}>
       <Curtain

@@ -1,5 +1,5 @@
 // Whether the stream manager curtain is down and which tab it shows. The
-// header button toggles it; Escape rolls it back up.
+// header button toggles it; Escape or a click outside rolls it back up.
 
 import { createSignal } from "solid-js";
 import { currentUserId } from "./authStore";

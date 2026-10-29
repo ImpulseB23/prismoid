@@ -83,6 +83,7 @@ const Curtain: Component<{
   return (
     <div
       class="sm-curtain-frame"
+      data-stream-manager
       ref={(el) => (frameRef = el)}
       style={{ height: `${height() * 100}%` }}
     >
