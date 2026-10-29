@@ -30,6 +30,28 @@ const card = {
 };
 vi.mock("./lib/userCardWindow", () => card);
 
+const session = {
+  startCardSession: vi.fn(async () => () => {}),
+  showCardUser: vi.fn<(u: CardUser) => Promise<() => void>>(
+    async () => () => {},
+  ),
+};
+vi.mock("./lib/cardSession", () => session);
+const bridge = { sendMention: vi.fn(), sendJump: vi.fn() };
+vi.mock("./lib/cardBridge", () => bridge);
+// The card itself is tested on its own; here it only has to show who it
+// is for and pass its callbacks through.
+vi.mock("./components/UserCard", () => ({
+  default: (p: {
+    user: CardUser | null;
+    onMention: (login: string) => void;
+  }) => (
+    <button type="button" onClick={() => p.onMention(p.user!.username)}>
+      {p.user ? `${p.user.display_name} (@${p.user.username})` : ""}
+    </button>
+  ),
+}));
+
 const { default: UserCardWindow } = await import("./UserCardWindow");
 
 const user = (name: string): CardUser => ({
@@ -67,6 +89,21 @@ describe("UserCardWindow", () => {
     await waitFor(() => expect(card.cardReady).toHaveBeenCalled());
     expect(screen.getByText("BOB (@bob)")).toBeTruthy();
     expect(screen.queryByText("ANN (@ann)")).toBeNull();
+  });
+
+  it("loads each person it shows and hands mentions to the main window", async () => {
+    card.currentCardUser.mockResolvedValue(user("ann"));
+    render(() => <UserCardWindow />);
+    await waitFor(() =>
+      expect(session.showCardUser).toHaveBeenCalledWith(user("ann")),
+    );
+    expect(session.startCardSession).toHaveBeenCalledOnce();
+    announce!(user("bob"));
+    await waitFor(() =>
+      expect(session.showCardUser).toHaveBeenLastCalledWith(user("bob")),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "BOB (@bob)" }));
+    expect(bridge.sendMention).toHaveBeenCalledWith("bob");
   });
 
   it("still shows when the user cannot be loaded", async () => {

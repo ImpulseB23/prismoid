@@ -61,6 +61,13 @@ pub fn show_main<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
+/// Brings the main window forward, for a user card that sends the user
+/// there (a mention to write, a message to jump to).
+#[tauri::command]
+pub fn show_main_window<R: Runtime>(app: AppHandle<R>) {
+    show_main(&app);
+}
+
 pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
     if let WindowEvent::CloseRequested { api, .. } = event {
         if hides_on_close(window.label(), window.state::<CloseToTray>().inner()) {

@@ -47,7 +47,6 @@ import {
   resetMentions,
   scanMentionHistory,
 } from "./stores/mentionsStore";
-import { settings } from "./stores/settingsStore";
 import { clearRoles, loadModeratedChannels } from "./stores/roleStore";
 import { trackActiveStream } from "./stores/streamStore";
 import { initWhatsNew } from "./stores/whatsNewStore";
@@ -56,6 +55,11 @@ import TitleBar from "./components/TitleBar";
 import ContextMenu from "./components/ContextMenu";
 import ModPopover from "./components/ModPopover";
 import { installContextMenus } from "./lib/appContextMenu";
+import { announceModLog, serveCards } from "./lib/cardBridge";
+import { requestMention } from "./stores/composerStore";
+import { jumpToMessage } from "./stores/jumpStore";
+import { modActionsFor, modLogRevision } from "./stores/modLogStore";
+import { followSettingsElsewhere, settings } from "./stores/settingsStore";
 import { settingsOpen } from "./stores/settingsPanelStore";
 import {
   dismissUpdate,
@@ -105,6 +109,26 @@ const App: Component = () => {
       .then((stop) => (stopChrome = stop))
       .catch((err: unknown) => console.error("window chrome", err));
   });
+
+  // User card windows hand mentions and jumps over, ask for the mod log,
+  // and save settings this window has to pick up.
+  const cardStops: (() => void)[] = [];
+  onCleanup(() => {
+    for (const stop of cardStops) stop();
+  });
+  onMount(() => {
+    Promise.all([
+      serveCards({
+        mention: requestMention,
+        jump: (j) => jumpToMessage(j.channel_id, j.message_id),
+        modLogFor: modActionsFor,
+      }),
+      followSettingsElsewhere(),
+    ])
+      .then((stops) => cardStops.push(...stops))
+      .catch((err: unknown) => console.error("user card windows", err));
+  });
+  createEffect(on(modLogRevision, announceModLog, { defer: true }));
 
   // The moderated-channel list needs its own scope, so it is fetched once
   // the session has it: at sign-in, and again after a reconnect that

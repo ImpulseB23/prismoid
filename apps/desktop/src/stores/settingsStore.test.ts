@@ -107,6 +107,19 @@ describe("settingsStore", () => {
     });
   });
 
+  it("announces saves and re-reads what another window saved", async () => {
+    const storage = memStorage();
+    const here = createSettingsStore(appliers(), storage);
+    const there = createSettingsStore(appliers(), storage);
+    const announce = vi.fn();
+    here.onSave(announce);
+    await here.update({ highlightUsers: ["kit"] });
+    expect(announce).toHaveBeenCalledOnce();
+    expect(there.settings().highlightUsers).toEqual([]);
+    there.reload();
+    expect(there.settings().highlightUsers).toEqual(["kit"]);
+  });
+
   it("zoom steps along the ladder and clamps at the ends", async () => {
     const a = appliers();
     const store = createSettingsStore(a, memStorage());

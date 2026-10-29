@@ -5,6 +5,7 @@
 
 import { createSignal } from "solid-js";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { invoke } from "@tauri-apps/api/core";
 import type { StorageLike } from "./channelStore";
@@ -160,6 +161,10 @@ export interface SettingsStore {
   apply: () => Promise<void>;
   /** Re-applies zoom, for when the window moves to a display with another scale. */
   reapplyZoom: () => Promise<void>;
+  /** Re-reads what another window saved. */
+  reload: () => void;
+  /** Called after every save, to tell the app's other windows. */
+  onSave: (announce: () => void) => void;
 }
 
 const defaultAppliers: SettingsAppliers = {
@@ -184,6 +189,7 @@ export function createSettingsStore(
   appliers: SettingsAppliers = defaultAppliers,
   storage: StorageLike | null = defaultStorage(),
 ): SettingsStore {
+  let announce = () => {};
   const [settings, setSettings] = createSignal<Settings>(readSettings(storage));
 
   async function update(patch: Partial<Settings>): Promise<void> {
@@ -221,6 +227,7 @@ export function createSettingsStore(
       SETTINGS_KEY,
       JSON.stringify({ ...next, v: SETTINGS_VERSION }),
     );
+    announce();
   }
 
   function step(
@@ -258,6 +265,10 @@ export function createSettingsStore(
     textReset: () => update({ textSize: DEFAULT_TEXT_SIZE }),
     apply,
     reapplyZoom: () => appliers.zoom(settings().zoom),
+    reload: () => setSettings(readSettings(storage)),
+    onSave: (fn) => {
+      announce = fn;
+    },
   };
 }
 
@@ -443,6 +454,29 @@ function defaultStorage(): StorageLike | null {
 }
 
 const defaultStore = createSettingsStore();
+
+// User card windows share the main window's storage but keep their own
+// copy in memory, so each window announces its saves and re-reads the
+// others'.
+const SETTINGS_EVENT = "settings_changed";
+
+/** Keeps this window's settings in step with the app's other windows. */
+export async function followSettingsElsewhere(): Promise<UnlistenFn> {
+  const me = getCurrentWindow().label;
+  const off = await listen<{ from: string }>(SETTINGS_EVENT, (e) => {
+    if (e.payload.from !== me) defaultStore.reload();
+  });
+  defaultStore.onSave(
+    () =>
+      void emit(SETTINGS_EVENT, { from: me }).catch((err: unknown) =>
+        console.error("announce settings", err),
+      ),
+  );
+  return () => {
+    defaultStore.onSave(() => {});
+    off();
+  };
+}
 
 export const settings = defaultStore.settings;
 export const updateSettings = defaultStore.update;

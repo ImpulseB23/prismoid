@@ -35,7 +35,6 @@ import {
   viewport,
   type ChatMessage,
 } from "../stores/chatStore";
-import { requestMention } from "../stores/composerStore";
 import {
   FOLLOWERS_SCOPE,
   currentUserId,
@@ -46,7 +45,7 @@ import { getFollowSince } from "../lib/twitchChannel";
 import { modActionsFor, modLogRevision } from "../stores/modLogStore";
 import { describeModAction } from "../lib/modActions";
 import { formatSeconds } from "../lib/slashCommands";
-import { canModerate } from "../stores/roleStore";
+import { canModerateIn } from "../stores/roleStore";
 import {
   isIgnored,
   isUserHighlighted,
@@ -64,8 +63,6 @@ import {
   userInfoRevision,
 } from "../stores/userInfoStore";
 import MessageRow from "./MessageRow";
-import { jumpToMessage } from "../stores/jumpStore";
-import PaletteClose from "./PaletteClose";
 
 export interface CardUser {
   /** Channel the card was opened in; every action targets it. */
@@ -82,6 +79,10 @@ export interface UserCardProps {
   /** Signed-in login, so messages that mention it are highlighted. */
   login: string;
   onClose: () => void;
+  /** Starts a reply to them in the main window's chat box. */
+  onMention: (login: string) => void;
+  /** Shows one of their messages in the main window's chat. */
+  onJump: (msg: ChatMessage) => void;
 }
 
 const RECENT_LIMIT = 20;
@@ -96,9 +97,12 @@ const UserCard: Component<UserCardProps> = (props) => {
   // Free-text reason sent with the next timeout or ban. Twitch shows it to
   // other moderators, not to the chatter.
   const [reason, setReason] = createSignal("");
-  let dialogRef: HTMLDivElement | undefined;
+  let dialogRef: HTMLElement | undefined;
 
   const isSelf = () => props.user?.platform_user_id === currentUserId();
+  // The card acts in the channel it was opened from, whatever is on screen.
+  const moderates = () =>
+    props.user ? canModerateIn(props.user.channel_id) : false;
 
   // A new person starts fresh: their messages, no leftover notice or reason.
   createEffect(
@@ -167,7 +171,7 @@ const UserCard: Component<UserCardProps> = (props) => {
       const u = props.user;
       if (!u) return false;
       const own = u.platform_user_id === currentUserId();
-      const mod = canModerate() && !missingScopes().includes(FOLLOWERS_SCOPE);
+      const mod = moderates() && !missingScopes().includes(FOLLOWERS_SCOPE);
       return own || mod ? ([u.channel_id, u.platform_user_id] as const) : false;
     },
     ([channel, user]) => getFollowSince(channel, user),
@@ -212,447 +216,441 @@ const UserCard: Component<UserCardProps> = (props) => {
   return (
     <Show when={props.user}>
       {(u) => (
-        <div class="palette-backdrop" onMouseDown={close}>
-          <div
-            ref={(el) => (dialogRef = el)}
-            tabIndex={-1}
-            class="palette user-card"
-            role="dialog"
-            aria-modal="true"
-            aria-label={`${u().display_name} profile`}
-            onMouseDown={(e) => e.stopPropagation()}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") close();
-            }}
-          >
-            <div class="user-card__hero">
+        <main
+          ref={(el) => (dialogRef = el)}
+          tabIndex={-1}
+          class="user-card"
+          aria-label={`${u().display_name} profile`}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") close();
+          }}
+        >
+          <div class="user-card__hero">
+            <Show
+              when={profile()?.profile_image_url}
+              fallback={
+                <span class="user-card__avatar user-card__avatar--empty">
+                  {u().display_name.slice(0, 1)}
+                </span>
+              }
+            >
+              {(url) => (
+                <img
+                  class="user-card__avatar"
+                  src={url()}
+                  alt=""
+                  width={64}
+                  height={64}
+                  draggable={false}
+                />
+              )}
+            </Show>
+            <div class="user-card__who">
               <Show
-                when={profile()?.profile_image_url}
+                when={u().platform_user_id !== currentUserId()}
                 fallback={
-                  <span class="user-card__avatar user-card__avatar--empty">
-                    {u().display_name.slice(0, 1)}
+                  <span class="user-card__name user-card__name--self">
+                    {u().display_name}
                   </span>
                 }
               >
-                {(url) => (
-                  <img
-                    class="user-card__avatar"
-                    src={url()}
-                    alt=""
-                    width={64}
-                    height={64}
-                    draggable={false}
-                  />
-                )}
-              </Show>
-              <div class="user-card__who">
-                <Show
-                  when={u().platform_user_id !== currentUserId()}
-                  fallback={
-                    <span class="user-card__name user-card__name--self">
-                      {u().display_name}
-                    </span>
-                  }
+                <span
+                  class="user-card__name"
+                  classList={{ "name--painted": name().painted }}
+                  style={name().style}
                 >
-                  <span
-                    class="user-card__name"
-                    classList={{ "name--painted": name().painted }}
-                    style={name().style}
-                  >
-                    {u().display_name}
-                  </span>
-                </Show>
-                <Show when={u().username !== u().display_name.toLowerCase()}>
-                  <span class="user-card__login">{u().username}</span>
-                </Show>
-                <Show when={badges().length > 0}>
-                  <div class="user-card__badges">
-                    <For each={badges()}>
-                      {(b) => (
-                        <img
-                          class="user-card__badge"
-                          src={b.url_2x || b.url_1x}
-                          alt={b.title}
-                          title={b.title}
-                          width={18}
-                          height={18}
-                          draggable={false}
-                        />
-                      )}
-                    </For>
-                  </div>
-                </Show>
-              </div>
-              <PaletteClose onClick={close} />
+                  {u().display_name}
+                </span>
+              </Show>
+              <Show when={u().username !== u().display_name.toLowerCase()}>
+                <span class="user-card__login">{u().username}</span>
+              </Show>
+              <Show when={badges().length > 0}>
+                <div class="user-card__badges">
+                  <For each={badges()}>
+                    {(b) => (
+                      <img
+                        class="user-card__badge"
+                        src={b.url_2x || b.url_1x}
+                        alt={b.title}
+                        title={b.title}
+                        width={18}
+                        height={18}
+                        draggable={false}
+                      />
+                    )}
+                  </For>
+                </div>
+              </Show>
             </div>
+          </div>
 
-            <Show when={profile()?.description}>
-              {(d) => <p class="user-card__bio">{d()}</p>}
-            </Show>
+          <Show when={profile()?.description}>
+            {(d) => <p class="user-card__bio">{d()}</p>}
+          </Show>
 
-            <dl class="user-card__stats">
-              <Show when={profile()}>
-                {(p) => (
-                  <div
-                    classList={{
-                      "user-card__stat": true,
-                      "user-card__stat--warn": isNewAccount(p(), Date.now()),
-                    }}
-                  >
-                    <dt>Account</dt>
-                    <dd>{formatJoined(p().created_at, Date.now())}</dd>
-                  </div>
-                )}
-              </Show>
-              <Show when={following.state === "ready"}>
-                <div class="user-card__stat">
-                  <dt>Following</dt>
-                  <dd>
-                    {following()
-                      ? capitalize(formatSince(following()!, Date.now()))
-                      : "Not following"}
-                  </dd>
-                </div>
-              </Show>
-              <Show when={history().length > 0}>
-                <div class="user-card__stat">
-                  <dt>Mod actions</dt>
-                  <dd>{history().length}</dd>
-                </div>
-              </Show>
-            </dl>
-
-            {/* Mention, highlight and ignore are about someone else. */}
-            <Show when={!isSelf()}>
-              <div class="user-card__actions">
-                <button
-                  type="button"
-                  class="user-card__action"
-                  onClick={() => {
-                    requestMention(u().username);
-                    close();
+          <dl class="user-card__stats">
+            <Show when={profile()}>
+              {(p) => (
+                <div
+                  classList={{
+                    "user-card__stat": true,
+                    "user-card__stat--warn": isNewAccount(p(), Date.now()),
                   }}
                 >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <circle
-                      cx="8"
-                      cy="8"
-                      r="2.6"
-                      stroke="currentColor"
-                      stroke-width="1.5"
-                    />
-                    <path
-                      d="M10.6 8v1.2a1.9 1.9 0 0 0 3.8 0V8A6.4 6.4 0 1 0 11 13.4"
-                      stroke="currentColor"
-                      stroke-width="1.5"
-                      stroke-linecap="round"
-                    />
-                  </svg>
-                  Mention
-                </button>
-                <button
-                  type="button"
-                  class="user-card__action"
-                  aria-pressed={spotlit()}
-                  onClick={() =>
-                    void setUserHighlighted(u().username, !spotlit()).catch(
-                      (err: unknown) => console.error("highlight user", err),
-                    )
-                  }
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M8 1.8l1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.6l-3.8 2 .7-4.3-3.1-3 4.3-.6z"
-                      stroke="currentColor"
-                      stroke-width="1.4"
-                      stroke-linejoin="round"
-                      fill={spotlit() ? "currentColor" : "none"}
-                    />
-                  </svg>
-                  {spotlit() ? "Stop highlighting" : "Highlight"}
-                </button>
-                <button
-                  type="button"
-                  class="user-card__action"
-                  aria-pressed={ignored()}
-                  onClick={() =>
-                    void setIgnored(u().username, !ignored()).catch(
-                      (err: unknown) => console.error("ignore", err),
-                    )
-                  }
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <circle
-                      cx="8"
-                      cy="8"
-                      r="5.8"
-                      stroke="currentColor"
-                      stroke-width="1.5"
-                    />
-                    <path
-                      d="M4 4l8 8"
-                      stroke="currentColor"
-                      stroke-width="1.5"
-                      stroke-linecap="round"
-                    />
-                  </svg>
-                  {ignored() ? "Unignore" : "Ignore"}
-                </button>
-                <button
-                  type="button"
-                  class="user-card__action"
-                  onClick={() =>
-                    void openUrl(`https://www.twitch.tv/${u().username}`).catch(
-                      (err: unknown) => console.error("open profile", err),
-                    )
-                  }
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M6.5 3.5h-3v9h9v-3M9.5 2.5h4v4M13.5 2.5 7.5 8.5"
-                      stroke="currentColor"
-                      stroke-width="1.5"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                  Twitch
-                </button>
-              </div>
-            </Show>
-
-            <Show when={moderationNeedsReconnect()}>
-              <div class="user-card__note">
-                Moderation needs new Twitch permissions. Reconnect in Settings.
-              </div>
-            </Show>
-            <Show when={canModerate()}>
-              <div class="user-card__mod">
-                <input
-                  type="text"
-                  class="settings__input user-card__reason"
-                  placeholder="Reason (other mods see it)"
-                  value={reason()}
-                  onInput={(e) => setReason(e.currentTarget.value)}
-                />
-                <div class="user-card__mod-row">
-                  <div class="segmented" role="group" aria-label="Timeout">
-                    <For each={settings().timeoutPresets}>
-                      {(seconds) => (
-                        <button
-                          type="button"
-                          class="segmented__btn"
-                          disabled={busy()}
-                          title={`Time out for ${formatSeconds(seconds)}`}
-                          onClick={() =>
-                            void runMod(
-                              "timeout",
-                              () =>
-                                timeoutUser(
-                                  u().channel_id,
-                                  u().platform_user_id,
-                                  seconds,
-                                  reason().trim() || undefined,
-                                ),
-                              `Timed out ${u().display_name} for ${formatSeconds(seconds)}.`,
-                            )
-                          }
-                        >
-                          {formatSeconds(seconds)}
-                        </button>
-                      )}
-                    </For>
-                  </div>
-                  <span class="user-card__mod-end">
-                    <button
-                      type="button"
-                      class="btn btn--small"
-                      disabled={busy()}
-                      onClick={() =>
-                        void runMod(
-                          "unban",
-                          () => unbanUser(u().channel_id, u().platform_user_id),
-                          `Unbanned ${u().display_name}.`,
-                        )
-                      }
-                    >
-                      {pending() === "unban" ? "Unbanning…" : "Unban"}
-                    </button>
-                    <Show
-                      when={pending() === "confirm_ban"}
-                      fallback={
-                        <button
-                          type="button"
-                          class="btn btn--small btn--danger"
-                          disabled={busy()}
-                          onClick={() => setPending("confirm_ban")}
-                        >
-                          Ban
-                        </button>
-                      }
-                    >
-                      <button
-                        type="button"
-                        class="btn btn--small btn--danger btn--armed"
-                        onClick={() =>
-                          void runMod(
-                            "ban",
-                            () =>
-                              banUser(
-                                u().channel_id,
-                                u().platform_user_id,
-                                reason().trim() || undefined,
-                              ),
-                            `Banned ${u().display_name}.`,
-                          )
-                        }
-                      >
-                        Confirm ban
-                      </button>
-                    </Show>
-                  </span>
-                </div>
-              </div>
-            </Show>
-
-            <Show when={notice()}>
-              {(n) => (
-                <div class="user-card__notice" role="status">
-                  {n()}
+                  <dt>Account</dt>
+                  <dd>{formatJoined(p().created_at, Date.now())}</dd>
                 </div>
               )}
             </Show>
+            <Show when={following.state === "ready"}>
+              <div class="user-card__stat">
+                <dt>Following</dt>
+                <dd>
+                  {following()
+                    ? capitalize(formatSince(following()!, Date.now()))
+                    : "Not following"}
+                </dd>
+              </div>
+            </Show>
+            <Show when={history().length > 0}>
+              <div class="user-card__stat">
+                <dt>Mod actions</dt>
+                <dd>{history().length}</dd>
+              </div>
+            </Show>
+          </dl>
 
-            <div class="user-card__tabs" role="tablist">
+          {/* Mention, highlight and ignore are about someone else. */}
+          <Show when={!isSelf()}>
+            <div class="user-card__actions">
+              <button
+                type="button"
+                class="user-card__action"
+                onClick={() => {
+                  props.onMention(u().username);
+                  close();
+                }}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <circle
+                    cx="8"
+                    cy="8"
+                    r="2.6"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  />
+                  <path
+                    d="M10.6 8v1.2a1.9 1.9 0 0 0 3.8 0V8A6.4 6.4 0 1 0 11 13.4"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                  />
+                </svg>
+                Mention
+              </button>
+              <button
+                type="button"
+                class="user-card__action"
+                aria-pressed={spotlit()}
+                onClick={() =>
+                  void setUserHighlighted(u().username, !spotlit()).catch(
+                    (err: unknown) => console.error("highlight user", err),
+                  )
+                }
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M8 1.8l1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.6l-3.8 2 .7-4.3-3.1-3 4.3-.6z"
+                    stroke="currentColor"
+                    stroke-width="1.4"
+                    stroke-linejoin="round"
+                    fill={spotlit() ? "currentColor" : "none"}
+                  />
+                </svg>
+                {spotlit() ? "Stop highlighting" : "Highlight"}
+              </button>
+              <button
+                type="button"
+                class="user-card__action"
+                aria-pressed={ignored()}
+                onClick={() =>
+                  void setIgnored(u().username, !ignored()).catch(
+                    (err: unknown) => console.error("ignore", err),
+                  )
+                }
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <circle
+                    cx="8"
+                    cy="8"
+                    r="5.8"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  />
+                  <path
+                    d="M4 4l8 8"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                  />
+                </svg>
+                {ignored() ? "Unignore" : "Ignore"}
+              </button>
+              <button
+                type="button"
+                class="user-card__action"
+                onClick={() =>
+                  void openUrl(`https://www.twitch.tv/${u().username}`).catch(
+                    (err: unknown) => console.error("open profile", err),
+                  )
+                }
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M6.5 3.5h-3v9h9v-3M9.5 2.5h4v4M13.5 2.5 7.5 8.5"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                Twitch
+              </button>
+            </div>
+          </Show>
+
+          <Show when={moderationNeedsReconnect()}>
+            <div class="user-card__note">
+              Moderation needs new Twitch permissions. Reconnect in Settings.
+            </div>
+          </Show>
+          <Show when={moderates()}>
+            <div class="user-card__mod">
+              <input
+                type="text"
+                class="settings__input user-card__reason"
+                placeholder="Reason (other mods see it)"
+                value={reason()}
+                onInput={(e) => setReason(e.currentTarget.value)}
+              />
+              <div class="user-card__mod-row">
+                <div class="segmented" role="group" aria-label="Timeout">
+                  <For each={settings().timeoutPresets}>
+                    {(seconds) => (
+                      <button
+                        type="button"
+                        class="segmented__btn"
+                        disabled={busy()}
+                        title={`Time out for ${formatSeconds(seconds)}`}
+                        onClick={() =>
+                          void runMod(
+                            "timeout",
+                            () =>
+                              timeoutUser(
+                                u().channel_id,
+                                u().platform_user_id,
+                                seconds,
+                                reason().trim() || undefined,
+                              ),
+                            `Timed out ${u().display_name} for ${formatSeconds(seconds)}.`,
+                          )
+                        }
+                      >
+                        {formatSeconds(seconds)}
+                      </button>
+                    )}
+                  </For>
+                </div>
+                <span class="user-card__mod-end">
+                  <button
+                    type="button"
+                    class="btn btn--small"
+                    disabled={busy()}
+                    onClick={() =>
+                      void runMod(
+                        "unban",
+                        () => unbanUser(u().channel_id, u().platform_user_id),
+                        `Unbanned ${u().display_name}.`,
+                      )
+                    }
+                  >
+                    {pending() === "unban" ? "Unbanning…" : "Unban"}
+                  </button>
+                  <Show
+                    when={pending() === "confirm_ban"}
+                    fallback={
+                      <button
+                        type="button"
+                        class="btn btn--small btn--danger"
+                        disabled={busy()}
+                        onClick={() => setPending("confirm_ban")}
+                      >
+                        Ban
+                      </button>
+                    }
+                  >
+                    <button
+                      type="button"
+                      class="btn btn--small btn--danger btn--armed"
+                      onClick={() =>
+                        void runMod(
+                          "ban",
+                          () =>
+                            banUser(
+                              u().channel_id,
+                              u().platform_user_id,
+                              reason().trim() || undefined,
+                            ),
+                          `Banned ${u().display_name}.`,
+                        )
+                      }
+                    >
+                      Confirm ban
+                    </button>
+                  </Show>
+                </span>
+              </div>
+            </div>
+          </Show>
+
+          <Show when={notice()}>
+            {(n) => (
+              <div class="user-card__notice" role="status">
+                {n()}
+              </div>
+            )}
+          </Show>
+
+          <div class="user-card__tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              class="user-card__tab"
+              aria-selected={tab() === "messages"}
+              onClick={() => setTab("messages")}
+            >
+              Messages
+              <span class="user-card__tab-count">{recent().length}</span>
+            </button>
+            <Show when={history().length > 0}>
               <button
                 type="button"
                 role="tab"
                 class="user-card__tab"
-                aria-selected={tab() === "messages"}
-                onClick={() => setTab("messages")}
+                aria-selected={tab() === "history"}
+                onClick={() => setTab("history")}
               >
-                Messages
-                <span class="user-card__tab-count">{recent().length}</span>
+                Mod history
+                <span class="user-card__tab-count">{history().length}</span>
               </button>
-              <Show when={history().length > 0}>
-                <button
-                  type="button"
-                  role="tab"
-                  class="user-card__tab"
-                  aria-selected={tab() === "history"}
-                  onClick={() => setTab("history")}
-                >
-                  Mod history
-                  <span class="user-card__tab-count">{history().length}</span>
-                </button>
-              </Show>
-            </div>
-
-            <div class="palette__body user-card__list" role="tabpanel">
-              <Show when={tab() === "history" && history().length > 0}>
-                <For each={history()}>
-                  {(a) => (
-                    <div class="user-card__history-row">
-                      <span class="msg-row__time">
-                        {formatTimestamp(a.timestamp)}
-                      </span>
-                      <span>{describeModAction(a)}</span>
-                    </div>
-                  )}
-                </For>
-              </Show>
-              <Show when={tab() === "messages" || history().length === 0}>
-                <Show
-                  when={recent().length > 0}
-                  fallback={
-                    <div class="palette__empty palette__empty--center">
-                      Nothing from {u().display_name} in this session yet.
-                    </div>
-                  }
-                >
-                  <ol class="msg-list">
-                    <For each={recent()}>
-                      {(m) => (
-                        <MessageRow
-                          msg={m}
-                          hideName
-                          onClick={() => {
-                            close();
-                            jumpToMessage(m.channel_id, m.id);
-                          }}
-                          mention={isHighlighted(
-                            m.message_text,
-                            props.login,
-                            settings().highlightPhrases,
-                          )}
-                          trailing={
-                            <Show when={!m.deleted && canModerate()}>
-                              <button
-                                type="button"
-                                class="msg-row__delete"
-                                title="Delete message"
-                                aria-label="Delete message"
-                                disabled={busy()}
-                                onClick={() =>
-                                  void runMod(
-                                    "delete",
-                                    async () => {
-                                      await deleteMessage(m.channel_id, m.id);
-                                      markMessageDeleted(m.id);
-                                    },
-                                    "Message deleted.",
-                                  )
-                                }
-                              >
-                                <svg
-                                  width="10"
-                                  height="10"
-                                  viewBox="0 0 10 10"
-                                  aria-hidden="true"
-                                >
-                                  <path
-                                    d="M2 2l6 6M8 2l-6 6"
-                                    stroke="currentColor"
-                                    stroke-width="1.5"
-                                    stroke-linecap="round"
-                                  />
-                                </svg>
-                              </button>
-                            </Show>
-                          }
-                        />
-                      )}
-                    </For>
-                  </ol>
-                </Show>
-              </Show>
-            </div>
+            </Show>
           </div>
-        </div>
+
+          <div class="palette__body user-card__list" role="tabpanel">
+            <Show when={tab() === "history" && history().length > 0}>
+              <For each={history()}>
+                {(a) => (
+                  <div class="user-card__history-row">
+                    <span class="msg-row__time">
+                      {formatTimestamp(a.timestamp)}
+                    </span>
+                    <span>{describeModAction(a)}</span>
+                  </div>
+                )}
+              </For>
+            </Show>
+            <Show when={tab() === "messages" || history().length === 0}>
+              <Show
+                when={recent().length > 0}
+                fallback={
+                  <div class="palette__empty palette__empty--center">
+                    Nothing from {u().display_name} in this session yet.
+                  </div>
+                }
+              >
+                <ol class="msg-list">
+                  <For each={recent()}>
+                    {(m) => (
+                      <MessageRow
+                        msg={m}
+                        hideName
+                        onClick={() => {
+                          close();
+                          props.onJump(m);
+                        }}
+                        mention={isHighlighted(
+                          m.message_text,
+                          props.login,
+                          settings().highlightPhrases,
+                        )}
+                        trailing={
+                          <Show when={!m.deleted && moderates()}>
+                            <button
+                              type="button"
+                              class="msg-row__delete"
+                              title="Delete message"
+                              aria-label="Delete message"
+                              disabled={busy()}
+                              onClick={() =>
+                                void runMod(
+                                  "delete",
+                                  async () => {
+                                    await deleteMessage(m.channel_id, m.id);
+                                    markMessageDeleted(m.id);
+                                  },
+                                  "Message deleted.",
+                                )
+                              }
+                            >
+                              <svg
+                                width="10"
+                                height="10"
+                                viewBox="0 0 10 10"
+                                aria-hidden="true"
+                              >
+                                <path
+                                  d="M2 2l6 6M8 2l-6 6"
+                                  stroke="currentColor"
+                                  stroke-width="1.5"
+                                  stroke-linecap="round"
+                                />
+                              </svg>
+                            </button>
+                          </Show>
+                        }
+                      />
+                    )}
+                  </For>
+                </ol>
+              </Show>
+            </Show>
+          </div>
+        </main>
       )}
     </Show>
   );

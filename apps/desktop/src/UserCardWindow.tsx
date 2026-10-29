@@ -1,17 +1,22 @@
-// Root of a user card window. Shows who the card is for, with a title bar
-// to drag, pin, minimize and close it; the card body itself lands with the
-// user card rework.
+// Root of a user card window: a title bar to drag, pin, minimize and close
+// it, and the user card below. The window loads its own data (see
+// cardSession) and hands mentions and jumps to the main window.
 
 import {
   Component,
   Show,
+  createEffect,
   createRenderEffect,
   createSignal,
+  on,
   onCleanup,
   onMount,
 } from "solid-js";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import type { CardUser } from "./components/UserCard";
+import UserCard, { type CardUser } from "./components/UserCard";
+import { sendJump, sendMention } from "./lib/cardBridge";
+import { showCardUser, startCardSession } from "./lib/cardSession";
+import { authStatus } from "./stores/authStore";
 import {
   cardReady,
   closeUserCard,
@@ -58,6 +63,53 @@ const UserCardWindow: Component = () => {
         if (!disposed) void cardReady().catch(report("failed to show card"));
       });
   });
+
+  onMount(() => {
+    let stop: (() => void) | undefined;
+    let disposed = false;
+    onCleanup(() => {
+      disposed = true;
+      stop?.();
+    });
+    startCardSession()
+      .then((s) => {
+        if (disposed) s();
+        else stop = s;
+      })
+      .catch(report("failed to start card session"));
+  });
+
+  // Each person shown loads their own history and mod log; a reuse for
+  // someone else stops the previous one.
+  createEffect(
+    on(
+      () => {
+        const u = user();
+        return u ? `${u.channel_id}:${u.platform_user_id}` : null;
+      },
+      (key) => {
+        const u = user();
+        if (!key || !u) return;
+        let stop: (() => void) | undefined;
+        let disposed = false;
+        onCleanup(() => {
+          disposed = true;
+          stop?.();
+        });
+        showCardUser(u)
+          .then((s) => {
+            if (disposed) s();
+            else stop = s;
+          })
+          .catch(report("failed to load card"));
+      },
+    ),
+  );
+
+  const login = () => {
+    const a = authStatus();
+    return a?.state === "logged_in" ? a.login : "";
+  };
 
   const togglePin = () => {
     const next = !pinned();
@@ -123,13 +175,15 @@ const UserCardWindow: Component = () => {
           </svg>
         </button>
       </div>
-      <Show when={user()}>
-        {(u) => (
-          <p>
-            {u().display_name} (@{u().username})
-          </p>
-        )}
-      </Show>
+      <UserCard
+        user={user()}
+        login={login()}
+        onClose={() =>
+          void closeUserCard().catch(report("failed to close card"))
+        }
+        onMention={sendMention}
+        onJump={(m) => sendJump(m.channel_id, m.id)}
+      />
     </div>
   );
 };
