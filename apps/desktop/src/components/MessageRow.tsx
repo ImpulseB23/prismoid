@@ -27,6 +27,8 @@ export interface MessageRowProps {
   unread?: boolean;
   /** Indented under the message above, for replies in a thread. */
   reply?: boolean;
+  /** One tight line, time then text, for a single chatter's history. */
+  compact?: boolean;
   onClick?: () => void;
 }
 
@@ -41,6 +43,7 @@ const MessageRow: Component<MessageRowProps> = (props) => (
         "msg-row--action": props.onClick !== undefined,
         "msg-row--mention": props.mention === true,
         "msg-row--unread": props.unread === true,
+        "msg-row--compact": props.compact === true,
         "msg-row--deleted": props.msg.deleted === true,
       }}
     >

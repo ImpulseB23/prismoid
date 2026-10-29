@@ -10,10 +10,15 @@ import type { CardUser } from "./components/UserCard";
 
 const minimize = vi.fn(async () => {});
 vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({ minimize }),
+  getCurrentWindow: () => ({
+    minimize,
+    onScaleChanged: async () => () => {},
+    scaleFactor: async () => 1,
+  }),
 }));
+const setZoom = vi.fn(async () => {});
 vi.mock("@tauri-apps/api/webview", () => ({
-  getCurrentWebview: () => ({ setZoom: vi.fn() }),
+  getCurrentWebview: () => ({ setZoom }),
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
@@ -104,6 +109,12 @@ describe("UserCardWindow", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "BOB (@bob)" }));
     expect(bridge.sendMention).toHaveBeenCalledWith("bob");
+  });
+
+  it("applies the app's zoom to the card", async () => {
+    card.currentCardUser.mockResolvedValue(user("ann"));
+    render(() => <UserCardWindow />);
+    await waitFor(() => expect(setZoom).toHaveBeenCalled());
   });
 
   it("still shows when the user cannot be loaded", async () => {
