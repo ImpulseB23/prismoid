@@ -28,6 +28,28 @@ export function playerUrl(login: string, parent: string): string {
   return url.toString();
 }
 
+/**
+ * Twitch's player for `login`, sandboxed so it cannot navigate the window
+ * away or open new ones. Shared by the preview and the pop-out window.
+ */
+export const PlayerFrame: Component<{
+  login: string;
+  name: string;
+  width?: number;
+  height?: number;
+}> = (props) => (
+  <iframe
+    class="stream-video__player"
+    src={playerUrl(props.login, location.hostname)}
+    title={`${props.name}'s stream`}
+    width={props.width}
+    height={props.height}
+    allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+    allowfullscreen
+    sandbox="allow-scripts allow-same-origin allow-presentation"
+  />
+);
+
 export type VideoFit = { width: number; height: number } | "narrow" | "short";
 
 /**
@@ -73,15 +95,11 @@ const StreamVideo: Component<{ login: string; name: string }> = (props) => {
         }
       >
         {(s) => (
-          <iframe
-            class="stream-video__player"
-            src={playerUrl(props.login, location.hostname)}
-            title={`${props.name}'s stream`}
+          <PlayerFrame
+            login={props.login}
+            name={props.name}
             width={s().width}
             height={s().height}
-            allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-            allowfullscreen
-            sandbox="allow-scripts allow-same-origin allow-presentation"
           />
         )}
       </Show>

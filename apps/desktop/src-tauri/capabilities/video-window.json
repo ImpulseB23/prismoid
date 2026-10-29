@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "video-window",
+  "description": "Pop-out stream players: fullscreen when the player asks, and log",
+  "windows": ["video-*"],
+  "permissions": ["core:window:allow-set-fullscreen", "log:default"]
+}

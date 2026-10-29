@@ -2904,6 +2904,10 @@ option::checkmark {
   margin-left: auto;
 }
 
+.stream-bar__video + .stream-bar__video {
+  margin-left: 2px;
+}
+
 .stream-bar__video:hover {
   color: var(--text);
   background: var(--hover);
@@ -4330,6 +4334,17 @@ option::checkmark {
 .stream-video__player {
   display: block;
   border: 0;
+}
+
+/* A pop-out player: the player and nothing else, edge to edge. */
+.video-window {
+  height: 100%;
+  background: #000;
+}
+
+.video-window .stream-video__player {
+  width: 100%;
+  height: 100%;
 }
 
 .stream-video__small {
