@@ -9,15 +9,12 @@ import {
   hoveredEmote,
   largeUrl,
 } from "../stores/emoteCardStore";
-import { useSession } from "../lib/chatSession";
-import { activeChannel } from "../stores/channelStore";
 import ProviderIcon from "./ProviderIcon";
 
 const EDGE_GAP = 8;
 const ANCHOR_GAP = 8;
 
 const EmoteTooltip: Component = () => {
-  const session = useSession();
   let ref: HTMLDivElement | undefined;
 
   createEffect(() => {
@@ -54,12 +51,12 @@ const EmoteTooltip: Component = () => {
     <Show when={hoveredEmote()}>
       {(h) => {
         const setName = () => {
-          const emotes = session().emotes;
-          emotes.revision();
+          const session = h().pane?.session();
+          session?.emotes.revision();
           return emoteSetName(
             h().emote,
-            emotes.scopeOf(h().emote),
-            activeChannel()?.display_name,
+            session?.emotes.scopeOf(h().emote),
+            session?.channel?.display_name,
           );
         };
         return (

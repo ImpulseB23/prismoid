@@ -3,9 +3,8 @@
 
 import { Component, For, Show, createEffect, createMemo } from "solid-js";
 import type { ChatMessage } from "../stores/chatStore";
-import { useSession } from "../lib/chatSession";
-import { closeThread, threadRoot, threadRootOf } from "../stores/threadStore";
-import { requestReply } from "../stores/composerStore";
+import { threadRootOf } from "../stores/threadStore";
+import { requirePane } from "../lib/pane";
 import MessageRow from "./MessageRow";
 import { jumpToMessage } from "../stores/jumpStore";
 import PaletteClose from "./PaletteClose";
@@ -13,7 +12,10 @@ import PaletteClose from "./PaletteClose";
 export const MAX_REPLIES = 200;
 
 const Thread: Component = () => {
-  const session = useSession();
+  const pane = requirePane();
+  const session = pane.session;
+  const { root: threadRoot, close: closeThread } = pane.thread;
+  const { requestReply } = pane.composer;
   let dialogRef: HTMLDivElement | undefined;
 
   createEffect(() => {

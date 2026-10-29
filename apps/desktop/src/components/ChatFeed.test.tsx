@@ -67,7 +67,6 @@ const { setAuthStatus } = await import("../stores/authStore");
 const { clearJump, jumpRequest, jumpToMessage } =
   await import("../stores/jumpStore");
 const { focusChannel } = await import("../stores/channelStore");
-const { notice } = await import("../stores/noticeStore");
 const { ownBadges } = await import("../stores/ownIdentityStore");
 const { closeContextMenu, contextMenu } =
   await import("../stores/contextMenuStore");
@@ -233,11 +232,13 @@ describe("ChatFeed", () => {
   });
 
   it("says when the message is gone, and opens another channel first", async () => {
-    renderFeed("me");
+    const { container } = renderFeed("me");
     await tick();
     jumpToMessage("chan", "missing");
     await tick();
-    expect(notice()).toBe("That message is no longer in the loaded chat");
+    expect(container.querySelector(".feed__toast")?.textContent).toBe(
+      "That message is no longer in the loaded chat",
+    );
 
     jumpToMessage("elsewhere", "m1");
     await tick();

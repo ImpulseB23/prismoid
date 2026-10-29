@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import type { ChatMessage } from "../stores/chatStore";
-import { SessionProvider, type ChatSession } from "../lib/chatSession";
+import type { ChatSession } from "../lib/chatSession";
+import { PaneProvider, type Pane } from "../lib/pane";
 
 const msg = (id: string, text: string, thread: string | null): ChatMessage =>
   ({
@@ -29,12 +30,16 @@ const session = {
   },
 } as unknown as ChatSession;
 const reply = vi.fn();
-vi.mock("../stores/composerStore", () => ({
-  requestReply: (t: unknown) => reply(t),
-}));
 
-const { openThread, threadRoot, threadRootOf } =
+const { createThreadPanel, threadRootOf } =
   await import("../stores/threadStore");
+const thread = createThreadPanel();
+const { open: openThread, root: threadRoot } = thread;
+const pane = {
+  session: () => session,
+  thread,
+  composer: { requestReply: (t: unknown) => reply(t) },
+} as unknown as Pane;
 const { default: Thread } = await import("./Thread");
 
 describe("threadRootOf", () => {
@@ -58,9 +63,9 @@ describe("Thread", () => {
     loaded.push(msg("r1", "agree", "root"), msg("r2", "nah", "root"));
     loaded.push(msg("x", "unrelated", null));
     render(() => (
-      <SessionProvider value={() => session}>
+      <PaneProvider value={pane}>
         <Thread />
-      </SessionProvider>
+      </PaneProvider>
     ));
     openThread(loaded[1]!);
     const rows = screen.getAllByRole("listitem");
@@ -79,9 +84,9 @@ describe("Thread", () => {
   it("quotes the original when it is no longer loaded", () => {
     loaded.push(msg("r1", "agree", "gone"));
     render(() => (
-      <SessionProvider value={() => session}>
+      <PaneProvider value={pane}>
         <Thread />
-      </SessionProvider>
+      </PaneProvider>
     ));
     openThread(loaded[0]!);
     expect(screen.getAllByRole("listitem")[0]!.textContent).toContain(

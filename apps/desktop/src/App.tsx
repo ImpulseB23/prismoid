@@ -58,7 +58,9 @@ import ModPopover from "./components/ModPopover";
 import { installContextMenus } from "./lib/appContextMenu";
 import { startChatRouter } from "./lib/chatRouter";
 import { announceModLog, serveCards } from "./lib/cardBridge";
-import { requestMention } from "./stores/composerStore";
+import { focusedPane } from "./lib/pane";
+import EmoteCard from "./components/EmoteCard";
+import EmoteTooltip from "./components/EmoteTooltip";
 import { jumpToMessage } from "./stores/jumpStore";
 import { modActionsFor, modLogRevision } from "./stores/modLogStore";
 import { followSettingsElsewhere, settings } from "./stores/settingsStore";
@@ -129,7 +131,7 @@ const App: Component = () => {
   onMount(() => {
     Promise.all([
       serveCards({
-        mention: requestMention,
+        mention: (login) => focusedPane()?.composer.requestMention(login),
         jump: (j) => jumpToMessage(j.channel_id, j.message_id),
         modLogFor: modActionsFor,
       }),
@@ -197,6 +199,8 @@ const App: Component = () => {
       </Switch>
       <ContextMenu />
       <ModPopover />
+      <EmoteCard />
+      <EmoteTooltip />
       <UpdateScreen
         state={updateState}
         onRetry={() => void installUpdate()}
