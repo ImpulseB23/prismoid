@@ -184,6 +184,25 @@ describe("StreamManager", () => {
     expect(screen.queryByRole("note")).toBeNull();
   });
 
+  it("rolls up on a click outside, but not inside or on its button", () => {
+    signIn();
+    render(() => (
+      <>
+        <button type="button" data-stream-manager-toggle>
+          toggle
+        </button>
+        <p>chat</p>
+        <StreamManager />
+      </>
+    ));
+    setStreamManagerOpen(true);
+    fireEvent.pointerDown(curtain()!);
+    fireEvent.pointerDown(screen.getByText("toggle"));
+    expect(curtain()).not.toBeNull();
+    fireEvent.pointerDown(screen.getByText("chat"));
+    expect(curtain()?.classList.contains("sm-curtain--closing")).toBe(true);
+  });
+
   it("resizes with the keyboard and by dragging, and remembers it", () => {
     signIn();
     render(() => <StreamManager />);
