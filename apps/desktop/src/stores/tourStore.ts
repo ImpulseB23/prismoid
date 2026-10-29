@@ -39,8 +39,8 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     target: "chat-modes",
-    title: "Chat modes live here",
-    body: "Slow mode, followers-only, subs-only and the rest. The bar shows what is on right now.",
+    title: "Your chat manager",
+    body: "Chat modes, the AutoMod queue and the mod log, all in the tab on the right edge of the chat.",
   },
   {
     section: "appearance",

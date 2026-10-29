@@ -160,9 +160,9 @@ const CommandCenter: Component = () => {
         class="cc-handle"
         classList={{ "cc-handle--open": open() }}
         data-tour="chat-modes"
-        aria-label="Command center"
+        aria-label="Chat manager"
         aria-expanded={open()}
-        title="Command center"
+        title="Chat manager"
         onClick={() => setOpen((o) => !o)}
       >
         <svg width="10" height="14" viewBox="0 0 10 14" aria-hidden="true">
@@ -183,7 +183,7 @@ const CommandCenter: Component = () => {
         <aside
           ref={(el) => (panelRef = el)}
           class="cc"
-          aria-label="Command center"
+          aria-label="Chat manager"
         >
           <div class="cc__head">
             <span
@@ -195,7 +195,7 @@ const CommandCenter: Component = () => {
             <button
               type="button"
               class="icon-btn"
-              aria-label="Close command center"
+              aria-label="Close chat manager"
               onClick={() => setOpen(false)}
             >
               <svg
