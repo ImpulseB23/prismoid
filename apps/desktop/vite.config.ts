@@ -15,6 +15,13 @@ export default defineConfig(({ mode }) => ({
   server: {
     port: 5173,
     strictPort: true,
+    // As in the create-tauri-app template: cargo writes thousands of files
+    // under src-tauri/target while it builds, and watching them kept the
+    // dev server too busy to answer the window's first request for over a
+    // minute, which left the dev window black.
+    watch: {
+      ignored: ["**/src-tauri/**"],
+    },
   },
   build: {
     target: "esnext",
