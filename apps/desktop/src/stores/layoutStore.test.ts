@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createSignal } from "solid-js";
 import { MAX_PANES, createLayoutStore } from "./layoutStore";
 
 function memStorage(initial?: unknown) {
@@ -117,5 +118,34 @@ describe("layoutStore", () => {
     );
     expect(channels(broken)).toEqual(["z"]);
     expect(channels(createLayoutStore(memStorage("nope")))).toEqual([null]);
+  });
+
+  it("refuses splits and video while their features are off", () => {
+    const [split, setSplit] = createSignal(true);
+    const [video, setVideo] = createSignal(true);
+    const s = createLayoutStore(memStorage(), { split, video });
+    s.show("a");
+    s.split("b");
+    s.setVideo(s.focusedId(), true);
+    setSplit(false);
+    setVideo(false);
+    expect(s.canSplit()).toBe(false);
+    expect(s.split("c")).toBe(false);
+    s.collapse();
+    expect(channels(s)).toEqual(["b"]);
+    s.toggleVideo(s.focusedId());
+    expect(s.panes()[0]!.video).toBe(false);
+    s.setVideo(s.focusedId(), true);
+    expect(s.panes()[0]!.video).toBe(false);
+  });
+
+  it("clears every pane's video", () => {
+    const s = createLayoutStore(memStorage());
+    s.show("a");
+    s.setVideo(s.focusedId(), true);
+    s.split("b");
+    s.setVideo(s.focusedId(), true);
+    s.clearVideo();
+    expect(s.panes().map((p) => p.video)).toEqual([false, false]);
   });
 });

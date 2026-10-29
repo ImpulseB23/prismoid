@@ -153,6 +153,7 @@ pub fn run() {
             user_card::user_card_set_pinned,
             user_card::user_card_close,
             video_window::video_window_open,
+            video_window::video_windows_close,
             twitch_chat_settings::twitch_get_chat_settings,
             twitch_chat_settings::twitch_update_chat_settings,
             twitch_channel_info::twitch_get_channel_info,

@@ -6,6 +6,7 @@ import { createSignal } from "solid-js";
 
 export const SETTINGS_SECTIONS = [
   "account",
+  "features",
   "appearance",
   "chat",
   "highlights",
