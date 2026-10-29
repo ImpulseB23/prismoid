@@ -24,7 +24,7 @@ const BUNDLE_LOG_BYTES: u64 = 200 * 1024;
 pub fn plugin<R: Runtime>() -> TauriPlugin<R> {
     let builder = tauri_plugin_log::Builder::new()
         .level(log::LevelFilter::Info)
-        .level_for("prismoid", log::LevelFilter::Debug)
+        .level_for("prismoid_lib", log::LevelFilter::Debug)
         .max_file_size(MAX_FILE_SIZE)
         .rotation_strategy(RotationStrategy::KeepSome(KEEP_FILES))
         .timezone_strategy(TimezoneStrategy::UseLocal)

@@ -639,6 +639,13 @@ func HandleSendChatMessage(ctx context.Context, cmd control.Command, notify twit
 	}
 	first := resp.Data[0]
 	if !first.IsSent {
+		logger.Warn().
+			Str("broadcaster", cmd.BroadcasterID).
+			Str("code", first.DropReason.Code).
+			Str("reason", first.DropReason.Message).
+			Bool("reply", cmd.ReplyParentMessageID != "").
+			Int("bytes", len(cmd.Message)).
+			Msg("twitch dropped the chat message")
 		reply(SendChatResultPayload{
 			DropCode:    first.DropReason.Code,
 			DropMessage: first.DropReason.Message,
