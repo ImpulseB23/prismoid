@@ -80,6 +80,16 @@ const MessageRow: Component<MessageRowProps> = (props) => (
           </span>
         </span>
         <span class="msg-row__text">
+          {/* Subs, gifts, raids and moderation carry their line here; a
+              notice may also have the chatter's own words after it. */}
+          <Show when={props.msg.notice}>
+            {(n) => (
+              <span class="msg-row__notice">
+                {n().system_message}
+                {props.msg.message_text ? " " : ""}
+              </span>
+            )}
+          </Show>
           <MessagePieces
             pieces={splitMessage(
               props.msg.message_text,
