@@ -138,7 +138,9 @@ const CategoryPicker: Component<{
           ref={(el) => (inputRef = el)}
           onInput={(e) => onQuery(e.currentTarget.value)}
           onKeyDown={(e) => {
-            if (e.key === "Escape") close();
+            if (e.key !== "Escape") return;
+            e.preventDefault();
+            close();
           }}
         />
         <Show when={query().trim()}>

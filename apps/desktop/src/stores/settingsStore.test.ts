@@ -101,6 +101,7 @@ describe("settingsStore", () => {
       setupDone: false,
       mentionAlerts: true,
       theme: "dark",
+      streamManagerHeight: 0.58,
     });
   });
 
@@ -228,6 +229,7 @@ describe("settingsStore", () => {
       setupDone: false,
       mentionAlerts: false,
       theme: "dark",
+      streamManagerHeight: 0.58,
     });
 
     const badZoom = createSettingsStore(
@@ -382,6 +384,20 @@ describe("settingsStore lists", () => {
     expect(parseDurations("5m, nope, 5m")).toEqual([300]);
     expect(parseDurations("nope")).toBeNull();
     expect(parseDurations("3w")).toEqual([60, 600, 3600, 86_400]);
+  });
+
+  it("keeps a stream manager height only within bounds", () => {
+    const height = (v: unknown) =>
+      createSettingsStore(
+        appliers(),
+        memStorage({
+          "prismoid.settings": JSON.stringify({ streamManagerHeight: v }),
+        }),
+      ).settings().streamManagerHeight;
+    expect(height(0.7)).toBe(0.7);
+    expect(height(0.2)).toBe(0.58);
+    expect(height(0.9)).toBe(0.58);
+    expect(height("0.7")).toBe(0.58);
   });
 
   it("parseList trims, dedupes and optionally lowercases", () => {

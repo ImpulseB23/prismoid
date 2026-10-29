@@ -4,7 +4,7 @@
 
 import { Component, Show } from "solid-js";
 import { COMMERCIAL_MAX_SECS, DEFAULT_COMMERCIAL_SECS } from "../../lib/ads";
-import { formatAdLength, formatClock } from "../../lib/streamInfo";
+import { formatAdLength, formatClock, liveSince } from "../../lib/streamInfo";
 import { formatChannelError, type StreamInfo } from "../../lib/twitchChannel";
 import {
   adSchedule,
@@ -26,12 +26,7 @@ const NowStrip: Component<{
   /** Ads are turned on and granted. */
   adsReady: boolean;
 }> = (props) => {
-  const start = () => {
-    const at = props.info?.is_live ? props.info.started_at : null;
-    if (at === null) return null;
-    const ms = Date.parse(at);
-    return Number.isNaN(ms) ? null : ms;
-  };
+  const start = () => liveSince(props.info);
 
   const nextAd = () => {
     const s = props.adsReady ? adSchedule() : null;

@@ -67,7 +67,10 @@ import {
 import Settings from "./Settings";
 import { displayVersion } from "../lib/version";
 import { logo } from "../stores/themeStore";
-import { openStreamManager } from "../lib/streamManagerWindow";
+import {
+  streamManagerOpen,
+  toggleStreamManager,
+} from "../stores/streamManagerPanelStore";
 
 export interface HeaderProps {
   login: string;
@@ -245,6 +248,7 @@ const Header: Component<HeaderProps> = (props) => {
   createEffect(() =>
     holdChrome(
       settingsOpen() ||
+        streamManagerOpen() ||
         searchOpen() ||
         mentionsOpen() ||
         cardLoading() === "self" ||
@@ -320,7 +324,9 @@ const Header: Component<HeaderProps> = (props) => {
         <button
           type="button"
           class="icon-btn"
+          classList={{ "icon-btn--active": streamManagerOpen() }}
           aria-label="Stream manager"
+          aria-expanded={streamManagerOpen()}
           title="Stream manager"
           onClick={(e) => {
             animateIcon(
@@ -332,9 +338,7 @@ const Header: Component<HeaderProps> = (props) => {
               ],
               360,
             );
-            openStreamManager().catch((err: unknown) =>
-              console.error("open stream manager", err),
-            );
+            toggleStreamManager();
           }}
         >
           <svg

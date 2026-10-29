@@ -4069,6 +4069,134 @@ option::checkmark {
   line-height: 1.4;
 }
 
+/* Everything under the header. The stream manager curtain hangs from its
+   top edge. */
+.app__body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* The frame sets the curtain's height and clips it while it slides, so it
+   never passes over the header. Chat under the frame stays clickable
+   wherever the curtain is not. */
+.sm-curtain-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 12;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.sm-curtain {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-bottom: 1px solid var(--border-strong);
+  background: var(--bg);
+  font-variant-numeric: tabular-nums;
+  pointer-events: auto;
+  animation: sm-curtain-down 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.sm-curtain--closing {
+  animation: sm-curtain-up 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes sm-curtain-down {
+  from {
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes sm-curtain-up {
+  to {
+    transform: translateY(-100%);
+  }
+}
+
+.sm-curtain .sm-now {
+  padding: 14px 16px 12px;
+}
+
+.sm-curtain__body {
+  flex: 1;
+  min-height: 0;
+  padding: 18px 16px 24px;
+  overflow-y: auto;
+}
+
+.sm-curtain__handle {
+  flex-shrink: 0;
+  position: relative;
+  height: 12px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.sm-curtain__handle::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: 40px;
+  height: 4px;
+  margin-left: -20px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background-color 0.15s;
+}
+
+.sm-curtain__handle:hover::after,
+.sm-curtain__handle:focus-visible::after {
+  background: var(--text-faint);
+}
+
+.sm-curtain__handle:focus-visible {
+  outline-offset: -2px;
+}
+
+.sm-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.sm-tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 10px;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  white-space: nowrap;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.sm-tabs__tab:hover {
+  color: var(--text);
+}
+
+.sm-tabs__tab--on {
+  border-bottom-color: var(--select);
+  color: var(--text);
+}
+
+.sm-tabs__icon {
+  display: inline-flex;
+}
+
 /* Stream manager window: a title bar, the stream right now with its
    timeline across the full width, sections on the left and the open
    section on the right. */

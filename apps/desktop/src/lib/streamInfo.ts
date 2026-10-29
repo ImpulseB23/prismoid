@@ -1,6 +1,15 @@
 // Formatting for the stream bar and the stream manager: compact viewer
 // counts, uptime and countdown clocks, ad lengths and times of day.
 
+import type { StreamInfo } from "./twitchChannel";
+
+/** Unix ms the stream went live; null while offline or when unknown. */
+export function liveSince(info: StreamInfo | null): number | null {
+  if (!info?.is_live || info.started_at === null) return null;
+  const ms = Date.parse(info.started_at);
+  return Number.isNaN(ms) ? null : ms;
+}
+
 export function formatViewers(n: number): string {
   if (n < 1000) return String(n);
   if (n < 10_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}K`;

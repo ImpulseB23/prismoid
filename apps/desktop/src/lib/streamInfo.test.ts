@@ -5,6 +5,7 @@ import {
   formatTime,
   formatUptime,
   formatViewers,
+  liveSince,
 } from "./streamInfo";
 
 describe("formatViewers", () => {
@@ -28,6 +29,23 @@ describe("formatUptime", () => {
 
   it("returns empty for an unparsable start", () => {
     expect(formatUptime("nope", 0)).toBe("");
+  });
+});
+
+describe("liveSince", () => {
+  const info = {
+    is_live: true,
+    title: "",
+    game_name: "",
+    viewer_count: 1,
+    started_at: "2026-10-24T20:00:00Z",
+  };
+  it("is the start of a live stream only", () => {
+    expect(liveSince(info)).toBe(Date.parse(info.started_at));
+    expect(liveSince({ ...info, is_live: false })).toBeNull();
+    expect(liveSince({ ...info, started_at: null })).toBeNull();
+    expect(liveSince({ ...info, started_at: "nope" })).toBeNull();
+    expect(liveSince(null)).toBeNull();
   });
 });
 
