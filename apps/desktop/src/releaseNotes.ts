@@ -13,6 +13,28 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.8.5",
+    headline: "Cards in their own windows",
+    features: [
+      {
+        title: "User cards you can keep open",
+        body: "Clicking a name opens their card in its own window at your mouse. Pin it to keep it around while you click more names, or let it close when you click away.",
+      },
+      {
+        title: "Everything they said, right there",
+        body: "A card shows their recent messages in one tight list and keeps it live. Click one to jump to it in chat, or Mention them straight from the card.",
+      },
+      {
+        title: "Sending feels instant",
+        body: "Your message shows up with your name color, badges and emotes the moment you press Enter, instead of catching up a second later.",
+      },
+    ],
+    fixes: [
+      "Mentions marks only the ones you have not seen, with a thin line under the message.",
+      "Cards follow your zoom and chat text size.",
+    ],
+  },
+  {
     version: "0.8.3",
     headline: "Quicker to moderate, easier to find",
     features: [
