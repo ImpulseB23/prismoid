@@ -315,6 +315,17 @@
   color: var(--text-muted);
 }
 
+.hero__version {
+  margin-left: var(--space-sm);
+  font-size: 0.75rem;
+  color: var(--text-faint);
+  text-decoration: none;
+}
+
+.hero__version:hover {
+  color: var(--text-muted);
+}
+
 .hero__plain + .download-note {
   margin-top: var(--space-xs);
 }

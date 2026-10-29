@@ -24,6 +24,7 @@ import {
   PLATFORM_NAMES,
   type Platform,
 } from "~/lib/platform";
+import { loadLatestRelease } from "~/lib/latestRelease";
 import "./index.css";
 
 const GitHubIcon = () => (
@@ -45,6 +46,13 @@ const visitorPlatform = query(async (): Promise<Platform> => {
   const event = getRequestEvent();
   return event ? detectPlatform(event.request.headers) : "unknown";
 }, "visitorPlatform");
+
+const latestRelease = query(async () => {
+  "use server";
+  // Workers' caches.default, which the DOM CacheStorage type doesn't know.
+  const { caches } = globalThis as { caches?: { default?: Cache } };
+  return loadLatestRelease(caches?.default);
+}, "latestRelease");
 
 // Visitors we cannot place get the Windows button, since that is the only
 // installer there is. Everyone else sees their own platform, with a plain
@@ -299,6 +307,7 @@ function AppMock() {
 
 export default function Home() {
   const platform = createAsync(() => visitorPlatform(), { deferStream: true });
+  const release = createAsync(() => latestRelease());
   return (
     <>
       <Title>
@@ -338,7 +347,16 @@ export default function Home() {
               <GitHubIcon /> View source
             </GithubPreview>
           </div>
-          <p class="hero__plain">Free and open source.</p>
+          <p class="hero__plain">
+            Free and open source.
+            <Show when={release()}>
+              {(r) => (
+                <a href={r().url} class="hero__version" target="_blank">
+                  v{r().version}
+                </a>
+              )}
+            </Show>
+          </p>
           <DownloadNote platform={platform()} />
         </div>
         <AppMock />
