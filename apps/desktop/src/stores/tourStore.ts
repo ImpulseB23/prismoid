@@ -11,7 +11,7 @@ import {
   setSettingsOpen,
   type SettingsSection,
 } from "./settingsPanelStore";
-import { LAST_VERSION_KEY } from "./whatsNewStore";
+import { whatsNewFirstRun } from "./whatsNewStore";
 
 export interface TourStep {
   /** `data-tour` value of the element to ring, if any. */
@@ -91,7 +91,7 @@ export function createTourStore(
   done: () => boolean,
   markDone: () => Promise<void>,
   showSettings: (section: SettingsSection | null) => void,
-  freshInstall: boolean,
+  firstRun: () => boolean,
 ): TourStore {
   const [step, setStep] = createSignal<number | null>(null);
 
@@ -120,7 +120,7 @@ export function createTourStore(
     },
     finish,
     offer: () => {
-      if (freshInstall && !done() && step() === null) go(0);
+      if (firstRun() && !done() && step() === null) go(0);
     },
   };
 }
@@ -130,7 +130,7 @@ const defaultStore = createTourStore(
   () => settings().setupDone,
   () => updateSettings({ setupDone: true }),
   (section) => (section ? openSettings(section) : setSettingsOpen(false)),
-  isFreshInstall(),
+  whatsNewFirstRun,
 );
 export const tourStep = defaultStore.step;
 export const startTour = defaultStore.start;
@@ -138,13 +138,3 @@ export const nextTourStep = defaultStore.next;
 export const previousTourStep = defaultStore.back;
 export const finishTour = defaultStore.finish;
 export const offerTour = defaultStore.offer;
-
-// Read once at startup, before this launch records its version: no record
-// means Prismoid has never run here.
-function isFreshInstall(): boolean {
-  try {
-    return localStorage.getItem(LAST_VERSION_KEY) === null;
-  } catch {
-    return false;
-  }
-}
