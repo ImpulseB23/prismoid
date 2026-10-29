@@ -101,14 +101,16 @@ const ChatIdentity: Component<{ login: string }> = (props) => {
             />
           )}
         </For>
-        <span
-          class="identity__name"
-          classList={{ "name--painted": name().painted }}
-          style={name().style}
-        >
-          {displayName()}
+        <span>
+          <span
+            class="identity__name"
+            classList={{ "name--painted": name().painted }}
+            style={name().style}
+          >
+            {displayName()}
+          </span>
+          <span class="identity__sample">: hello chat</span>
         </span>
-        <span class="identity__sample">: hello chat</span>
       </div>
 
       <Show
