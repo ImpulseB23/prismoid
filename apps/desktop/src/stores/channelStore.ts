@@ -68,6 +68,8 @@ export interface ChannelStore {
   focus: (channelId: string) => Promise<void>;
   /** Closes a tab; a neighbour takes over when it was the one on screen. */
   close: (channelId: string) => Promise<void>;
+  /** Moves a tab to `index` in the strip, as dragging it there does. */
+  move: (channelId: string, index: number) => void;
   forgetRecent: (login: string) => void;
   /** Twitch refuses to show `channelId`'s chat to this account. */
   bannedIn: (channelId: string) => boolean;
@@ -118,6 +120,19 @@ export function createChannelStore(
   function persistRecents(list: RecentChannel[]): void {
     setRecents(list);
     write(storage, RECENTS_KEY, JSON.stringify(list));
+  }
+
+  function move(channelId: string, index: number): void {
+    const list = tabs();
+    const from = list.findIndex((c) => c.id === channelId);
+    if (from < 0) return;
+    const to = Math.max(0, Math.min(index, list.length - 1));
+    if (from === to) return;
+    const next = [...list];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved!);
+    setTabs(next);
+    persistTabs();
   }
 
   function persistTabs(): void {
@@ -302,6 +317,7 @@ export function createChannelStore(
     restore,
     focus,
     close,
+    move,
     forgetRecent,
     bannedIn: (channelId) => bannedIds().has(channelId),
     markBanned,
@@ -396,6 +412,7 @@ export const openChannel = defaultStore.open;
 export const restoreChannels = defaultStore.restore;
 export const focusChannel = defaultStore.focus;
 export const closeChannel = defaultStore.close;
+export const moveChannelTab = defaultStore.move;
 export const forgetRecentChannel = defaultStore.forgetRecent;
 export const channelBannedIn = defaultStore.bannedIn;
 export const markChannelBanned = defaultStore.markBanned;

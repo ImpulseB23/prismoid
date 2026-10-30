@@ -188,4 +188,17 @@ describe("layoutStore", () => {
     s.clearVideo();
     expect(s.panes().map((p) => p.videoChannelId)).toEqual([null, null]);
   });
+
+  it("swaps two panes and keeps focus where it was", () => {
+    const s = createLayoutStore(memStorage());
+    s.show("a");
+    s.split("b");
+    s.split("c");
+    const [p1, , p3] = s.panes().map((p) => p.id);
+    s.swap(p1!, p3!);
+    expect(channels(s)).toEqual(["c", "b", "a"]);
+    expect(s.focusedChannel()).toBe("c");
+    s.swap(p1!, "missing");
+    expect(channels(s)).toEqual(["c", "b", "a"]);
+  });
 });

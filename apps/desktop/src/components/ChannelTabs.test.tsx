@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
+import {
+  cleanup,
+  createEvent,
+  fireEvent,
+  render,
+  screen,
+} from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import type { Channel } from "../lib/twitchChannel";
 
@@ -16,6 +22,12 @@ vi.mock("../stores/channelStore", () => ({
   closeChannel: (id: string) => closeChannel(id),
   focusChannel: (id: string) => focusChannel(id),
   unreadCount: () => 0,
+  moveChannelTab: (id: string, index: number) => {
+    const list = tabs().filter((c) => c.id !== id);
+    const moved = tabs().find((c) => c.id === id)!;
+    list.splice(index, 0, moved);
+    setTabs(list);
+  },
 }));
 const openPicker = vi.fn();
 vi.mock("../stores/pickerStore", () => ({
@@ -94,5 +106,35 @@ describe("ChannelTabs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close B" }));
     expect(layout.panes().map((p) => p.channelId)).toEqual(["a"]);
     expect(closeChannel).toHaveBeenCalledWith("b");
+  });
+
+  it("moves a tab dropped on another, to the side the pointer is on", async () => {
+    setTabs([channel("a"), channel("b"), channel("c")]);
+    await mount();
+    const order = () => tabs().map((c) => c.id);
+    const drag = (id: string) => ({
+      types: [layout.TAB_DRAG_TYPE],
+      getData: () => id,
+    });
+    // jsdom has no DragEvent, so the pointer position is set by hand.
+    const over = (el: HTMLElement, x: number) => {
+      const ev = createEvent.dragOver(el, { dataTransfer: drag("a") });
+      Object.defineProperty(ev, "clientX", { value: x });
+      fireEvent(el, ev);
+    };
+    const target = tab("C");
+    target.getBoundingClientRect = () => ({ left: 100, width: 100 }) as DOMRect;
+    fireEvent.dragStart(tab("A"), { dataTransfer: { setData: () => {} } });
+    over(target, 180);
+    expect(target.classList.contains("tab--drop-after")).toBe(true);
+    fireEvent.drop(target, { dataTransfer: drag("a") });
+    expect(order()).toEqual(["b", "c", "a"]);
+
+    const first = tab("B");
+    first.getBoundingClientRect = () => ({ left: 0, width: 100 }) as DOMRect;
+    over(first, 10);
+    expect(first.classList.contains("tab--drop-before")).toBe(true);
+    fireEvent.drop(first, { dataTransfer: drag("a") });
+    expect(order()).toEqual(["a", "b", "c"]);
   });
 });

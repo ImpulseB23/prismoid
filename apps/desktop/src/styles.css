@@ -360,6 +360,26 @@ option::checkmark {
   display: none;
 }
 
+/* Where a dragged tab lands: a gold bar on the side it goes. */
+.tab--drop-before::before,
+.tab--drop-after::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--action);
+}
+
+.tab--drop-before::before {
+  left: -2px;
+}
+
+.tab--drop-after::after {
+  right: -2px;
+}
+
 .tab {
   position: relative;
   display: inline-flex;
@@ -4512,6 +4532,7 @@ option::checkmark {
 }
 
 .pane-head {
+  cursor: grab;
   display: flex;
   align-items: center;
   gap: 6px;
