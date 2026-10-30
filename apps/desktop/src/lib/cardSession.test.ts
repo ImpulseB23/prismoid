@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage, ChatStore } from "../stores/chatStore";
+import type { BadgeStore } from "../stores/badgeStore";
 import type { ModAction } from "./chatEvents";
 
 const handlers = new Map<string, (e: { payload: unknown }) => void>();
@@ -22,16 +23,6 @@ vi.mock("./userCardWindow", () => ({
 const emoteBundle = vi.fn(async (): Promise<unknown> => null);
 vi.mock("./emoteBundle", () => ({
   currentEmoteBundle: () => emoteBundle(),
-}));
-const loadBadgeBundle = vi.fn();
-vi.mock("../stores/badgeStore", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../stores/badgeStore")>()),
-  loadBadgeBundle: (b: unknown) => loadBadgeBundle(b),
-}));
-const loadEmoteBundle = vi.fn();
-vi.mock("../stores/emoteStore", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../stores/emoteStore")>()),
-  loadEmoteBundle: (b: unknown) => loadEmoteBundle(b),
 }));
 let sendLog: (actions: ModAction[]) => void = () => {};
 vi.mock("./cardBridge", () => ({
@@ -66,6 +57,7 @@ vi.mock("../stores/settingsStore", async (importOriginal) => ({
 
 const { showCardUser, startCardSession } = await import("./cardSession");
 const { createChatStore } = await import("../stores/chatStore");
+const { createBadgeStore } = await import("../stores/badgeStore");
 const { modActionsFor } = await import("../stores/modLogStore");
 const { authStatus } = await import("../stores/authStore");
 
@@ -102,10 +94,12 @@ const tick = () => new Promise((r) => requestAnimationFrame(r));
 
 describe("cardSession", () => {
   let chat: ChatStore;
+  let badges: BadgeStore;
 
   beforeEach(() => {
     handlers.clear();
     chat = createChatStore();
+    badges = createBadgeStore();
   });
 
   it("starts with the signed-in session", async () => {
@@ -122,7 +116,7 @@ describe("cardSession", () => {
   });
 
   it("shows their stored and live messages, and nobody else's", async () => {
-    const shown = showCardUser(card, chat);
+    const shown = showCardUser(card, chat, badges);
     await Promise.resolve();
     handlers.get("chat_messages")!({
       payload: [msg("live"), msg("other", "u2"), msg("away", "u1", "x")],
@@ -138,7 +132,7 @@ describe("cardSession", () => {
   });
 
   it("adds their messages that arrive after history loaded", async () => {
-    const shown = showCardUser(card, chat);
+    const shown = showCardUser(card, chat, badges);
     releaseHistory([]);
     const stop = await shown;
     handlers.get("chat_messages")!({ payload: [msg("later")] });
@@ -147,21 +141,29 @@ describe("cardSession", () => {
     stop();
   });
 
-  it("loads the channel's badges and emotes", async () => {
-    const bundle = { channel: "c" };
-    emoteBundle.mockResolvedValueOnce(bundle);
-    const shown = showCardUser(card, chat);
+  it("loads the channel's badges", async () => {
+    const sub = {
+      set: "subscriber",
+      version: "6",
+      title: "6-Month Subscriber",
+      url_1x: "1x",
+      url_2x: "2x",
+      url_4x: "4x",
+    };
+    emoteBundle.mockResolvedValueOnce({
+      twitch_channel_badges: { badges: [sub] },
+    });
+    const shown = showCardUser(card, chat, badges);
     releaseHistory([]);
     const stop = await shown;
-    expect(loadBadgeBundle).toHaveBeenCalledWith(bundle);
-    expect(loadEmoteBundle).toHaveBeenCalledWith(bundle);
+    expect(badges.resolve("subscriber", "6")?.title).toBe("6-Month Subscriber");
     stop();
   });
 
   it("still opens when the emotes fail to load", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     emoteBundle.mockRejectedValueOnce(new Error("offline"));
-    const shown = showCardUser(card, chat);
+    const shown = showCardUser(card, chat, badges);
     releaseHistory([]);
     const stop = await shown;
     expect(error).toHaveBeenCalledWith("card emotes", expect.any(Error));
@@ -170,7 +172,7 @@ describe("cardSession", () => {
   });
 
   it("keeps the mod log the main window sends, newest first", async () => {
-    const shown = showCardUser(card, chat);
+    const shown = showCardUser(card, chat, badges);
     releaseHistory([]);
     const stop = await shown;
     const action = (n: number) =>

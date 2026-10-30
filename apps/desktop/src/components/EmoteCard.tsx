@@ -15,9 +15,10 @@ import {
 import { activeChannel } from "../stores/channelStore";
 import ProviderIcon from "./ProviderIcon";
 import { requestInsert } from "../stores/composerStore";
-import { emoteRevision, emoteScope } from "../stores/emoteStore";
+import { useSession } from "../lib/chatSession";
 
 const EmoteCard: Component = () => {
+  const session = useSession();
   const [copied, setCopied] = createSignal(false);
   let dialogRef: HTMLDivElement | undefined;
 
@@ -29,10 +30,11 @@ const EmoteCard: Component = () => {
   });
 
   const setName = () => {
-    emoteRevision();
+    const emotes = session().emotes;
+    emotes.revision();
     const e = inspectedEmote();
     return e
-      ? emoteSetName(e, emoteScope(e), activeChannel()?.display_name)
+      ? emoteSetName(e, emotes.scopeOf(e), activeChannel()?.display_name)
       : "";
   };
 

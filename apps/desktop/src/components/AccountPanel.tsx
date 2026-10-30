@@ -5,7 +5,7 @@
 import { Component, For, Show, createEffect } from "solid-js";
 import { createConfirmTap } from "../lib/confirmTap";
 import { UPCOMING_PLATFORMS } from "../lib/platforms";
-import { resolveBadge, badgeRevision } from "../stores/badgeStore";
+import { sessionFor } from "../lib/chatSession";
 import { activeChannel } from "../stores/channelStore";
 import type { ChatMessage } from "../stores/chatStore";
 import { reconnectScopes } from "../stores/roleStore";
@@ -31,9 +31,10 @@ const AccountPanel: Component<AccountPanelProps> = (props) => {
   });
 
   const badges = () => {
-    badgeRevision();
+    const store = sessionFor(activeChannel()?.id)?.badges;
+    store?.revision();
     return props.badges.flatMap((b) => {
-      const r = resolveBadge(b.set_id, b.id);
+      const r = store?.resolve(b.set_id, b.id);
       return r ? [r] : [];
     });
   };

@@ -42,7 +42,6 @@ import {
   insertRequest,
   replyTarget,
 } from "../stores/composerStore";
-import { allEmotes, emoteByCode, emoteRevision } from "../stores/emoteStore";
 import { scanEmotes } from "../lib/emoteSpans";
 import {
   ownBadges,
@@ -143,13 +142,10 @@ const MessageInput: Component<Props> = (props) => {
 
   const word = createMemo(() => wordAtCaret(text(), caret()));
   const candidates = createMemo(() => {
-    emoteRevision();
+    const emotes = session().emotes;
+    emotes.revision();
     if (dismissed()) return [];
-    return complete(
-      word().word,
-      allEmotes(),
-      session()?.chatters.recent() ?? [],
-    );
+    return complete(word().word, emotes.all(), session().chatters.recent());
   });
   const open = () => candidates().length > 0;
 
@@ -212,7 +208,7 @@ const MessageInput: Component<Props> = (props) => {
   };
 
   const resolveId = async (login: string): Promise<string> => {
-    const known = session()?.chatters.byLogin(login);
+    const known = session().chatters.byLogin(login);
     if (known) return known.id;
     return (await lookupUser(login)).id;
   };
@@ -264,8 +260,8 @@ const MessageInput: Component<Props> = (props) => {
     const channel = activeChannel();
     // Kept for Twitch's answer: by then the pane may show another channel,
     // and the message still belongs to the session it went into.
-    const store = session()?.chat;
-    if (!channel || !store) return;
+    const store = session().chat;
+    if (!channel) return;
     const parsed = parseInput(text().trim());
     if (parsed.kind === "error") {
       setStatus(parsed.message);
@@ -327,7 +323,7 @@ const MessageInput: Component<Props> = (props) => {
             displayName: ownDisplayName(channel.id),
             color: ownColor(),
             badges: ownBadges(channel.id),
-            emoteSpans: scanEmotes(payload, emoteByCode),
+            emoteSpans: scanEmotes(payload, session().emotes.byCode),
           }
         : undefined,
     });
