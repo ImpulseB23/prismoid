@@ -54,6 +54,20 @@ const ChatSettingsMenu: Component<ChatSettingsMenuProps> = (props) => {
         <h2 class="chat-settings__title">Chat settings</h2>
         <label class="settings__row settings__row--toggle">
           <div class="settings__text">
+            <span class="settings__name">Readable colors</span>
+            <span class="settings__hint">
+              Lighten or darken names that are hard to read on this theme
+            </span>
+          </div>
+          <input
+            type="checkbox"
+            class="switch"
+            checked={settings().readableColors}
+            onChange={(e) => save({ readableColors: e.currentTarget.checked })}
+          />
+        </label>
+        <label class="settings__row settings__row--toggle">
+          <div class="settings__text">
             <span class="settings__name">Timestamps</span>
             <span class="settings__hint">
               Show the time next to each message

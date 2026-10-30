@@ -6,18 +6,18 @@
 
 import type { JSX } from "solid-js";
 import type { Paint } from "../stores/paintStore";
-import { normalizeUserColor } from "./messageStyle";
+import { normalizeUserColor, type NameContrast } from "./messageStyle";
 
 /**
  * On the light palette every stop goes through the same darkening as plain
  * name colors so pale paints stay readable; alpha is kept.
  */
-function stopColor(color: string, light: boolean): string {
-  if (!light) return color;
-  return normalizeUserColor(color.slice(0, 7), true) + color.slice(7);
+function stopColor(color: string, contrast: NameContrast): string {
+  if (contrast !== "light") return color;
+  return normalizeUserColor(color.slice(0, 7), contrast) + color.slice(7);
 }
 
-function background(paint: Paint, light: boolean): string | undefined {
+function background(paint: Paint, contrast: NameContrast): string | undefined {
   if (paint.function === "URL") {
     if (!paint.image_url) return undefined;
     let url: URL;
@@ -31,7 +31,7 @@ function background(paint: Paint, light: boolean): string | undefined {
   }
   if (paint.stops.length === 0) return undefined;
   const stops = paint.stops.map(
-    (s) => `${stopColor(s.color, light)} ${+(s.at * 100).toFixed(3)}%`,
+    (s) => `${stopColor(s.color, contrast)} ${+(s.at * 100).toFixed(3)}%`,
   );
   const repeat = paint.repeat ? "repeating-" : "";
   const head =
@@ -49,17 +49,17 @@ function background(paint: Paint, light: boolean): string | undefined {
 export function nameStyle(
   color: string | null | undefined,
   paint: Paint | undefined,
-  light: boolean,
+  contrast: NameContrast,
 ): { style: JSX.CSSProperties; painted: boolean } {
-  const image = paint && background(paint, light);
+  const image = paint && background(paint, contrast);
   if (!paint || !image) {
     return {
-      style: { color: normalizeUserColor(color, light) },
+      style: { color: normalizeUserColor(color, contrast) },
       painted: false,
     };
   }
   const style: JSX.CSSProperties = {
-    color: normalizeUserColor(paint.color?.slice(0, 7) ?? color, light),
+    color: normalizeUserColor(paint.color?.slice(0, 7) ?? color, contrast),
     "background-image": image,
   };
   if (paint.shadows.length > 0) {

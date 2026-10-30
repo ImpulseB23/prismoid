@@ -53,14 +53,14 @@ const twitchCon: Paint = {
 
 describe("nameStyle", () => {
   it("keeps the plain chat color without a paint", () => {
-    expect(nameStyle("#1e90ff", undefined, false)).toEqual({
+    expect(nameStyle("#1e90ff", undefined, "dark")).toEqual({
       style: { color: "#1e90ff" },
       painted: false,
     });
   });
 
   it("builds a radial gradient with drop shadows", () => {
-    const { style, painted } = nameStyle("#1e90ff", firebrand, false);
+    const { style, painted } = nameStyle("#1e90ff", firebrand, "dark");
     expect(painted).toBe(true);
     expect(style).toEqual({
       color: "#1e90ff",
@@ -71,7 +71,7 @@ describe("nameStyle", () => {
   });
 
   it("repeats a linear gradient at its angle", () => {
-    const { style } = nameStyle(null, candyCane, false);
+    const { style } = nameStyle(null, candyCane, "dark");
     expect(style["background-image"]).toBe(
       "repeating-linear-gradient(45deg, #d2d2d2ff 10%, #d2d2d2ff 20%, #ff6464ff 20%, #ff6464ff 30%)",
     );
@@ -81,7 +81,7 @@ describe("nameStyle", () => {
   });
 
   it("uses the image of an image paint", () => {
-    const { style, painted } = nameStyle("#1e90ff", twitchCon, false);
+    const { style, painted } = nameStyle("#1e90ff", twitchCon, "dark");
     expect(painted).toBe(true);
     expect(style["background-image"]).toBe(`url("${twitchCon.image_url}")`);
     expect(style.filter).toBeUndefined();
@@ -95,7 +95,7 @@ describe("nameStyle", () => {
         stops: [{ at: 0, color: "#fff70080" }],
         shadows: [],
       },
-      true,
+      "light",
     );
     const stop = /radial-gradient\(circle, (#[0-9a-f]{8}) 0%\)/.exec(
       String(style["background-image"]),
@@ -109,7 +109,7 @@ describe("nameStyle", () => {
     const { style } = nameStyle(
       "#1e90ff",
       { ...firebrand, color: "#ff9500ff" },
-      false,
+      "dark",
     );
     expect(style.color).toBe("#ff9500");
   });
@@ -121,7 +121,7 @@ describe("nameStyle", () => {
       { ...twitchCon, image_url: "not a url" },
       { ...twitchCon, image_url: "http://cdn.7tv.app/paint/x/1x.webp" },
     ]) {
-      expect(nameStyle("#1e90ff", paint, false)).toEqual({
+      expect(nameStyle("#1e90ff", paint, "dark")).toEqual({
         style: { color: "#1e90ff" },
         painted: false,
       });
@@ -132,7 +132,7 @@ describe("nameStyle", () => {
     const { style } = nameStyle(
       null,
       { ...twitchCon, image_url: 'https://cdn.7tv.app/a"b.webp' },
-      false,
+      "dark",
     );
     expect(style["background-image"]).toBe(
       'url("https://cdn.7tv.app/a%22b.webp")',

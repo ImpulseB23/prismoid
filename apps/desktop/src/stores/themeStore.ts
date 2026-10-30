@@ -3,6 +3,7 @@
 
 import { createSignal } from "solid-js";
 import { settings, type Theme } from "./settingsStore";
+import type { NameContrast } from "../lib/messageStyle";
 import logoOnDark from "../assets/logo.svg";
 import logoOnLight from "../assets/logo-on-light.svg";
 
@@ -22,4 +23,6 @@ query?.addEventListener("change", (e) => setSystemDark(e.matches));
 
 export const palette = () => resolvePalette(settings().theme, systemDark());
 export const isLight = () => palette() === "light";
+export const nameContrast = (): NameContrast =>
+  !settings().readableColors ? "off" : isLight() ? "light" : "dark";
 export const logo = () => (isLight() ? logoOnLight : logoOnDark);
