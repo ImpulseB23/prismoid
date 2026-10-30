@@ -54,6 +54,8 @@ import {
 import { canModerateIn } from "../stores/roleStore";
 import { formatSeconds } from "../lib/slashCommands";
 import EmotePicker from "./EmotePicker";
+import ChatSettingsMenu from "./ChatSettingsMenu";
+import GearIcon from "./GearIcon";
 
 interface Props {
   /** Current Twitch login of the signed-in user. Used as both the
@@ -92,6 +94,8 @@ const MessageInput: Component<Props> = (props) => {
   // Escape hides suggestions for the word being typed; any edit re-arms.
   const [dismissed, setDismissed] = createSignal(false);
   const [pickerOpen, setPickerOpen] = createSignal(false);
+  const [menuOpen, setMenuOpen] = createSignal(false);
+  const [gear, setGear] = createSignal<HTMLButtonElement>();
   let inputEl: HTMLTextAreaElement | undefined;
   // Per-input monotonic counter. Pending-entry mutations are already
   // safely keyed by `local_id`, but the inline status string is shared
@@ -477,6 +481,11 @@ const MessageInput: Component<Props> = (props) => {
         onPick={(e) => insertAtCaret(e.code)}
         onClose={() => setPickerOpen(false)}
       />
+      <ChatSettingsMenu
+        open={menuOpen()}
+        anchor={gear()}
+        onClose={() => setMenuOpen(false)}
+      />
       <Show when={replyTarget()}>
         {(r) => (
           <div class="composer__reply">
@@ -538,7 +547,10 @@ const MessageInput: Component<Props> = (props) => {
           aria-expanded={pickerOpen()}
           disabled={session().channel === null || banned()}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => setPickerOpen((v) => !v)}
+          onClick={() => {
+            setMenuOpen(false);
+            setPickerOpen((v) => !v);
+          }}
         >
           <svg
             width="16"
@@ -563,6 +575,20 @@ const MessageInput: Component<Props> = (props) => {
             <circle cx="6" cy="6.5" r="0.9" fill="currentColor" />
             <circle cx="10" cy="6.5" r="0.9" fill="currentColor" />
           </svg>
+        </button>
+        <button
+          ref={setGear}
+          type="button"
+          class="icon-btn composer__gear"
+          aria-label="Chat settings"
+          title="Chat settings"
+          aria-expanded={menuOpen()}
+          onClick={() => {
+            setPickerOpen(false);
+            setMenuOpen((v) => !v);
+          }}
+        >
+          <GearIcon />
         </button>
         <button
           type="button"

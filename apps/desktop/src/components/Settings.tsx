@@ -471,24 +471,6 @@ const Settings: Component<SettingsProps> = (props) => {
             </div>
             <label class="settings__row settings__row--toggle">
               <div class="settings__text">
-                <span class="settings__name">Timestamps</span>
-                <span class="settings__hint">
-                  Show the time next to each message
-                </span>
-              </div>
-              <input
-                type="checkbox"
-                class="switch"
-                checked={settings().showTimestamps}
-                onChange={(e) =>
-                  run(
-                    updateSettings({ showTimestamps: e.currentTarget.checked }),
-                  )
-                }
-              />
-            </label>
-            <label class="settings__row settings__row--toggle">
-              <div class="settings__text">
                 <span class="settings__name">Alternating rows</span>
                 <span class="settings__hint">
                   Shade every other message so busy chat is easier to follow

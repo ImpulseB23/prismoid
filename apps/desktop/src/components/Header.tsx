@@ -58,6 +58,7 @@ import WindowControls from "./WindowControls";
 import Mentions from "./Mentions";
 import AccountAvatar from "./AccountAvatar";
 import ChatSearch from "./ChatSearch";
+import GearIcon from "./GearIcon";
 import { installUpdate, updateState } from "../stores/updateStore";
 import { updatedTo, whatsNewUnseen } from "../stores/whatsNewStore";
 import Settings from "./Settings";
@@ -73,23 +74,6 @@ export interface HeaderProps {
   login: string;
   onSignOut: () => void;
 }
-
-/** Outline of an eight-tooth gear centred in a 16 px box. */
-const GEAR_PATH = (() => {
-  const teeth = 8;
-  const outer = 7;
-  const inner = 5.4;
-  const steps = teeth * 4;
-  const parts: string[] = [];
-  for (let i = 0; i < steps; i++) {
-    const r = i % 4 < 2 ? outer : inner;
-    const angle = ((i - 0.5) / steps) * Math.PI * 2;
-    const x = (8 + r * Math.cos(angle)).toFixed(2);
-    const y = (8 + r * Math.sin(angle)).toFixed(2);
-    parts.push(`${i === 0 ? "M" : "L"}${x} ${y}`);
-  }
-  return `${parts.join(" ")} Z`;
-})();
 
 const CLICK_EASE = "cubic-bezier(0.2, 0.8, 0.2, 1)";
 
@@ -505,28 +489,7 @@ const Header: Component<HeaderProps> = (props) => {
             openSettings(attention()?.section);
           }}
         >
-          <svg
-            class="gear-icon"
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            aria-hidden="true"
-          >
-            <path
-              d={GEAR_PATH}
-              stroke="currentColor"
-              stroke-width="1.3"
-              stroke-linejoin="round"
-            />
-            <circle
-              cx="8"
-              cy="8"
-              r="2.1"
-              stroke="currentColor"
-              stroke-width="1.3"
-            />
-          </svg>
+          <GearIcon />
           <Show when={attention()}>
             <span class="icon-btn__badge" aria-hidden="true" />
           </Show>
