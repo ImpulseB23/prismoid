@@ -1,7 +1,7 @@
 // One quiet line under the tabs: live marker, category and stream title on
 // the left, the numbers on the right (viewers, uptime, messages a minute,
 // people chatting), each one switchable in Settings, and the button that
-// shows the stream above the focused pane's chat. A channel loading for
+// shows a preview of the stream in the focused pane's corner. A channel loading for
 // the first time gets a placeholder of the same height so nothing below it
 // jumps.
 
@@ -11,6 +11,7 @@ import { streamClock, streamInfo, streamLoading } from "../stores/streamStore";
 import { activeChannel } from "../stores/channelStore";
 import { settings } from "../stores/settingsStore";
 import { focusedPaneId, panes, togglePaneVideo } from "../stores/layoutStore";
+import { isPoppedOut, openVideoWindow } from "../lib/videoWindow";
 import {
   activeChatters,
   messagesPerMinute,
@@ -21,6 +22,25 @@ const StreamBar: Component = () => {
   onMount(() => onCleanup(startPulse()));
   const videoOn = () =>
     panes().find((p) => p.id === focusedPaneId())?.video === true;
+  const out = () => isPoppedOut(activeChannel()?.login ?? "");
+  // A stream out in its own window plays only there: the button brings
+  // that window forward instead of opening a second player.
+  const onVideo = () => {
+    const channel = activeChannel();
+    if (channel && out()) {
+      openVideoWindow(channel.login, `${channel.display_name}'s stream`).catch(
+        (err: unknown) => console.error("show video window", err),
+      );
+      return;
+    }
+    togglePaneVideo(focusedPaneId());
+  };
+  const videoLabel = () =>
+    out()
+      ? "Watching in its own window"
+      : videoOn()
+        ? "Hide the stream"
+        : "Watch the stream";
 
   return (
     <Show
@@ -88,13 +108,14 @@ const StreamBar: Component = () => {
                 <button
                   type="button"
                   class="stream-bar__video"
-                  classList={{ "stream-bar__video--on": videoOn() }}
-                  aria-pressed={videoOn()}
-                  aria-label={
-                    videoOn() ? "Hide the stream" : "Watch the stream"
-                  }
-                  title={videoOn() ? "Hide the stream" : "Watch the stream"}
-                  onClick={() => togglePaneVideo(focusedPaneId())}
+                  classList={{
+                    "stream-bar__video--on": videoOn() && !out(),
+                    "stream-bar__video--out": out(),
+                  }}
+                  aria-pressed={videoOn() || out()}
+                  aria-label={videoLabel()}
+                  title={videoLabel()}
+                  onClick={onVideo}
                 >
                   <svg
                     width="16"

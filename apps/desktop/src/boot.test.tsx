@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./App", () => ({ default: () => <p>main app</p> }));
 vi.mock("./UserCardWindow", () => ({ default: () => <p>user card</p> }));
+vi.mock("./VideoWindow", () => ({ default: () => <p>video</p> }));
 
 const { boot } = await import("./boot");
 
@@ -19,6 +20,10 @@ describe("boot", () => {
 
   it("renders the card for user card windows", async () => {
     expect(await mount("user-card-3")).toBe("user card");
+  });
+
+  it("renders the player for pop-out video windows", async () => {
+    expect(await mount("video-caedrel")).toBe("video");
   });
 
   it("renders the app for every other window", async () => {

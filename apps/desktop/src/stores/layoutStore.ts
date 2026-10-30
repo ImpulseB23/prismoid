@@ -53,6 +53,7 @@ export interface LayoutStore {
   keepOnly: (channelIds: ReadonlySet<string>) => void;
   /** Shows or hides the stream video in a pane. */
   toggleVideo: (paneId: string) => void;
+  setVideo: (paneId: string, on: boolean) => void;
 }
 
 export function createLayoutStore(
@@ -153,10 +154,13 @@ export function createLayoutStore(
     }
   }
 
+  function setVideo(paneId: string, on: boolean): void {
+    update(panes().map((p) => (p.id === paneId ? { ...p, video: on } : p)));
+  }
+
   function toggleVideo(paneId: string): void {
-    update(
-      panes().map((p) => (p.id === paneId ? { ...p, video: !p.video } : p)),
-    );
+    const pane = panes().find((p) => p.id === paneId);
+    if (pane) setVideo(paneId, !pane.video);
   }
 
   return {
@@ -173,6 +177,7 @@ export function createLayoutStore(
     drop,
     keepOnly,
     toggleVideo,
+    setVideo,
   };
 }
 
@@ -228,3 +233,4 @@ export const closePane = defaultStore.close;
 export const dropPaneChannel = defaultStore.drop;
 export const keepPaneChannels = defaultStore.keepOnly;
 export const togglePaneVideo = defaultStore.toggleVideo;
+export const setPaneVideo = defaultStore.setVideo;

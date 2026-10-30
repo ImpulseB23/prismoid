@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "video-window",
+  "description": "Pop-out stream players: their own title bar, fullscreen when the player asks, popping back in, and log",
+  "windows": ["video-*"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-set-fullscreen",
+    "log:default"
+  ]
+}

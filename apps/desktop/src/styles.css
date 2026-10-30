@@ -2904,6 +2904,10 @@ option::checkmark {
   margin-left: auto;
 }
 
+.stream-bar__video + .stream-bar__video {
+  margin-left: 2px;
+}
+
 .stream-bar__video:hover {
   color: var(--text);
   background: var(--hover);
@@ -2912,6 +2916,12 @@ option::checkmark {
 .stream-bar__video--on {
   color: var(--text);
   background: var(--prism-tint);
+}
+
+/* The stream is out in its own window; the button brings that forward. */
+.stream-bar__video--out {
+  color: #e8bf5e;
+  box-shadow: inset 0 0 0 1px rgba(232, 191, 94, 0.55);
 }
 
 .stream-bar__skeleton-end {
@@ -4330,6 +4340,132 @@ option::checkmark {
 .stream-video__player {
   display: block;
   border: 0;
+}
+
+.stream-video__bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+  padding: 0 4px 0 10px;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.stream-video__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stream-video__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}
+
+.stream-video__btn:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+/* A pop-out player: the app's own title bar with a gold edge, and the
+   player under it edge to edge. */
+.video-window {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #000;
+}
+
+.video-window__bar {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  height: 34px;
+  padding-left: 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.video-window__bar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--action);
+  pointer-events: none;
+}
+
+.video-window__name {
+  flex: 1;
+  min-width: 0;
+  align-self: center;
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-window__back {
+  align-self: center;
+  margin-right: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--action);
+  color: var(--action-text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: filter 0.15s;
+}
+
+.video-window__back:hover {
+  filter: brightness(1.06);
+}
+
+.video-window__pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  color: var(--text-muted);
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+
+.video-window__pin:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.video-window__pin--on {
+  color: #e8bf5e;
+}
+
+.video-window__player {
+  flex: 1;
+  min-height: 0;
+}
+
+.video-window .stream-video__player {
+  width: 100%;
+  height: 100%;
 }
 
 .stream-video__small {
