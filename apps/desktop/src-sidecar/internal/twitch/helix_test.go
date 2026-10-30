@@ -72,7 +72,7 @@ func TestSubscribeSuccess(t *testing.T) {
 	if !slices.Equal(gotTypes, chatSubscriptions) {
 		t.Fatalf("subscribed to %v, want %v", gotTypes, chatSubscriptions)
 	}
-	if len(ids) != 5 || ids["channel.chat.message"] != "sub-1" || ids["channel.chat.clear"] != "sub-5" {
+	if len(ids) != 6 || ids["channel.chat.message"] != "sub-1" || ids["channel.chat.clear"] != "sub-5" {
 		t.Fatalf("unexpected ids %v", ids)
 	}
 
@@ -83,8 +83,9 @@ func TestSubscribeSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
-	if !slices.Equal(gotTypes, chatSubscriptions[1:4]) || len(ids) != 3 {
-		t.Fatalf("subscribed to %v (ids %v), want %v", gotTypes, ids, chatSubscriptions[1:4])
+	want := []string{chatSubscriptions[1], chatSubscriptions[2], chatSubscriptions[3], chatSubscriptions[5]}
+	if !slices.Equal(gotTypes, want) || len(ids) != len(want) {
+		t.Fatalf("subscribed to %v (ids %v), want %v", gotTypes, ids, want)
 	}
 }
 

@@ -13,7 +13,7 @@ import {
   onCleanup,
 } from "solid-js";
 import { currentUserId } from "../stores/authStore";
-import { canModerateIn } from "../stores/roleStore";
+import { canModerateIn, holdsModRole } from "../stores/roleStore";
 import { useSession } from "../lib/chatSession";
 import ChatModes from "./ChatModes";
 import ModLog from "./ModLog";
@@ -33,12 +33,15 @@ const CommandCenter: Component = () => {
     const c = channel();
     return c !== null && canModerateIn(c.id);
   };
-  // The only owner of the pane's room modes: loaded for moderators, and
-  // dropped when the rights go so nothing reads stale modes.
+  // The only owner of the pane's room modes, loaded for every channel so
+  // the composer knows about slow mode, and again when the user's role
+  // there changes, since moderators also get the non-moderator delay.
   createEffect(() => {
     const s = session();
-    if (s.channel && canModerateIn(s.channel.id)) {
-      void s.roomModes.load(s.channel.id);
+    const c = s.channel;
+    if (c) {
+      holdsModRole(c.id);
+      void s.roomModes.load(c.id);
     } else {
       s.roomModes.clear();
     }

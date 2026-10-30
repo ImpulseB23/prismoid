@@ -204,11 +204,11 @@ func TestSessionSubscribesEveryJoinedChannelAndImmediatelyWhenConnected(t *testi
 	s := newTestSession(ctx, ws, helix.URL, make(chan []byte, 16), nil)
 	s.Join("a", nil)
 	s.Join("b", nil)
-	// five chat subscriptions, channel.moderate and the two automod ones, per channel
-	waitFor(t, "both channels subscribed", func() bool { return rec.postCount() == 16 })
+	// six chat subscriptions, channel.moderate and the two automod ones, per channel
+	waitFor(t, "both channels subscribed", func() bool { return rec.postCount() == 18 })
 
 	s.Join("c", nil)
-	waitFor(t, "late join subscribed on the live socket", func() bool { return rec.postCount() == 24 })
+	waitFor(t, "late join subscribed on the live socket", func() bool { return rec.postCount() == 27 })
 
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
@@ -219,7 +219,7 @@ func TestSessionSubscribesEveryJoinedChannelAndImmediatelyWhenConnected(t *testi
 		}
 		seen[p.Condition["broadcaster_user_id"]]++
 	}
-	if seen["a"] != 8 || seen["b"] != 8 || seen["c"] != 8 {
+	if seen["a"] != 9 || seen["b"] != 9 || seen["c"] != 9 {
 		t.Fatalf("unexpected per-channel subscriptions: %v", seen)
 	}
 }
@@ -235,16 +235,16 @@ func TestSessionLeaveDeletesOnlyThatChannel(t *testing.T) {
 	defer cancel()
 	s := newTestSession(ctx, ws, helix.URL, make(chan []byte, 16), nil)
 	s.Join("a", nil)
-	waitFor(t, "a subscribed", func() bool { return rec.postCount() == 8 })
+	waitFor(t, "a subscribed", func() bool { return rec.postCount() == 9 })
 	s.Join("b", nil)
-	waitFor(t, "b subscribed", func() bool { return rec.postCount() == 16 })
+	waitFor(t, "b subscribed", func() bool { return rec.postCount() == 18 })
 
 	s.Leave("a")
-	waitFor(t, "a's subscriptions deleted", func() bool { return len(rec.deleted()) == 8 })
+	waitFor(t, "a's subscriptions deleted", func() bool { return len(rec.deleted()) == 9 })
 	for _, id := range rec.deleted() {
 		n := 0
 		_, _ = fmt.Sscanf(id, "sub-%d", &n)
-		if n < 1 || n > 8 {
+		if n < 1 || n > 9 {
 			t.Fatalf("deleted a subscription that was not a's: %s", id)
 		}
 	}
@@ -306,8 +306,8 @@ func TestSessionReconnectCarriesSubscriptionsOver(t *testing.T) {
 	// The reconnect url carries the old subscriptions, so nothing is
 	// subscribed twice.
 	time.Sleep(100 * time.Millisecond)
-	if n := rec.postCount(); n != 8 {
-		t.Fatalf("expected 8 subscriptions in total, got %d", n)
+	if n := rec.postCount(); n != 9 {
+		t.Fatalf("expected 9 subscriptions in total, got %d", n)
 	}
 }
 
@@ -325,7 +325,7 @@ func TestSessionResubscribesAfterADrop(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	newTestSession(ctx, ws, helix.URL, make(chan []byte, 16), nil).Join("broadcaster-1", nil)
-	waitFor(t, "subscriptions on both sockets", func() bool { return rec.postCount() == 16 })
+	waitFor(t, "subscriptions on both sockets", func() bool { return rec.postCount() == 18 })
 }
 
 func TestSessionRevocationIsReportedAndKeepsTheSocket(t *testing.T) {
@@ -503,7 +503,7 @@ func TestSessionSkipsAutoModWhereNotAModerator(t *testing.T) {
 	defer cancel()
 	s := newTestSession(ctx, ws, helix.URL, make(chan []byte, 16), func(string, any) { notified.Add(1) })
 	s.Join("a", nil)
-	waitFor(t, "chat and moderation attempts", func() bool { return rec.postCount() == 6 })
+	waitFor(t, "chat and moderation attempts", func() bool { return rec.postCount() == 7 })
 	time.Sleep(100 * time.Millisecond)
 
 	if slices.Contains(rec.types(), "automod.message.hold") {
@@ -536,7 +536,7 @@ func TestSessionKeepsModerationWhenAutoModScopeIsMissing(t *testing.T) {
 		t.Fatalf("a missing automod scope must stay quiet, got %d notifications", notified.Load())
 	}
 	s.Leave("a")
-	waitFor(t, "chat and moderation subscriptions deleted", func() bool { return len(rec.deleted()) == 6 })
+	waitFor(t, "chat and moderation subscriptions deleted", func() bool { return len(rec.deleted()) == 7 })
 }
 
 func TestReconnectErrorMessage(t *testing.T) {
@@ -637,7 +637,7 @@ func TestSessionResubscribeAddsOnlyWhatANewGrantAllows(t *testing.T) {
 	s := newTestSession(ctx, idleSocket(t, "sess-grant"), helix.URL, make(chan []byte, 16), nil)
 	s.Join("a", nil)
 	s.Join("b", nil)
-	waitFor(t, "chat subscribed, moderation refused", func() bool { return g.postCount() == 10 && g.tries.Load() == 2 })
+	waitFor(t, "chat subscribed, moderation refused", func() bool { return g.postCount() == 12 && g.tries.Load() == 2 })
 	if g.typeCount("automod.message.hold") != 0 {
 		t.Fatal("automod must wait for channel.moderate")
 	}
@@ -649,7 +649,7 @@ func TestSessionResubscribeAddsOnlyWhatANewGrantAllows(t *testing.T) {
 		return g.typeCount("channel.moderate") == 2 && g.typeCount("automod.message.update") == 2
 	})
 	time.Sleep(100 * time.Millisecond)
-	if g.postCount() != 16 {
+	if g.postCount() != 18 {
 		t.Fatalf("chat must not be subscribed twice, got %d subscriptions", g.postCount())
 	}
 	if len(g.deleted()) != 0 {
@@ -657,7 +657,7 @@ func TestSessionResubscribeAddsOnlyWhatANewGrantAllows(t *testing.T) {
 	}
 
 	s.Leave("a")
-	waitFor(t, "a's chat, moderation and automod deleted", func() bool { return len(g.deleted()) == 8 })
+	waitFor(t, "a's chat, moderation and automod deleted", func() bool { return len(g.deleted()) == 9 })
 }
 
 func TestSessionResubscribeAddsAutoModWhenTheGrantGainsIt(t *testing.T) {
@@ -667,7 +667,7 @@ func TestSessionResubscribeAddsAutoModWhenTheGrantGainsIt(t *testing.T) {
 	defer cancel()
 	s := newTestSession(ctx, idleSocket(t, "sess-automod"), helix.URL, make(chan []byte, 16), nil)
 	s.Join("a", nil)
-	waitFor(t, "chat and moderation subscribed, automod refused", func() bool { return g.postCount() == 6 })
+	waitFor(t, "chat and moderation subscribed, automod refused", func() bool { return g.postCount() == 7 })
 	time.Sleep(100 * time.Millisecond)
 
 	g.automod.Store(true)
@@ -677,12 +677,12 @@ func TestSessionResubscribeAddsAutoModWhenTheGrantGainsIt(t *testing.T) {
 		return g.typeCount("automod.message.hold") == 1 && g.typeCount("automod.message.update") == 1
 	})
 	time.Sleep(100 * time.Millisecond)
-	if g.postCount() != 8 || g.tries.Load() != 1 {
+	if g.postCount() != 9 || g.tries.Load() != 1 {
 		t.Fatalf("only automod should be new, got %d subscriptions and %d moderation tries", g.postCount(), g.tries.Load())
 	}
 
 	s.Leave("a")
-	waitFor(t, "every subscription deleted", func() bool { return len(g.deleted()) == 8 })
+	waitFor(t, "every subscription deleted", func() bool { return len(g.deleted()) == 9 })
 }
 
 func TestSessionSubscribesBroadcasterFeedsOnlyOnTheOwnChannel(t *testing.T) {
@@ -692,9 +692,9 @@ func TestSessionSubscribesBroadcasterFeedsOnlyOnTheOwnChannel(t *testing.T) {
 	s := newTestSession(ctx, idleSocket(t, "sess-own"), helix.URL, make(chan []byte, 16), nil)
 	s.Join("a", nil)
 	s.Join("user-1", nil)
-	// eight per channel, plus three poll, four prediction and one ad break
+	// nine per channel, plus three poll, four prediction and one ad break
 	// feed at home
-	waitFor(t, "both channels subscribed", func() bool { return rec.postCount() == 24 })
+	waitFor(t, "both channels subscribed", func() bool { return rec.postCount() == 26 })
 	time.Sleep(100 * time.Millisecond)
 
 	rec.mu.Lock()
@@ -721,7 +721,7 @@ func TestSessionSubscribesBroadcasterFeedsOnlyOnTheOwnChannel(t *testing.T) {
 	}
 
 	s.Leave("user-1")
-	waitFor(t, "every feed of the own channel deleted", func() bool { return len(rec.deleted()) == 16 })
+	waitFor(t, "every feed of the own channel deleted", func() bool { return len(rec.deleted()) == 17 })
 }
 
 func TestSessionResubscribeAddsPollsWhenTheGrantGainsThem(t *testing.T) {
@@ -735,7 +735,7 @@ func TestSessionResubscribeAddsPollsWhenTheGrantGainsThem(t *testing.T) {
 	s := newTestSession(ctx, idleSocket(t, "sess-polls"), helix.URL, make(chan []byte, 16), func(string, any) { notified.Add(1) })
 	s.Join("user-1", nil)
 	// the refused poll.begin is not recorded, so predictions still land
-	waitFor(t, "predictions subscribed, polls refused", func() bool { return g.postCount() == 13 })
+	waitFor(t, "predictions subscribed, polls refused", func() bool { return g.postCount() == 14 })
 	time.Sleep(100 * time.Millisecond)
 	if g.typeCount("channel.poll.progress") != 0 || g.typeCount("channel.poll.end") != 0 {
 		t.Fatal("the poll group must stop at its first refusal")
@@ -749,7 +749,7 @@ func TestSessionResubscribeAddsPollsWhenTheGrantGainsThem(t *testing.T) {
 	s.Resubscribe()
 	waitFor(t, "polls added", func() bool { return g.typeCount("channel.poll.end") == 1 })
 	time.Sleep(100 * time.Millisecond)
-	if g.postCount() != 16 || g.typeCount("channel.prediction.begin") != 1 {
+	if g.postCount() != 17 || g.typeCount("channel.prediction.begin") != 1 {
 		t.Fatalf("only the poll feeds should be new, got %d subscriptions", g.postCount())
 	}
 }
@@ -764,7 +764,7 @@ func TestSessionResubscribeAddsAdBreaksWhenTheGrantGainsThem(t *testing.T) {
 	var notified atomic.Int32
 	s := newTestSession(ctx, idleSocket(t, "sess-ads"), helix.URL, make(chan []byte, 16), func(string, any) { notified.Add(1) })
 	s.Join("user-1", nil)
-	waitFor(t, "polls and predictions subscribed, ad breaks refused", func() bool { return g.postCount() == 15 })
+	waitFor(t, "polls and predictions subscribed, ad breaks refused", func() bool { return g.postCount() == 16 })
 	time.Sleep(100 * time.Millisecond)
 	if g.typeCount("channel.ad_break.begin") != 0 {
 		t.Fatal("the ad break feed must wait for channel:read:ads")
@@ -778,12 +778,12 @@ func TestSessionResubscribeAddsAdBreaksWhenTheGrantGainsThem(t *testing.T) {
 	s.Resubscribe()
 	waitFor(t, "ad breaks added", func() bool { return g.typeCount("channel.ad_break.begin") == 1 })
 	time.Sleep(100 * time.Millisecond)
-	if g.postCount() != 16 {
+	if g.postCount() != 17 {
 		t.Fatalf("only the ad break feed should be new, got %d subscriptions", g.postCount())
 	}
 
 	s.Leave("user-1")
-	waitFor(t, "every subscription deleted", func() bool { return len(g.deleted()) == 16 })
+	waitFor(t, "every subscription deleted", func() bool { return len(g.deleted()) == 17 })
 }
 
 func TestSessionResubscribeWhileSubscribingRunsAgain(t *testing.T) {
@@ -799,7 +799,7 @@ func TestSessionResubscribeWhileSubscribingRunsAgain(t *testing.T) {
 	close(block)
 	waitFor(t, "moderation tried again on the rerun", func() bool { return g.tries.Load() == 2 })
 	time.Sleep(100 * time.Millisecond)
-	if g.tries.Load() != 2 || g.postCount() != 5 {
+	if g.tries.Load() != 2 || g.postCount() != 6 {
 		t.Fatalf("expected one rerun and no duplicate chat, got %d moderation tries, %d subscriptions", g.tries.Load(), g.postCount())
 	}
 }
@@ -840,9 +840,9 @@ func TestSessionFeedSwitchesDeleteAndRestoreTheirSubscriptions(t *testing.T) {
 	s := newTestSession(ctx, idleSocket(t, "sess-feeds"), helix.URL, make(chan []byte, 16), nil)
 	s.SetFeed(FeedBroadcaster, false)
 	s.Join("user-1", nil)
-	waitFor(t, "chat and moderation without the stream manager feeds", func() bool { return rec.postCount() == 8 })
+	waitFor(t, "chat and moderation without the stream manager feeds", func() bool { return rec.postCount() == 9 })
 	time.Sleep(100 * time.Millisecond)
-	if rec.postCount() != 8 {
+	if rec.postCount() != 9 {
 		t.Fatalf("broadcaster feeds must wait, got %d subscriptions", rec.postCount())
 	}
 
@@ -851,10 +851,10 @@ func TestSessionFeedSwitchesDeleteAndRestoreTheirSubscriptions(t *testing.T) {
 
 	s.SetFeed(FeedBroadcaster, true)
 	s.SetFeed(FeedModeration, true)
-	waitFor(t, "both feeds back", func() bool { return rec.postCount() == 8+8+3 })
+	waitFor(t, "both feeds back", func() bool { return rec.postCount() == 9+8+3 })
 	s.SetFeed(FeedModeration, true)
 	time.Sleep(100 * time.Millisecond)
-	if rec.postCount() != 19 || len(rec.deleted()) != 3 {
+	if rec.postCount() != 20 || len(rec.deleted()) != 3 {
 		t.Fatalf("a repeated switch must change nothing, got %d posts and %d deletes", rec.postCount(), len(rec.deleted()))
 	}
 }

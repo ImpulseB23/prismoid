@@ -130,10 +130,15 @@ export interface ChatSettings {
 /** Send only the fields being changed; a duration needs its mode set true. */
 export type ChatSettingsPatch = Partial<ChatSettings>;
 
+/**
+ * Anyone can read a room's modes; a moderator also gets the non-moderator
+ * delay, which Twitch only reveals when asked as one.
+ */
 export function getChatSettings(
   channelId: string,
+  asModerator: boolean,
 ): Promise<ChatSettings | null> {
-  return invoke("twitch_get_chat_settings", { channelId });
+  return invoke("twitch_get_chat_settings", { channelId, asModerator });
 }
 
 export function updateChatSettings(

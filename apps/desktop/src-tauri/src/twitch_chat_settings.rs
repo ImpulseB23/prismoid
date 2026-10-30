@@ -1,7 +1,7 @@
 //! Chat room modes for the active channel: emote-only, followers-only,
 //! slow, subscribers-only, unique chat and the non-moderator delay. Read
-//! with Helix `GET /chat/settings`, changed with `PATCH /chat/settings`;
-//! both act as the signed-in user, who must moderate the channel.
+//! with Helix `GET /chat/settings` by anyone (the delay only comes back
+//! for moderators), changed with `PATCH /chat/settings` by moderators.
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -97,12 +97,13 @@ pub async fn fetch_chat_settings(
     helix_base: &str,
     access_token: &str,
     broadcaster_id: &str,
-    moderator_id: &str,
+    moderator_id: Option<&str>,
 ) -> Result<ChatSettings, ChannelError> {
-    let query = [
-        ("broadcaster_id", broadcaster_id),
-        ("moderator_id", moderator_id),
-    ];
+    let mut query = vec![("broadcaster_id", broadcaster_id)];
+    // Only a moderator may name themselves here; it adds the delay fields.
+    if let Some(id) = moderator_id {
+        query.push(("moderator_id", id));
+    }
     let resp: ChatSettingsResponse = helix_get(
         http,
         format!("{helix_base}/chat/settings"),
@@ -160,6 +161,7 @@ pub async fn twitch_get_chat_settings(
     auth: State<'_, AuthState>,
     channels: State<'_, ChannelState>,
     channel_id: String,
+    as_moderator: bool,
 ) -> Result<Option<ChatSettings>, ChannelError> {
     let tokens = auth.manager.load_or_refresh().await?;
     fetch_chat_settings(
@@ -167,7 +169,7 @@ pub async fn twitch_get_chat_settings(
         channels.helix_base(),
         &tokens.access_token,
         &channel_id,
-        &tokens.user_id,
+        as_moderator.then_some(tokens.user_id.as_str()),
     )
     .await
     .map(Some)
@@ -226,13 +228,42 @@ mod tests {
                 .header("Authorization", "Bearer tok");
             then.status(200).json_body(settings_json(false));
         });
-        let got = fetch_chat_settings(&reqwest::Client::new(), &server.base_url(), "tok", "1", "7")
-            .await
-            .unwrap();
+        let got = fetch_chat_settings(
+            &reqwest::Client::new(),
+            &server.base_url(),
+            "tok",
+            "1",
+            Some("7"),
+        )
+        .await
+        .unwrap();
         assert!(got.follower_mode);
         assert_eq!(got.follower_mode_duration, Some(10));
         assert!(!got.slow_mode);
         assert_eq!(got.slow_mode_wait_time, None);
+    }
+
+    #[tokio::test]
+    async fn viewers_read_the_modes_without_naming_a_moderator() {
+        let server = MockServer::start_async().await;
+        let viewer = server.mock(|when, then| {
+            when.method(GET)
+                .path("/chat/settings")
+                .query_param("broadcaster_id", "1")
+                .query_param_missing("moderator_id");
+            then.status(200).json_body(settings_json(true));
+        });
+        let got = fetch_chat_settings(
+            &reqwest::Client::new(),
+            &server.base_url(),
+            "tok",
+            "1",
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(viewer.calls(), 1);
+        assert_eq!(got.slow_mode_wait_time, Some(30));
     }
 
     #[tokio::test]
