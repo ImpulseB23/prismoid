@@ -16,6 +16,7 @@ mod sidecar_commands;
 #[cfg(windows)]
 mod sidecar_job;
 mod sidecar_supervisor;
+mod storage_move;
 mod tray;
 pub mod twitch_ads;
 pub mod twitch_auth;
@@ -87,14 +88,16 @@ pub fn run() {
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(WINDOW_STATE)
-                // Cards always open at the mouse.
-                .with_filter(|label| !user_card::is_card(label))
+                // Cards always open at the mouse; the storage move window
+                // is never shown.
+                .with_filter(|label| !user_card::is_card(label) && label != storage_move::LABEL)
                 .build(),
         )
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .manage(tray::CloseToTray::default())
         .manage(user_card::UserCards::default())
+        .manage(storage_move::StorageMove::default())
         .on_window_event(on_window_event)
         .invoke_handler(tauri::generate_handler![
             get_platform,
@@ -157,6 +160,10 @@ pub fn run() {
             user_card::user_card_ready,
             user_card::user_card_set_pinned,
             user_card::user_card_close,
+            storage_move::commands::storage_move_import,
+            storage_move::commands::storage_move_imported,
+            storage_move::commands::storage_move_export,
+            storage_move::commands::storage_move_finish,
             video_window::video_window_open,
             video_window::video_windows_close,
             twitch_chat_settings::twitch_get_chat_settings,
@@ -218,6 +225,7 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
         Some(vec![tray::MINIMIZED_ARG]),
     ))?;
     tray::install(app.handle())?;
+    storage_move::commands::start(app.handle())?;
     // Windows gets the in-app title bar (the frontend draws the buttons when
     // it sees an undecorated window); other platforms keep native chrome.
     // Done before the first show so the native frame never flashes.

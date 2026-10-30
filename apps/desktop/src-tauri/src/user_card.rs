@@ -425,6 +425,8 @@ impl<R: Runtime> Host for App<R> {
                 // A fixed size that follows the zoom, so the card always looks
                 // the same.
                 .resizable(false)
+                // The main window's origin, so both share localStorage.
+                .use_https_scheme(true)
                 .additional_browser_args(crate::browser_args::BROWSER_ARGS)
                 .visible(false);
         // Same chrome as the main window: the card draws its own title bar
