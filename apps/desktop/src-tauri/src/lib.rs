@@ -143,6 +143,7 @@ pub fn run() {
             twitch_channel::twitch_users_info,
             twitch_channel::twitch_follow_since,
             twitch_channel::twitch_own_chat_color,
+            twitch_channel::twitch_update_chat_color,
             sidecar_supervisor::current_emote_bundle,
             sidecar_supervisor::current_sidecar_status,
             seventv_paints::current_seventv_paints,
