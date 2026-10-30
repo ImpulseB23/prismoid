@@ -100,12 +100,14 @@ describe("EmoteTooltip", () => {
     expect(tip().style.left).toBe(`${window.innerWidth - 108}px`);
   });
 
-  it("hides on scroll, blur and resize while shown", () => {
+  it("hides on the user's scroll, blur and resize while shown", () => {
     render(() => <EmoteTooltip />);
     window.dispatchEvent(new Event("resize"));
     expect(endHover).not.toHaveBeenCalled();
     setHovered({ emote: meta("a"), overlays: [], anchor: at(500, 300), pane });
     document.body.dispatchEvent(new Event("scroll"));
+    expect(endHover).not.toHaveBeenCalled();
+    document.body.dispatchEvent(new WheelEvent("wheel", { bubbles: true }));
     window.dispatchEvent(new Event("blur"));
     window.dispatchEvent(new Event("resize"));
     expect(endHover).toHaveBeenCalledTimes(3);

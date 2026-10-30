@@ -19,11 +19,16 @@ const EmoteTooltip: Component = () => {
 
   createEffect(() => {
     if (!hoveredEmote()) return;
-    window.addEventListener("scroll", endEmoteHover, true);
+    // Only the user's own scrolling ends it; chat following new messages
+    // does not.
+    window.addEventListener("wheel", endEmoteHover, {
+      capture: true,
+      passive: true,
+    });
     window.addEventListener("blur", endEmoteHover);
     window.addEventListener("resize", endEmoteHover);
     onCleanup(() => {
-      window.removeEventListener("scroll", endEmoteHover, true);
+      window.removeEventListener("wheel", endEmoteHover, { capture: true });
       window.removeEventListener("blur", endEmoteHover);
       window.removeEventListener("resize", endEmoteHover);
     });

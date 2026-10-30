@@ -202,6 +202,22 @@ describe("ChatFeed", () => {
     expect(modPopover()).toMatchObject({ kind: "warn", x: 40, y: 50 });
   });
 
+  it("keeps following chat while a menu from it is open", async () => {
+    const { container } = renderFeed("me");
+    emit("chat_messages", [msg("held")]);
+    await tick();
+    fireEvent.contextMenu(rowFor(container, "held"), {
+      clientX: 40,
+      clientY: 50,
+    });
+    expect(contextMenu()).not.toBeNull();
+    emit("chat_messages", [msg("after")]);
+    await tick();
+    expect(contextMenu()).not.toBeNull();
+    expect(screen.queryByText(/paused/i)).toBeNull();
+    closeContextMenu();
+  });
+
   it("remembers the user's own badges from live chat", async () => {
     setAuthStatus({
       state: "logged_in",
