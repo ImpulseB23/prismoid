@@ -271,20 +271,19 @@ describe("createChannelStore", () => {
     expect(store.lastLogin()).toBeNull();
   });
 
-  it("tracks bans per tab and clears the active one on rejoin", async () => {
+  it("tracks bans per tab and clears one on rejoin", async () => {
     const commands = fakeCommands();
     const store = createChannelStore(commands, memStorage());
     await store.select("a");
     await store.select("b");
     store.markBanned("id-a");
-    expect(store.banned()).toBe(false);
-    await store.focus("id-a");
-    expect(store.banned()).toBe(true);
-    await store.rejoin();
-    expect(store.banned()).toBe(false);
+    expect(store.bannedIn("id-a")).toBe(true);
+    expect(store.bannedIn("id-b")).toBe(false);
+    await store.rejoin("id-a");
+    expect(store.bannedIn("id-a")).toBe(false);
     expect(commands.log).toContain("rejoin id-a");
     store.markBanned("id-zzz");
-    expect(store.banned()).toBe(false);
+    expect(store.bannedIn("id-zzz")).toBe(false);
   });
 
   it("counts unread for tabs off screen and clears on focus", async () => {

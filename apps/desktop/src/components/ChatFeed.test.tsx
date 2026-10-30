@@ -15,7 +15,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }));
 const role = { mod: false };
 vi.mock("../stores/roleStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../stores/roleStore")>()),
-  canModerate: () => role.mod,
+  canModerateIn: () => role.mod,
 }));
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({ requestUserAttention: vi.fn() }),
@@ -24,7 +24,7 @@ vi.mock("@tauri-apps/api/window", () => ({
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 vi.mock("../stores/channelStore", () => ({
   activeChannel: () => ({ id: "chan", login: "chan", display_name: "Chan" }),
-  channelBanned: () => false,
+  channelBannedIn: () => false,
   channelTabs: () => [],
   channelStatus: () => "connected",
   markChannelBanned: vi.fn(),

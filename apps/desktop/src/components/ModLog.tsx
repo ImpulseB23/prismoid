@@ -2,7 +2,7 @@
 // first: timeouts, bans, deletions and mode changes, by any mod.
 
 import { Component, For, Show, createSignal } from "solid-js";
-import { activeChannel } from "../stores/channelStore";
+import { useSession } from "../lib/chatSession";
 import { modActionsIn, modLogRevision } from "../stores/modLogStore";
 import { describeModAction } from "../lib/modActions";
 import { formatTimestamp } from "../lib/messageStyle";
@@ -44,11 +44,12 @@ const FILTERS: [ModLogFilter, string][] = [
 ];
 
 const ModLog: Component = () => {
+  const session = useSession();
   const [filter, setFilter] = createSignal<ModLogFilter>("all");
 
   const rows = () => {
     modLogRevision();
-    const id = activeChannel()?.id;
+    const id = session().channel?.id;
     if (id === undefined) return [];
     return modActionsIn(id).filter((a) => matchesFilter(a, filter()));
   };

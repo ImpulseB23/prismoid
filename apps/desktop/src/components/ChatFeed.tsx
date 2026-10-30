@@ -19,7 +19,7 @@ import type { ChatMessage } from "../stores/chatStore";
 import { useSession, type ChatSession } from "../lib/chatSession";
 import {
   activeChannel,
-  channelBanned,
+  channelBannedIn,
   channelTabs,
   channelStatus,
   focusChannel,
@@ -47,7 +47,7 @@ import { openContextMenu } from "../stores/contextMenuStore";
 import { notice, notify } from "../stores/noticeStore";
 import { formatSendError, toSendError } from "../lib/messageInput";
 import { retainPulse } from "../stores/pulseStore";
-import { canModerate } from "../stores/roleStore";
+import { canModerateIn } from "../stores/roleStore";
 import { BANNED_HINT, bannedText } from "../lib/chatAccess";
 import {
   isNewAccount,
@@ -143,6 +143,10 @@ export interface ChatFeedProps {
 const ChatFeed: Component<ChatFeedProps> = (props) => {
   const session = useSession();
   const chat = () => session().chat;
+  const moderates = () => {
+    const c = session().channel;
+    return c !== null && canModerateIn(c.id);
+  };
   let containerRef: HTMLDivElement | undefined;
   const entryCache = new Map<number, CachedEntry>();
   let cachedFor: ChatSession | undefined;
@@ -551,10 +555,10 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
   // Mods can delete any message, their own included; timeouts and bans
   // never target themselves.
   const canDelete = (msg: ChatMessage) =>
-    canModerate() && msg.platform === "Twitch";
+    moderates() && msg.platform === "Twitch";
 
   const showModIcons = (msg: ChatMessage) =>
-    canModerate() &&
+    moderates() &&
     msg.platform === "Twitch" &&
     msg.platform_user_id.length > 0 &&
     msg.username !== props.login;
@@ -590,7 +594,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       messageMenuItems(
         msg,
         {
-          canModerate: canModerate(),
+          canModerate: moderates(),
           ignored: isIgnored(msg.username),
           own: msg.username === props.login,
           timeouts: settings().timeoutPresets,
@@ -1167,7 +1171,8 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
 };
 
 const EmptyState: Component<{ loading: boolean }> = (props) => {
-  const channel = () => activeChannel();
+  const session = useSession();
+  const channel = () => session().channel;
   const status = () => channelStatus();
   const opening = () => {
     const c = channel();
@@ -1205,7 +1210,7 @@ const EmptyState: Component<{ loading: boolean }> = (props) => {
         >
           {(c) => (
             <Show
-              when={!channelBanned()}
+              when={!channelBannedIn(c().id)}
               fallback={
                 <>
                   <strong>{bannedText(c().display_name)}</strong>
@@ -1213,7 +1218,7 @@ const EmptyState: Component<{ loading: boolean }> = (props) => {
                   <button
                     type="button"
                     class="feed__empty-action"
-                    onClick={() => void rejoinChannel()}
+                    onClick={() => void rejoinChannel(c().id)}
                   >
                     Check again
                   </button>

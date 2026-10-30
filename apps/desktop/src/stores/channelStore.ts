@@ -67,12 +67,12 @@ export interface ChannelStore {
   /** Closes a tab; a neighbour takes over when it was the one on screen. */
   close: (channelId: string) => Promise<void>;
   forgetRecent: (login: string) => void;
-  /** Twitch refuses to show the active channel's chat to this account. */
-  banned: () => boolean;
+  /** Twitch refuses to show `channelId`'s chat to this account. */
+  bannedIn: (channelId: string) => boolean;
   /** Records the host's ban notice for any open tab. */
   markBanned: (channelId: string) => void;
-  /** Reconnects the active channel to see whether the ban still holds. */
-  rejoin: () => Promise<void>;
+  /** Reconnects a banned channel to see whether the ban still holds. */
+  rejoin: (channelId: string) => Promise<void>;
   /** Counts a message that arrived for a tab not on screen. */
   noteUnread: (channelId: string) => void;
   unread: (channelId: string) => number;
@@ -258,15 +258,13 @@ export function createChannelStore(
 
   // Optimistic: a channel that still refuses us answers the reconnect with
   // another ban notice, which flips this back.
-  async function rejoinBanned(): Promise<void> {
-    const a = active();
-    if (!a) return;
+  async function rejoinBanned(channelId: string): Promise<void> {
     setBannedIds((s) => {
       const next = new Set(s);
-      next.delete(a.id);
+      next.delete(channelId);
       return next;
     });
-    await commands.rejoin(a.id);
+    await commands.rejoin(channelId);
   }
 
   function noteUnread(channelId: string): void {
@@ -291,10 +289,7 @@ export function createChannelStore(
     focus,
     close,
     forgetRecent,
-    banned: () => {
-      const a = active();
-      return a !== null && bannedIds().has(a.id);
-    },
+    bannedIn: (channelId) => bannedIds().has(channelId),
     markBanned,
     rejoin: rejoinBanned,
     noteUnread,
@@ -387,7 +382,7 @@ export const restoreChannels = defaultStore.restore;
 export const focusChannel = defaultStore.focus;
 export const closeChannel = defaultStore.close;
 export const forgetRecentChannel = defaultStore.forgetRecent;
-export const channelBanned = defaultStore.banned;
+export const channelBannedIn = defaultStore.bannedIn;
 export const markChannelBanned = defaultStore.markBanned;
 export const rejoinChannel = defaultStore.rejoin;
 export const noteUnread = defaultStore.noteUnread;

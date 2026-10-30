@@ -7,11 +7,15 @@ const [modes, setModes] = createSignal<ChatSettings | null>(null);
 const [error, setError] = createSignal<unknown>(null);
 const apply = vi.fn<(patch: unknown) => Promise<void>>(async () => {});
 
-vi.mock("../stores/chatSettingsStore", () => ({
-  chatSettings: () => modes(),
-  chatSettingsBusy: () => false,
-  chatSettingsError: () => error(),
-  applyChatSettings: (p: unknown) => apply(p),
+vi.mock("../lib/chatSession", () => ({
+  useSession: () => () => ({
+    roomModes: {
+      settings: () => modes(),
+      busy: () => false,
+      error: () => error(),
+      apply: (p: unknown) => apply(p),
+    },
+  }),
 }));
 
 const { default: ChatModes } = await import("./ChatModes");

@@ -17,14 +17,17 @@ import {
   type ChatStore,
 } from "../stores/chatStore";
 import { createChatterStore, type ChatterStore } from "../stores/chatterStore";
-import { activeChannel } from "../stores/channelStore";
 import { settings } from "../stores/settingsStore";
 import { currentUserId } from "../stores/authStore";
 import { noteOwnMessage } from "../stores/ownIdentityStore";
 import { ensureUserInfo } from "../stores/userInfoStore";
 import { canModerateIn, noteModerator } from "../stores/roleStore";
 import { recordModAction } from "../stores/modLogStore";
-import { MODE_ACTIONS, loadChatSettings } from "../stores/chatSettingsStore";
+import {
+  MODE_ACTIONS,
+  createChatSettingsStore,
+  type ChatSettingsStore,
+} from "../stores/chatSettingsStore";
 import {
   createBadgeStore,
   type BadgeStore,
@@ -38,10 +41,14 @@ import {
 
 export interface ChatSession {
   readonly channelId: string;
+  /** The channel the pane shows; null for a pane with none open. */
+  readonly channel: Channel | null;
   readonly chat: ChatStore;
   readonly chatters: ChatterStore;
   readonly badges: BadgeStore;
   readonly emotes: EmoteStore;
+  /** Room modes, loaded when a moderator opens the chat manager. */
+  readonly roomModes: ChatSettingsStore;
   /** True while the stored tail is loading. */
   readonly historyLoading: () => boolean;
 }
@@ -49,10 +56,12 @@ export interface ChatSession {
 /** What a pane with no channel open reads: never written, always empty. */
 export const idleSession: ChatSession = {
   channelId: "",
+  channel: null,
   chat: createChatStore(),
   chatters: createChatterStore(),
   badges: createBadgeStore(),
   emotes: createEmoteStore(),
+  roomModes: createChatSettingsStore(),
   historyLoading: () => false,
 };
 
@@ -69,6 +78,7 @@ function openSession(channel: Channel): {
   const chatters = createChatterStore();
   const badges = createBadgeStore();
   const emotes = createEmoteStore();
+  const roomModes = createChatSettingsStore();
   const applyBundle = (bundle: EmoteBundle & EmoteBundleSets) => {
     badges.loadBundle(bundle);
     emotes.loadBundle(bundle);
@@ -140,13 +150,8 @@ function openSession(channel: Channel): {
           break;
         case "mod_action":
           recordModAction(e);
-          // The modes panel shows the channel on screen.
-          if (
-            MODE_ACTIONS.has(e.action) &&
-            activeChannel()?.id === channel.id
-          ) {
-            void loadChatSettings(channel.id);
-          }
+          // Only moderators get these, and they may have the modes open.
+          if (MODE_ACTIONS.has(e.action)) void roomModes.load(channel.id);
           if (settings().showModActions) {
             chat.addMessages([modActionMessage(e, nextLocalSeq++)]);
           }
@@ -169,10 +174,12 @@ function openSession(channel: Channel): {
   return {
     session: {
       channelId: channel.id,
+      channel,
       chat,
       chatters,
       badges,
       emotes,
+      roomModes,
       historyLoading: history.loading,
     },
     close: () => {
