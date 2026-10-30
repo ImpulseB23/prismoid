@@ -142,7 +142,7 @@ describe("ChatFeed", () => {
     handlers.clear();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
-    await updateSettings({ highlightFirstMessages: true });
+    await updateSettings({ highlightFirstMessages: true, pauseChat: "scroll" });
     role.mod = false;
     closeModPopover();
     clearJump();
@@ -218,6 +218,36 @@ describe("ChatFeed", () => {
     await tick();
     expect(ownBadges("chan")).toEqual([{ set_id: "subscriber", id: "6" }]);
     setAuthStatus(null);
+  });
+
+  it("holds still while the mouse is over chat, then catches up", async () => {
+    await updateSettings({ pauseChat: "hover" });
+    const { container } = renderFeed("me");
+    emit("chat_messages", [msg("before")]);
+    await tick();
+    const feed = container.querySelector(".feed")!;
+    fireEvent.pointerEnter(feed);
+    expect(screen.getByRole("status").textContent).toContain("Chat paused");
+    emit("chat_messages", [msg("during")]);
+    await tick();
+    expect(screen.getByRole("status").textContent).toContain("Paused, 1 new");
+    fireEvent.pointerLeave(feed);
+    expect(screen.queryByText(/paused/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /new message/ })).toBeNull();
+  });
+
+  it("holds still while Alt is down, and lets go when the window loses focus", async () => {
+    await updateSettings({ pauseChat: "alt" });
+    const { container } = renderFeed("me");
+    fireEvent.pointerEnter(container.querySelector(".feed")!);
+    expect(screen.queryByText(/paused/i)).toBeNull();
+    fireEvent.keyDown(window, { key: "Alt" });
+    expect(screen.getByText("Chat paused")).toBeTruthy();
+    fireEvent.blur(window);
+    expect(screen.queryByText(/paused/i)).toBeNull();
+    fireEvent.keyDown(window, { key: "Alt" });
+    fireEvent.keyUp(window, { key: "Alt" });
+    expect(screen.queryByText(/paused/i)).toBeNull();
   });
 
   it("jumps to a loaded message and flashes it", async () => {

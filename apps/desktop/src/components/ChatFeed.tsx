@@ -172,6 +172,38 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
 
   let scrollRafPending = false;
 
+  // Pause chat: while held (mouse over the feed or Alt down, per the
+  // setting) a feed at the bottom stops following, so new messages queue
+  // below and the view catches up on release.
+  const [hovering, setHovering] = createSignal(false);
+  const [altDown, setAltDown] = createSignal(false);
+  createEffect(() => {
+    const mode = settings().pauseChat;
+    if (mode !== "alt" && mode !== "hoverAlt") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Alt") setAltDown(e.type === "keydown");
+    };
+    // Alt-Tab leaves the window without a keyup.
+    const release = () => setAltDown(false);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKey);
+    window.addEventListener("blur", release);
+    onCleanup(() => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKey);
+      window.removeEventListener("blur", release);
+      setAltDown(false);
+    });
+  });
+  const held = () => {
+    const mode = settings().pauseChat;
+    return (
+      ((mode === "hover" || mode === "hoverAlt") && hovering()) ||
+      ((mode === "alt" || mode === "hoverAlt") && altDown())
+    );
+  };
+  const frozen = createMemo(() => held() && stickToBottom());
+
   const anchorAt = (top: number) => {
     const { messages } = layout();
     const i = firstBelow(messages, top);
@@ -191,6 +223,22 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       const totalH = containerRef.scrollHeight;
       setScrollTop(top);
       const atBottom = totalH - top - clientH <= STICK_THRESHOLD;
+      if (frozen()) {
+        // The feed's own scrolls keep the held message in place; any other
+        // scroll is the user's, and scrolling up leaves the pause behind.
+        const at = anchorAt(top);
+        if (
+          at &&
+          anchor &&
+          at.mono === anchor.mono &&
+          Math.abs(at.offset - anchor.offset) < 1
+        ) {
+          return;
+        }
+        anchor = at;
+        if (!atBottom) setStickToBottom(false);
+        return;
+      }
       if (atBottom !== stickToBottom()) {
         setStickToBottom(atBottom);
         const v = chat().viewport();
@@ -359,6 +407,24 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     return monos;
   });
 
+  createEffect(
+    on(
+      frozen,
+      (on) => {
+        if (!containerRef) return;
+        if (on) {
+          anchor = anchorAt(containerRef.scrollTop);
+          const v = chat().viewport();
+          setReadUpTo(v.start + v.count);
+        } else if (stickToBottom()) {
+          anchor = null;
+          setReadUpTo(null);
+        }
+      },
+      { defer: true },
+    ),
+  );
+
   const unseenCount = createMemo(() => {
     const upTo = readUpTo();
     if (upTo === null) return 0;
@@ -372,7 +438,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     const vh = viewportHeight();
     if (vh === 0) return;
 
-    if (stickToBottom()) {
+    if (stickToBottom() && !frozen()) {
       // The real bottom, padding included: the canvas height alone stops
       // short by the feed's top and bottom padding.
       const target = Math.max(
@@ -626,7 +692,12 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
   };
 
   return (
-    <div class="feed" data-tour="feed">
+    <div
+      class="feed"
+      data-tour="feed"
+      onPointerEnter={() => setHovering(true)}
+      onPointerLeave={() => setHovering(false)}
+    >
       <div
         class="feed__scroll"
         ref={(el) => (containerRef = el)}
@@ -1128,6 +1199,26 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
             channelStatus() === "connecting" || session().historyLoading()
           }
         />
+      </Show>
+
+      <Show when={frozen()}>
+        <div class="jump jump--paused" role="status">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 12 12"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M4 2.5v7M8 2.5v7"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+          </svg>
+          {unseenCount() > 0 ? `Paused, ${unseenCount()} new` : "Chat paused"}
+        </div>
       </Show>
 
       <Show when={!stickToBottom()}>

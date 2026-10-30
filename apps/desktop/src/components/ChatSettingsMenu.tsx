@@ -2,12 +2,21 @@
 // emote button, like the menu under Twitch's chat box. Settings that only
 // change this app are saved with the rest of the settings.
 
-import { Show, createEffect, onCleanup, type Component } from "solid-js";
+import { For, Show, createEffect, onCleanup, type Component } from "solid-js";
 import {
   settings,
   updateSettings,
+  PAUSE_CHAT,
+  type PauseChat,
   type Settings,
 } from "../stores/settingsStore";
+
+const PAUSE_LABEL: Record<PauseChat, string> = {
+  scroll: "Scrolling up only",
+  hover: "Mouse over chat",
+  alt: "Holding Alt",
+  hoverAlt: "Mouse over or Alt",
+};
 
 export interface ChatSettingsMenuProps {
   open: boolean;
@@ -65,6 +74,25 @@ const ChatSettingsMenu: Component<ChatSettingsMenuProps> = (props) => {
             checked={settings().readableColors}
             onChange={(e) => save({ readableColors: e.currentTarget.checked })}
           />
+        </label>
+        <label class="settings__row">
+          <div class="settings__text">
+            <span class="settings__name">Pause chat</span>
+            <span class="settings__hint">
+              Hold new messages back while reading
+            </span>
+          </div>
+          <select
+            class="modes__select"
+            value={settings().pauseChat}
+            onChange={(e) =>
+              save({ pauseChat: e.currentTarget.value as PauseChat })
+            }
+          >
+            <For each={PAUSE_CHAT}>
+              {(mode) => <option value={mode}>{PAUSE_LABEL[mode]}</option>}
+            </For>
+          </select>
         </label>
         <label class="settings__row settings__row--toggle">
           <div class="settings__text">

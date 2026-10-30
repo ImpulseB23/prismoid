@@ -31,6 +31,8 @@ export interface Settings {
   alternateRows: boolean;
   /** Lighten or darken names that are hard to read on the background. */
   readableColors: boolean;
+  /** What else besides scrolling up holds the feed still. */
+  pauseChat: PauseChat;
   /** Hide the live viewer count in the stream bar. */
   hideViewers: boolean;
   hideUptime: boolean;
@@ -81,6 +83,9 @@ export interface Settings {
 /** Bounds for streamManagerHeight. */
 export const STREAM_MANAGER_HEIGHT = { min: 0.35, max: 0.85 } as const;
 
+export type PauseChat = "scroll" | "hover" | "alt" | "hoverAlt";
+export const PAUSE_CHAT: PauseChat[] = ["scroll", "hover", "alt", "hoverAlt"];
+
 export type Theme = "system" | "dark" | "midnight" | "light" | "prismoid";
 export const THEMES: Theme[] = [
   "system",
@@ -109,6 +114,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showTimestamps: false,
   alternateRows: false,
   readableColors: true,
+  pauseChat: "scroll",
   hideViewers: false,
   hideUptime: false,
   hideChatRate: false,
@@ -302,6 +308,11 @@ function readSettings(storage: StorageLike | null): Settings {
         typeof p.readableColors === "boolean"
           ? p.readableColors
           : DEFAULT_SETTINGS.readableColors,
+      pauseChat:
+        typeof p.pauseChat === "string" &&
+        PAUSE_CHAT.includes(p.pauseChat as PauseChat)
+          ? (p.pauseChat as PauseChat)
+          : DEFAULT_SETTINGS.pauseChat,
       hideViewers:
         typeof p.hideViewers === "boolean"
           ? p.hideViewers

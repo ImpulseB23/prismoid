@@ -1854,6 +1854,13 @@ option::checkmark {
   color: var(--text);
 }
 
+.jump--paused,
+.jump--paused:hover {
+  border-color: var(--border);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
 /* Composer */
 
 /* Flush with the window's bottom edge, so header and composer frame the
