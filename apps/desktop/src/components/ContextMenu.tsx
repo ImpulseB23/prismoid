@@ -31,15 +31,23 @@ const ContextMenu: Component = () => {
       if (e.key === "Escape") closeContextMenu();
     };
     const close = () => closeContextMenu();
+    // Only a scroll that moves what was right-clicked closes the menu; with
+    // several chats open, another one is always scrolling on its own.
+    const onScroll = (e: Event) => {
+      const anchor = contextMenu()?.anchor;
+      if (!anchor || (e.target instanceof Node && e.target.contains(anchor))) {
+        close();
+      }
+    };
     document.addEventListener("mousedown", onPointerDown, true);
     document.addEventListener("keydown", onKey, true);
-    document.addEventListener("scroll", close, true);
+    document.addEventListener("scroll", onScroll, true);
     window.addEventListener("blur", close);
     window.addEventListener("resize", close);
     onCleanup(() => {
       document.removeEventListener("mousedown", onPointerDown, true);
       document.removeEventListener("keydown", onKey, true);
-      document.removeEventListener("scroll", close, true);
+      document.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("blur", close);
       window.removeEventListener("resize", close);
     });

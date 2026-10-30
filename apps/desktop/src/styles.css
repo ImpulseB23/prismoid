@@ -473,9 +473,14 @@ option::checkmark {
     border-color 0.15s;
 }
 
-.tabs__add:hover {
+.tabs__add:hover:not(:disabled) {
   color: var(--text);
   border-color: var(--border-strong);
+}
+
+.tabs__add:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .icon-btn__badge {
@@ -4202,12 +4207,134 @@ option::checkmark {
   }
 }
 
-/* One chat pane: its chat area over its composer. */
-.chat-pane {
+/* Chat panes side by side, equal widths. Narrower than four minimum panes,
+   the row scrolls sideways rather than squeezing chat. */
+.split {
+  position: relative;
   display: flex;
-  flex-direction: column;
   flex: 1;
   min-height: 0;
+  overflow-x: auto;
+}
+
+/* One chat pane: its chat area over its composer. */
+.chat-pane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.split--many .chat-pane {
+  min-width: 280px;
+}
+
+.split--many .chat-pane + .chat-pane {
+  border-left: 1px solid var(--border);
+}
+
+/* The focused pane wears the active tab's gradient along its top. */
+.chat-pane--focused::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--prism);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.pane-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 4px 0 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.chat-pane--focused .pane-head {
+  color: var(--text);
+}
+
+.pane-head__avatar {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.pane-head__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Drop targets for a dragged tab: the whole pane shows it there, the
+   strip on the right edge opens it in a new pane. They only take the
+   pointer while a tab is being dragged. */
+.split__drop {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  border-radius: var(--radius-sm);
+  transition: background 0.12s;
+}
+
+.split__drop--armed {
+  pointer-events: auto;
+}
+
+.split__drop--over,
+.split__edge--over {
+  background: var(--prism-tint);
+}
+
+.split__edge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 72px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-left: 2px dashed var(--border-strong);
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: center;
+  transition: background 0.12s;
+}
+
+/* A tab that is on screen in a pane other than the focused one. */
+.tab--shown {
+  color: var(--text);
+}
+
+.tab--shown::after {
+  content: "";
+  position: absolute;
+  left: 25%;
+  right: 25%;
+  bottom: -2px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--border-strong);
 }
 
 /* Chat plus the command center tab and panel, which sit over its right edge. */

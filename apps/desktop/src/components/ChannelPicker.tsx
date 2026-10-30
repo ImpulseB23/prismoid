@@ -26,12 +26,14 @@ import {
 import { formatViewers } from "../lib/streamInfo";
 import {
   forgetRecentChannel,
+  openChannel,
   recentChannels,
   selectChannel,
   type RecentChannel,
 } from "../stores/channelStore";
+import { splitPane } from "../stores/layoutStore";
 import { userInfo, userInfoRevision } from "../stores/userInfoStore";
-import { followedLive, liveState } from "../stores/pickerStore";
+import { followedLive, liveState, pickerSplits } from "../stores/pickerStore";
 
 export interface ChannelPickerProps {
   open: boolean;
@@ -135,7 +137,12 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
     setBusy(true);
     setError(null);
     try {
-      await selectChannel(login, { remember: true });
+      if (pickerSplits()) {
+        const channel = await openChannel(login, { remember: true });
+        splitPane(channel.id);
+      } else {
+        await selectChannel(login, { remember: true });
+      }
       props.onClose();
     } catch (e) {
       setError(formatChannelError(e));
@@ -289,10 +296,18 @@ const ChannelPicker: Component<ChannelPickerProps> = (props) => {
               ref={(el) => (inputRef = el)}
               class="palette__input"
               type="text"
-              placeholder="Search Twitch channels"
+              placeholder={
+                pickerSplits()
+                  ? "Open a channel in a new pane"
+                  : "Search Twitch channels"
+              }
               autocomplete="off"
               spellcheck={false}
-              aria-label="Search Twitch channels"
+              aria-label={
+                pickerSplits()
+                  ? "Open a channel in a new pane"
+                  : "Search Twitch channels"
+              }
               value={query()}
               disabled={busy()}
               onInput={(e) => {

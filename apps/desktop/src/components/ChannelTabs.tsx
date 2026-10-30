@@ -1,7 +1,8 @@
 // Tab strip under the header: one tab per open channel with its avatar,
 // name, unread count and a close control, plus a button that opens the
 // picker. Ctrl+Tab cycles, Ctrl+1..9 jump, Ctrl+W closes, middle click
-// closes.
+// closes. A tab opens in a split from its right-click menu or by dragging
+// it onto the panes.
 
 import {
   Component,
@@ -20,6 +21,15 @@ import {
   unreadCount,
 } from "../stores/channelStore";
 import { openPicker, pickerLoading, prefetchLive } from "../stores/pickerStore";
+import {
+  TAB_DRAG_TYPE,
+  canSplitPane,
+  dropPaneChannel,
+  panes,
+  setDraggedTab,
+  splitPane,
+} from "../stores/layoutStore";
+import { item, openContextMenu } from "../stores/contextMenuStore";
 
 const report = (what: string) => (err: unknown) => console.error(what, err);
 
@@ -58,8 +68,13 @@ const ChannelTabs: Component = () => {
 
   const show = (id: string) =>
     void focusChannel(id).catch(report("focus channel"));
-  const close = (id: string) =>
+  // Its pane goes first, so focus moves to the neighbouring pane rather
+  // than the closing tab's neighbour taking over the pane.
+  const close = (id: string) => {
+    dropPaneChannel(id);
     void closeChannel(id).catch(report("close channel"));
+  };
+  const onScreen = (id: string) => panes().some((p) => p.channelId === id);
 
   const cycle = (step: number) => {
     const tabs = channelTabs();
@@ -108,6 +123,7 @@ const ChannelTabs: Component = () => {
         <For each={channelTabs()}>
           {(channel) => {
             const active = () => activeChannel()?.id === channel.id;
+            const inOtherPane = () => !active() && onScreen(channel.id);
             const unread = () => unreadCount(channel.id);
             return (
               <div
@@ -116,10 +132,27 @@ const ChannelTabs: Component = () => {
                   onCleanup(() => tabEls.delete(channel.id));
                 }}
                 class="tab"
-                classList={{ "tab--active": active() }}
+                classList={{
+                  "tab--active": active(),
+                  "tab--shown": inOtherPane(),
+                }}
                 role="tab"
                 aria-selected={active()}
                 title={channel.display_name}
+                draggable={true}
+                onDragStart={(e) => {
+                  e.dataTransfer?.setData(TAB_DRAG_TYPE, channel.id);
+                  setDraggedTab(channel.id);
+                }}
+                onDragEnd={() => setDraggedTab(null)}
+                onContextMenu={(e) =>
+                  openContextMenu(
+                    e,
+                    !onScreen(channel.id) && canSplitPane()
+                      ? [item("Open in split", () => splitPane(channel.id))]
+                      : [],
+                  )
+                }
                 onClick={() => show(channel.id)}
                 onAuxClick={(e) => {
                   if (e.button === 1) close(channel.id);
@@ -132,7 +165,7 @@ const ChannelTabs: Component = () => {
                   {(url) => <img class="tab__avatar" src={url()} alt="" />}
                 </Show>
                 <span class="tab__name">{channel.display_name}</span>
-                <Show when={!active() && unread() > 0}>
+                <Show when={!active() && !inOtherPane() && unread() > 0}>
                   <span class="tab__unread" aria-label={`${unread()} new`}>
                     {unread() > 99 ? "99+" : unread()}
                   </span>
@@ -169,12 +202,39 @@ const ChannelTabs: Component = () => {
       <button
         type="button"
         class="tabs__add"
+        title={
+          canSplitPane()
+            ? "Open a channel next to this one"
+            : "Four chats is the most side by side"
+        }
+        aria-label="Open a channel in a new pane"
+        disabled={!canSplitPane()}
+        onPointerEnter={() => void prefetchLive()}
+        onClick={() => openPicker({ split: true })}
+      >
+        <svg width="14" height="12" viewBox="0 0 14 12" aria-hidden="true">
+          <rect
+            x="0.75"
+            y="0.75"
+            width="12.5"
+            height="10.5"
+            rx="2"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
+          <path d="M7 1v10" stroke="currentColor" stroke-width="1.5" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="tabs__add"
         data-tour="add-channel"
         title="Open a channel (Ctrl+K)"
         aria-label="Open a channel"
         aria-busy={pickerLoading()}
         onPointerEnter={() => void prefetchLive()}
-        onClick={openPicker}
+        onClick={() => openPicker()}
       >
         <Show
           when={!pickerLoading()}

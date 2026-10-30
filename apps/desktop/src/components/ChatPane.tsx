@@ -6,7 +6,6 @@ import {
   createMemo,
   on,
   onCleanup,
-  onMount,
   untrack,
   type ParentComponent,
 } from "solid-js";
@@ -17,18 +16,20 @@ import {
   idleSession,
   releaseSession,
 } from "../lib/chatSession";
-import {
-  PaneProvider,
-  blurPane,
-  focusPane,
-  focusedPane,
-  type Pane,
-} from "../lib/pane";
+import { PaneProvider, registerPane, type Pane } from "../lib/pane";
+import { focusPaneSlot } from "../stores/layoutStore";
 import { createComposer } from "../stores/composerStore";
 import { createThreadPanel } from "../stores/threadStore";
 import { createNoticeLine } from "../stores/noticeStore";
 
-const ChatPane: ParentComponent<{ channel: Channel | null }> = (props) => {
+export interface ChatPaneProps {
+  /** The layout slot this pane draws. */
+  slotId: string;
+  channel: Channel | null;
+  focused: boolean;
+}
+
+const ChatPane: ParentComponent<ChatPaneProps> = (props) => {
   const session = createMemo(
     on(
       () => props.channel?.id,
@@ -47,18 +48,17 @@ const ChatPane: ParentComponent<{ channel: Channel | null }> = (props) => {
     thread: createThreadPanel(),
     notice: createNoticeLine(),
   };
-  onMount(() => {
-    if (!focusedPane()) focusPane(pane);
-  });
-  onCleanup(() => blurPane(pane));
+  onCleanup(registerPane(props.slotId, pane));
+  const focus = () => focusPaneSlot(props.slotId);
 
   return (
     <SessionProvider value={session}>
       <PaneProvider value={pane}>
         <div
           class="chat-pane"
-          onPointerDown={() => focusPane(pane)}
-          onFocusIn={() => focusPane(pane)}
+          classList={{ "chat-pane--focused": props.focused }}
+          onPointerDown={focus}
+          onFocusIn={focus}
         >
           {props.children}
         </div>

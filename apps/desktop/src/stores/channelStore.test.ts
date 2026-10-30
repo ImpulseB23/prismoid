@@ -74,6 +74,21 @@ describe("createChannelStore", () => {
     ]);
   });
 
+  it("open adds a tab without showing it", async () => {
+    const storage = memStorage();
+    const store = createChannelStore(fakeCommands(), storage);
+    await store.select("a");
+    const b = await store.open("b", { remember: true });
+    expect(b.id).toBe("id-b");
+    expect(store.active()?.login).toBe("a");
+    expect(store.tabs().map((c) => c.login)).toEqual(["a", "b"]);
+    expect(store.recents().map((r) => r.login)).toContain("b");
+    expect(JSON.parse(storage.data["prismoid.channels.tabs"]!)).toEqual([
+      "a",
+      "b",
+    ]);
+  });
+
   it("select of an open tab focuses it without a duplicate", async () => {
     const store = createChannelStore(fakeCommands(), memStorage());
     await store.select("a");

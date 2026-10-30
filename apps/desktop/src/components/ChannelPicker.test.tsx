@@ -18,6 +18,10 @@ const mocks = vi.hoisted(() => ({
   search: vi.fn<(q: string) => Promise<ChannelSearchResult[]>>(),
   select:
     vi.fn<(login: string, opts?: { remember?: boolean }) => Promise<void>>(),
+  open: vi.fn<
+    (login: string, opts?: { remember?: boolean }) => Promise<{ id: string }>
+  >(async (login) => ({ id: `id-${login}` })),
+  split: vi.fn<(channelId: string) => boolean>(() => true),
   load: vi.fn<(ids: string[]) => Promise<void>>(),
   missing: [] as string[],
   recents: [] as RecentChannel[],
@@ -37,6 +41,11 @@ vi.mock("../stores/channelStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../stores/channelStore")>()),
   recentChannels: () => mocks.recents,
   selectChannel: mocks.select,
+  openChannel: mocks.open,
+}));
+vi.mock("../stores/layoutStore", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../stores/layoutStore")>()),
+  splitPane: mocks.split,
 }));
 vi.mock("../stores/userInfoStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../stores/userInfoStore")>()),
@@ -156,6 +165,20 @@ describe("ChannelPicker", () => {
     fireEvent.click(await screen.findByText("A"));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(mocks.select).toHaveBeenCalledWith("a", { remember: true });
+  });
+
+  it("opens the pick in a new pane when asked to split", async () => {
+    mocks.followedLive.mockResolvedValue([live("a", 10)]);
+    const onClose = vi.fn();
+    (await setup(onClose)).openPicker({ split: true });
+    expect(
+      await screen.findByPlaceholderText("Open a channel in a new pane"),
+    ).toBeTruthy();
+    fireEvent.click(await screen.findByText("A"));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(mocks.open).toHaveBeenCalledWith("a", { remember: true });
+    expect(mocks.split).toHaveBeenCalledWith("id-a");
+    expect(mocks.select).not.toHaveBeenCalled();
   });
 
   it("says so when nobody followed is live", async () => {

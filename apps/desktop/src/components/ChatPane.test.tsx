@@ -11,29 +11,34 @@ vi.mock("../lib/chatSession", async (importOriginal) => ({
 
 const { default: ChatPane } = await import("./ChatPane");
 const { focusedPane, requirePane, usePane } = await import("../lib/pane");
+const { focusedPaneId, panes, splitPane } =
+  await import("../stores/layoutStore");
 const { NOTICE_MS } = await import("../stores/noticeStore");
 
 const channel = (id: string) =>
   ({ id, login: id, display_name: id }) as Channel;
 
-// Hands each pane out to the test so it can drive and inspect it.
+// Two layout slots on the same channel, each pane handed out to the test
+// so it can drive and inspect it.
 function twoPanes() {
-  const panes: Pane[] = [];
+  if (panes().length < 2) splitPane("other");
+  const [first, second] = panes().map((p) => p.id);
+  const grabbed: Pane[] = [];
   const Grab = (props: { label: string }) => {
-    panes.push(requirePane());
+    grabbed.push(requirePane());
     return <button type="button">{props.label}</button>;
   };
   render(() => (
     <>
-      <ChatPane channel={channel("a")}>
+      <ChatPane slotId={first!} channel={channel("a")} focused={false}>
         <Grab label="in a" />
       </ChatPane>
-      <ChatPane channel={channel("a")}>
+      <ChatPane slotId={second!} channel={channel("a")} focused={false}>
         <Grab label="in b" />
       </ChatPane>
     </>
   ));
-  return panes as [Pane, Pane];
+  return { panes: grabbed as [Pane, Pane], slots: [first!, second!] };
 }
 
 describe("ChatPane", () => {
@@ -43,7 +48,7 @@ describe("ChatPane", () => {
   });
 
   it("gives each pane its own composer and thread on a shared channel", () => {
-    const [a, b] = twoPanes();
+    const [a, b] = twoPanes().panes;
     expect(a.session().channel?.id).toBe("a");
     expect(b.session().channel?.id).toBe("a");
     a.composer.requestMention("kit");
@@ -65,20 +70,24 @@ describe("ChatPane", () => {
     expect(a.thread.root()).toBeNull();
   });
 
-  it("focuses the first pane, then whichever is clicked or typed in", () => {
-    const [a, b] = twoPanes();
-    expect(focusedPane()).toBe(a);
+  it("focuses whichever pane is clicked or typed in", () => {
+    const {
+      panes: [a, b],
+      slots: [first, second],
+    } = twoPanes();
     fireEvent.pointerDown(screen.getByText("in b"));
+    expect(focusedPaneId()).toBe(second);
     expect(focusedPane()).toBe(b);
     fireEvent.focusIn(screen.getByText("in a"));
+    expect(focusedPaneId()).toBe(first);
     expect(focusedPane()).toBe(a);
     cleanup();
-    expect(focusedPane()).toBeNull();
+    expect(focusedPane()).toBeUndefined();
   });
 
   it("clears a notice on its own", () => {
     vi.useFakeTimers();
-    const [a] = twoPanes();
+    const [a] = twoPanes().panes;
     a.notice.notify("Timed out Kit");
     expect(a.notice.notice()).toBe("Timed out Kit");
     vi.advanceTimersByTime(NOTICE_MS);

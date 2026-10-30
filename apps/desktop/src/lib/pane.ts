@@ -1,9 +1,10 @@
 // What belongs to one chat pane rather than its channel: the composer, the
-// thread panel and the notice line. Panes on the same channel share a
-// session but never these. The focused pane is the last one clicked or
-// typed in; requests from outside any pane (a user card's Mention) go to it.
+// thread panel and the notice line. The focused pane is the layout's
+// focused slot; requests from outside any pane (a user card's Mention) go
+// to it.
 
 import { createContext, createSignal, useContext } from "solid-js";
+import { focusedPaneId } from "../stores/layoutStore";
 import type { ChatSession } from "./chatSession";
 import type { Composer } from "../stores/composerStore";
 import type { ThreadPanel } from "../stores/threadStore";
@@ -32,15 +33,22 @@ export function requirePane(): Pane {
   return pane;
 }
 
-const [focusedPane, setFocused] = createSignal<Pane | null>(null);
+const [mounted, setMounted] = createSignal<ReadonlyMap<string, Pane>>(
+  new Map(),
+);
 
-export { focusedPane };
-
-export function focusPane(pane: Pane): void {
-  setFocused(pane);
+/** Called by each mounted pane for its layout slot; returns the unmount. */
+export function registerPane(slotId: string, pane: Pane): () => void {
+  setMounted((m) => new Map(m).set(slotId, pane));
+  return () =>
+    setMounted((m) => {
+      if (m.get(slotId) !== pane) return m;
+      const next = new Map(m);
+      next.delete(slotId);
+      return next;
+    });
 }
 
-/** A closing pane hands focus back only if it held it. */
-export function blurPane(pane: Pane): void {
-  if (focusedPane() === pane) setFocused(null);
+export function focusedPane(): Pane | undefined {
+  return mounted().get(focusedPaneId());
 }

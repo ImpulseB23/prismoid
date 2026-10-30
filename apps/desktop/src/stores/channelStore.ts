@@ -56,6 +56,8 @@ export interface ChannelStore {
    * otherwise only after it has been on screen for a while.
    */
   select: (login: string, opts?: { remember?: boolean }) => Promise<Channel>;
+  /** Opens `login` as a tab without showing it, e.g. for a new pane. */
+  open: (login: string, opts?: { remember?: boolean }) => Promise<Channel>;
   /**
    * Reopens the tabs from the previous session, showing the one that was
    * on screen, or `fallbackLogin` on a fresh install. Channels that fail
@@ -177,6 +179,17 @@ export function createChannelStore(
     }
   }
 
+  async function open(
+    login: string,
+    opts: { remember?: boolean } = {},
+  ): Promise<Channel> {
+    const channel = await commands.join(login);
+    addTab(channel);
+    if (opts.remember) remember(channel);
+    persistTabs();
+    return channel;
+  }
+
   async function restore(fallbackLogin: string): Promise<void> {
     const saved = readTabs(storage);
     const last = read(storage, LAST_KEY);
@@ -285,6 +298,7 @@ export function createChannelStore(
     recents,
     lastLogin: () => read(storage, LAST_KEY),
     select,
+    open,
     restore,
     focus,
     close,
@@ -378,6 +392,7 @@ export const channelError = defaultStore.error;
 export const recentChannels = defaultStore.recents;
 export const lastChannelLogin = defaultStore.lastLogin;
 export const selectChannel = defaultStore.select;
+export const openChannel = defaultStore.open;
 export const restoreChannels = defaultStore.restore;
 export const focusChannel = defaultStore.focus;
 export const closeChannel = defaultStore.close;
