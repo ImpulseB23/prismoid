@@ -29,7 +29,11 @@ const KEEP_FOR: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 /// Inserts into one channel between count prunes of it.
 const PRUNE_EVERY: u32 = 256;
 
-const SCHEMA: &str = "
+/// Each entry moves the file from version `i` to `i + 1`, tracked in
+/// SQLite's `user_version`. Append new entries; never edit a shipped one.
+/// Version 1 is the schema from before versioning, written so it also
+/// applies cleanly to those older files.
+const MIGRATIONS: &[&str] = &["
 CREATE TABLE IF NOT EXISTS messages (
     channel_id   TEXT    NOT NULL,
     message_id   TEXT    NOT NULL,
@@ -52,7 +56,45 @@ CREATE TABLE IF NOT EXISTS first_messages (
     message_id TEXT NOT NULL,
     PRIMARY KEY (channel_id, message_id)
 ) WITHOUT ROWID;
-";
+"];
+
+/// The file was written by a newer Prismoid. Writing to it could break the
+/// newer format, so history stays off instead.
+#[derive(Debug)]
+struct NewerSchema {
+    found: i32,
+}
+
+impl std::fmt::Display for NewerSchema {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "chat history is at schema {} but this build knows up to {}",
+            self.found,
+            MIGRATIONS.len()
+        )
+    }
+}
+
+impl Error for NewerSchema {}
+
+/// Brings the file up to the newest schema, one transaction per step so a
+/// crash leaves it at the last finished version.
+fn migrate(conn: &mut Connection) -> Result<(), Box<dyn Error + Send + Sync>> {
+    // SQLite keeps `user_version` as a signed 32-bit integer.
+    let found: i32 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
+    let done = usize::try_from(found)
+        .ok()
+        .filter(|&done| done <= MIGRATIONS.len())
+        .ok_or(NewerSchema { found })?;
+    for (version, sql) in (1_i32..).zip(MIGRATIONS).skip(done) {
+        let tx = conn.transaction()?;
+        tx.execute_batch(sql)?;
+        tx.pragma_update(None, "user_version", version)?;
+        tx.commit()?;
+    }
+    Ok(())
+}
 
 /// A stored message as the feed receives it: the wire shape plus whether a
 /// moderator removed it after it was shown and whether it was the chatter's
@@ -119,10 +161,10 @@ impl History {
     /// thread.
     pub fn open(dir: &Path) -> Result<Self, Box<dyn Error + Send + Sync>> {
         std::fs::create_dir_all(dir)?;
-        let conn = Connection::open(dir.join(FILE_NAME))?;
+        let mut conn = Connection::open(dir.join(FILE_NAME))?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
-        conn.execute_batch(SCHEMA)?;
+        migrate(&mut conn)?;
         let (tx, rx) = mpsc::channel();
         std::thread::Builder::new()
             .name("chat-history".into())
@@ -608,8 +650,8 @@ mod tests {
     use crate::message::Platform;
 
     fn store() -> Store {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(SCHEMA).unwrap();
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate(&mut conn).unwrap();
         Store::new(conn)
     }
 
@@ -780,13 +822,65 @@ mod tests {
         );
     }
 
+    fn version(conn: &Connection) -> i32 {
+        conn.pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap()
+    }
+
+    fn latest() -> i32 {
+        i32::try_from(MIGRATIONS.len()).unwrap()
+    }
+
     #[test]
-    fn schema_swaps_the_old_user_index() {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(SCHEMA).unwrap();
+    fn migrates_once_and_leaves_a_current_file_alone() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate(&mut conn).unwrap();
+        assert_eq!(version(&conn), latest());
+        conn.execute(
+            "INSERT INTO messages VALUES ('c', 'm', 'u', 1, 1, 0, '{}')",
+            [],
+        )
+        .unwrap();
+        migrate(&mut conn).unwrap();
+        assert_eq!(version(&conn), latest());
+        let kept: i64 = conn
+            .query_row("SELECT count(*) FROM messages", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(kept, 1);
+    }
+
+    #[test]
+    fn refuses_a_file_from_a_newer_build() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        let newer = latest() + 1;
+        conn.pragma_update(None, "user_version", newer).unwrap();
+        let err = migrate(&mut conn).unwrap_err();
+        assert!(err.to_string().contains(&format!("schema {newer}")));
+        assert_eq!(version(&conn), newer);
+        let tables: i64 = conn
+            .query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(tables, 0);
+    }
+
+    #[test]
+    fn versions_a_file_from_before_migrations_and_swaps_its_old_index() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(MIGRATIONS[0]).unwrap();
         conn.execute_batch("CREATE INDEX messages_by_user ON messages (channel_id, user_id)")
             .unwrap();
-        conn.execute_batch(SCHEMA).unwrap();
+        conn.execute(
+            "INSERT INTO messages VALUES ('c', 'm', 'u', 1, 1, 0, '{}')",
+            [],
+        )
+        .unwrap();
+        assert_eq!(version(&conn), 0);
+        migrate(&mut conn).unwrap();
+        assert_eq!(version(&conn), latest());
+        let kept: i64 = conn
+            .query_row("SELECT count(*) FROM messages", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(kept, 1);
         let names: Vec<String> = conn
             .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'messages_by_user%'")
             .unwrap()
