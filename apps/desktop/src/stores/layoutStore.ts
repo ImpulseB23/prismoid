@@ -16,6 +16,8 @@ export interface PaneSlot {
   id: string;
   /** Null until the pane has a channel, e.g. before any tab is open. */
   channelId: string | null;
+  /** The stream's video shows above this pane's chat. */
+  video?: boolean;
 }
 
 interface Saved {
@@ -49,6 +51,8 @@ export interface LayoutStore {
   drop: (channelId: string) => void;
   /** Drops panes whose channel is no longer open. */
   keepOnly: (channelIds: ReadonlySet<string>) => void;
+  /** Shows or hides the stream video in a pane. */
+  toggleVideo: (paneId: string) => void;
 }
 
 export function createLayoutStore(
@@ -149,6 +153,12 @@ export function createLayoutStore(
     }
   }
 
+  function toggleVideo(paneId: string): void {
+    update(
+      panes().map((p) => (p.id === paneId ? { ...p, video: !p.video } : p)),
+    );
+  }
+
   return {
     panes,
     focusedId,
@@ -162,6 +172,7 @@ export function createLayoutStore(
     close,
     drop,
     keepOnly,
+    toggleVideo,
   };
 }
 
@@ -174,7 +185,8 @@ function read(storage: StorageLike | null): Saved | null {
       ? parsed.panes.filter(
           (p): p is PaneSlot =>
             typeof p?.id === "string" &&
-            (p.channelId === null || typeof p.channelId === "string"),
+            (p.channelId === null || typeof p.channelId === "string") &&
+            (p.video === undefined || typeof p.video === "boolean"),
         )
       : [];
     if (panes.length === 0) return null;
@@ -215,3 +227,4 @@ export const canSplitPane = defaultStore.canSplit;
 export const closePane = defaultStore.close;
 export const dropPaneChannel = defaultStore.drop;
 export const keepPaneChannels = defaultStore.keepOnly;
+export const togglePaneVideo = defaultStore.toggleVideo;
