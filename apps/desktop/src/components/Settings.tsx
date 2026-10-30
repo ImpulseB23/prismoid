@@ -453,6 +453,23 @@ const Settings: Component<SettingsProps> = (props) => {
             </label>
             <label class="settings__row settings__row--toggle">
               <div class="settings__text">
+                <span class="settings__name">7TV</span>
+                <span class="settings__hint">
+                  7TV emotes and name paints. Off, Prismoid does not connect to
+                  7TV at all
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                class="switch"
+                checked={settings().sevenTV}
+                onChange={(e) =>
+                  run(updateSettings({ sevenTV: e.currentTarget.checked }))
+                }
+              />
+            </label>
+            <label class="settings__row settings__row--toggle">
+              <div class="settings__text">
                 <span class="settings__name">Load earlier messages</span>
                 <span class="settings__hint">
                   When you open a channel, fetch what was said before you joined
@@ -629,23 +646,25 @@ const Settings: Component<SettingsProps> = (props) => {
                 }
               />
             </label>
-            <label class="settings__row settings__row--toggle">
-              <div class="settings__text">
-                <span class="settings__name">Show 7TV name paints</span>
-                <span class="settings__hint">
-                  Fill names with the gradient or image a chatter picked on 7TV.
-                  Connects to 7TV while on
-                </span>
-              </div>
-              <input
-                type="checkbox"
-                class="switch"
-                checked={settings().showPaints}
-                onChange={(e) =>
-                  run(updateSettings({ showPaints: e.currentTarget.checked }))
-                }
-              />
-            </label>
+            <Show when={settings().sevenTV}>
+              <label class="settings__row settings__row--toggle">
+                <div class="settings__text">
+                  <span class="settings__name">Show 7TV name paints</span>
+                  <span class="settings__hint">
+                    Fill names with the gradient or image a chatter picked on
+                    7TV. Connects to 7TV while on
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  class="switch"
+                  checked={settings().showPaints}
+                  onChange={(e) =>
+                    run(updateSettings({ showPaints: e.currentTarget.checked }))
+                  }
+                />
+              </label>
+            </Show>
           </Show>
           <Show when={settingsSection() === "chat"}>
             <div class="settings__group-label">Stream bar</div>
