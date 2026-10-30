@@ -23,8 +23,6 @@ const SHOW_EVENT: &str = "user_card_show";
 // so it holds the same content at every zoom and text size.
 const CONTENT_WIDTH: f64 = 320.0;
 const CONTENT_HEIGHT: f64 = 480.0;
-const MIN_CONTENT_WIDTH: f64 = 240.0;
-const MIN_CONTENT_HEIGHT: f64 = 300.0;
 /// Bounds on the zoom setting the app sends, against a bad value.
 const MIN_ZOOM: f64 = 0.5;
 const MAX_ZOOM: f64 = 6.0;
@@ -424,7 +422,9 @@ impl<R: Runtime> Host for App<R> {
             WebviewWindowBuilder::new(&self.0, label, WebviewUrl::App("index.html".into()))
                 .title(&user.display_name)
                 .inner_size(width, height)
-                .min_inner_size(MIN_CONTENT_WIDTH * zoom, MIN_CONTENT_HEIGHT * zoom)
+                // A fixed size that follows the zoom, so the card always looks
+                // the same.
+                .resizable(false)
                 .additional_browser_args(crate::browser_args::BROWSER_ARGS)
                 .visible(false);
         // Same chrome as the main window: the card draws its own title bar
