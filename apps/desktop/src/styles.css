@@ -4385,6 +4385,9 @@ option::checkmark {
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
+  /* The chat manager tab tucks past the right edge; clipping only this
+     axis keeps it from widening the split without making a scroll box. */
+  overflow-x: clip;
 }
 
 .split--many .chat-pane {
