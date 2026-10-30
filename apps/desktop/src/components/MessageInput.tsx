@@ -31,17 +31,12 @@ import {
   type Candidate,
 } from "../lib/completion";
 import { buildOptimisticMessage, type EmoteMeta } from "../stores/chatStore";
-import { useSession } from "../lib/chatSession";
+import { requirePane } from "../lib/pane";
 import { channelBannedIn } from "../stores/channelStore";
 import { bannedText } from "../lib/chatAccess";
 import { lookupUser, formatChannelError } from "../lib/twitchChannel";
 import { banUser, timeoutUser, unbanUser } from "../lib/twitchAuth";
 import { parseInput, type SlashCommand } from "../lib/slashCommands";
-import {
-  clearReply,
-  insertRequest,
-  replyTarget,
-} from "../stores/composerStore";
 import { scanEmotes } from "../lib/emoteSpans";
 import {
   ownBadges,
@@ -78,7 +73,9 @@ const PROVIDER_LABEL: Record<EmoteMeta["provider"], string> = {
 const HISTORY_LIMIT = 50;
 
 const MessageInput: Component<Props> = (props) => {
-  const session = useSession();
+  const pane = requirePane();
+  const session = pane.session;
+  const { insertRequest, replyTarget, clearReply } = pane.composer;
   const banned = () => {
     const c = session().channel;
     return c !== null && channelBannedIn(c.id);

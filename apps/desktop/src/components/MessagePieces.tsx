@@ -4,6 +4,7 @@
 import { Component, For } from "solid-js";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { MessagePiece } from "../lib/emoteSpans";
+import { usePane } from "../lib/pane";
 import {
   endEmoteHover,
   hoverEmote,
@@ -12,6 +13,7 @@ import {
 } from "../stores/emoteCardStore";
 
 const Piece: Component<{ piece: MessagePiece }> = (props) => {
+  const pane = usePane();
   const p = props.piece;
   if (p.kind === "text") {
     return <span>{p.text}</span>;
@@ -51,6 +53,7 @@ const Piece: Component<{ piece: MessagePiece }> = (props) => {
           e.currentTarget,
           primary.emote,
           overlays.map((o) => o.emote),
+          pane,
         )
       }
       onPointerLeave={endEmoteHover}
@@ -60,13 +63,13 @@ const Piece: Component<{ piece: MessagePiece }> = (props) => {
       }}
       onClick={(e) => {
         e.stopPropagation();
-        inspectEmote(primary.emote);
+        inspectEmote(primary.emote, pane);
       }}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           e.stopPropagation();
-          inspectEmote(primary.emote);
+          inspectEmote(primary.emote, pane);
         }
       }}
     >

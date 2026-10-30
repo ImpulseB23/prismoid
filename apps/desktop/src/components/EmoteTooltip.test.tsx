@@ -3,6 +3,7 @@ import { cleanup, render, screen } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import type { EmoteMeta } from "../stores/chatStore";
 import type { EmoteHover } from "../stores/emoteCardStore";
+import type { Pane } from "../lib/pane";
 
 const [hovered, setHovered] = createSignal<EmoteHover | null>(null);
 const endHover = vi.fn();
@@ -12,15 +13,13 @@ vi.mock("../stores/emoteCardStore", async (importOriginal) => ({
   hoveredEmote: () => hovered(),
   endEmoteHover: () => endHover(),
 }));
-vi.mock("../lib/chatSession", () => ({
-  useSession: () => () => ({
+// The pane the emote was hovered in, for its channel's set names.
+const pane = {
+  session: () => ({
+    channel: { display_name: "Forsen" },
     emotes: { revision: () => 0, scopeOf: () => "channel" },
   }),
-}));
-vi.mock("../stores/channelStore", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../stores/channelStore")>()),
-  activeChannel: () => ({ display_name: "Forsen" }),
-}));
+} as unknown as Pane;
 
 const { default: EmoteTooltip } = await import("./EmoteTooltip");
 
@@ -68,6 +67,7 @@ describe("EmoteTooltip", () => {
       emote: meta("catJAM", { owner: { display_name: "Ayyybubu" } }),
       overlays: [meta("RainTime", { provider: "bttv" })],
       anchor: at(500, 300),
+      pane,
     });
     render(() => <EmoteTooltip />);
     expect(screen.getByText("catJAM + RainTime")).toBeTruthy();
@@ -81,7 +81,7 @@ describe("EmoteTooltip", () => {
   });
 
   it("sits centered above the emote", () => {
-    setHovered({ emote: meta("a"), overlays: [], anchor: at(500, 300) });
+    setHovered({ emote: meta("a"), overlays: [], anchor: at(500, 300), pane });
     render(() => <EmoteTooltip />);
     expect(tip().style.top).toBe("212px");
     expect(tip().style.left).toBe("464px");
@@ -93,6 +93,7 @@ describe("EmoteTooltip", () => {
       emote: meta("a"),
       overlays: [],
       anchor: at(window.innerWidth - 10, 50),
+      pane,
     });
     render(() => <EmoteTooltip />);
     expect(tip().style.top).toBe("86px");
@@ -103,7 +104,7 @@ describe("EmoteTooltip", () => {
     render(() => <EmoteTooltip />);
     window.dispatchEvent(new Event("resize"));
     expect(endHover).not.toHaveBeenCalled();
-    setHovered({ emote: meta("a"), overlays: [], anchor: at(500, 300) });
+    setHovered({ emote: meta("a"), overlays: [], anchor: at(500, 300), pane });
     document.body.dispatchEvent(new Event("scroll"));
     window.dispatchEvent(new Event("blur"));
     window.dispatchEvent(new Event("resize"));

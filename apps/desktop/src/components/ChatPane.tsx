@@ -1,10 +1,12 @@
-// Gives everything inside it the chat session of one channel, held while
-// the pane shows that channel and let go when it moves on.
+// One chat pane: the session of the channel it shows, held while it shows
+// it and let go when it moves on, plus the composer, thread panel and
+// notice line of its own. Clicking or typing anywhere in it focuses it.
 
 import {
   createMemo,
   on,
   onCleanup,
+  onMount,
   untrack,
   type ParentComponent,
 } from "solid-js";
@@ -15,6 +17,16 @@ import {
   idleSession,
   releaseSession,
 } from "../lib/chatSession";
+import {
+  PaneProvider,
+  blurPane,
+  focusPane,
+  focusedPane,
+  type Pane,
+} from "../lib/pane";
+import { createComposer } from "../stores/composerStore";
+import { createThreadPanel } from "../stores/threadStore";
+import { createNoticeLine } from "../stores/noticeStore";
 
 const ChatPane: ParentComponent<{ channel: Channel | null }> = (props) => {
   const session = createMemo(
@@ -29,7 +41,30 @@ const ChatPane: ParentComponent<{ channel: Channel | null }> = (props) => {
       },
     ),
   );
-  return <SessionProvider value={session}>{props.children}</SessionProvider>;
+  const pane: Pane = {
+    session,
+    composer: createComposer(),
+    thread: createThreadPanel(),
+    notice: createNoticeLine(),
+  };
+  onMount(() => {
+    if (!focusedPane()) focusPane(pane);
+  });
+  onCleanup(() => blurPane(pane));
+
+  return (
+    <SessionProvider value={session}>
+      <PaneProvider value={pane}>
+        <div
+          class="chat-pane"
+          onPointerDown={() => focusPane(pane)}
+          onFocusIn={() => focusPane(pane)}
+        >
+          {props.children}
+        </div>
+      </PaneProvider>
+    </SessionProvider>
+  );
 };
 
 export default ChatPane;

@@ -15,24 +15,20 @@ const openUrl = vi.fn<(url: string) => Promise<void>>(async () => {});
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: (url: string) => openUrl(url),
 }));
+// The pane the emote was clicked in: its channel's sets and composer.
+const pane = {
+  session: () => ({
+    channel: { display_name: "Forsen" },
+    emotes: { revision: () => 0, scopeOf: () => scope() },
+  }),
+  composer: { requestInsert: (text: string) => requestInsert(text) },
+};
 vi.mock("../stores/emoteCardStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../stores/emoteCardStore")>()),
   inspectedEmote: () => emote(),
   inspectedAddedBy: () => addedBy(),
+  inspectedPane: () => pane,
   closeEmoteCard: () => close(),
-}));
-vi.mock("../lib/chatSession", () => ({
-  useSession: () => () => ({
-    emotes: { revision: () => 0, scopeOf: () => scope() },
-  }),
-}));
-vi.mock("../stores/channelStore", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../stores/channelStore")>()),
-  activeChannel: () => ({ display_name: "Forsen" }),
-}));
-vi.mock("../stores/composerStore", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../stores/composerStore")>()),
-  requestInsert: (text: string) => requestInsert(text),
 }));
 
 const { default: EmoteCard } = await import("./EmoteCard");

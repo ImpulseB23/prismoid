@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
+import { PaneProvider, type Pane } from "../lib/pane";
 import { createSignal } from "solid-js";
 import type { EmoteMeta } from "../stores/chatStore";
 import type { MessagePiece } from "../lib/emoteSpans";
@@ -14,7 +15,7 @@ vi.mock("../stores/emoteCardStore", () => ({
   inspectLoading: () => loading(),
   hoverEmote: (...args: unknown[]) => hoverEmote(...args),
   endEmoteHover: () => endEmoteHover(),
-  inspectEmote: (e: EmoteMeta) => inspectEmote(e),
+  inspectEmote: (...args: unknown[]) => inspectEmote(...args),
 }));
 
 const { default: MessagePieces } = await import("./MessagePieces");
@@ -52,10 +53,15 @@ describe("MessagePieces", () => {
     setLoading(null);
   });
 
-  it("hovers the emote with its overlays", () => {
-    render(() => <MessagePieces pieces={pieces} />);
+  it("hovers the emote with its overlays and the pane it is in", () => {
+    const pane = {} as Pane;
+    render(() => (
+      <PaneProvider value={pane}>
+        <MessagePieces pieces={pieces} />
+      </PaneProvider>
+    ));
     fireEvent.pointerEnter(emote());
-    expect(hoverEmote).toHaveBeenCalledWith(emote(), cat, [rain]);
+    expect(hoverEmote).toHaveBeenCalledWith(emote(), cat, [rain], pane);
     fireEvent.pointerLeave(emote());
     expect(endEmoteHover).toHaveBeenCalled();
   });
@@ -73,6 +79,7 @@ describe("MessagePieces", () => {
   it("opens the card on click", () => {
     render(() => <MessagePieces pieces={pieces} />);
     fireEvent.click(emote());
-    expect(inspectEmote).toHaveBeenCalledWith(cat);
+    // Outside any pane, as in a user card window.
+    expect(inspectEmote).toHaveBeenCalledWith(cat, undefined);
   });
 });

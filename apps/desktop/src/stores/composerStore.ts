@@ -1,5 +1,5 @@
-// Lets other surfaces (the feed, the user card, the emote card) hand state
-// to the composer without a direct component reference. Insert requests
+// Lets other surfaces (the feed, the thread, the emote card) hand state to
+// a pane's composer without a direct component reference. Insert requests
 // carry a sequence number so the same text can be inserted twice in a
 // row; the reply target is plain state the composer shows and clears.
 
@@ -17,27 +17,30 @@ export interface ReplyTarget {
   body: string;
 }
 
-const [insertRequest, setInsertRequest] = createSignal<InsertRequest | null>(
-  null,
-);
-const [replyTarget, setReplyTarget] = createSignal<ReplyTarget | null>(null);
-let seq = 0;
-
-export { insertRequest, replyTarget };
-
-/** Appends `text` to the draft as its own word. */
-export function requestInsert(text: string): void {
-  setInsertRequest({ seq: ++seq, text });
+export interface Composer {
+  insertRequest: () => InsertRequest | null;
+  replyTarget: () => ReplyTarget | null;
+  /** Appends `text` to the draft as its own word. */
+  requestInsert: (text: string) => void;
+  requestMention: (login: string) => void;
+  requestReply: (target: ReplyTarget) => void;
+  clearReply: () => void;
 }
 
-export function requestMention(login: string): void {
-  requestInsert(`@${login}`);
-}
-
-export function requestReply(target: ReplyTarget): void {
-  setReplyTarget(target);
-}
-
-export function clearReply(): void {
-  setReplyTarget(null);
+export function createComposer(): Composer {
+  const [insertRequest, setInsertRequest] = createSignal<InsertRequest | null>(
+    null,
+  );
+  const [replyTarget, setReplyTarget] = createSignal<ReplyTarget | null>(null);
+  let seq = 0;
+  const requestInsert = (text: string) =>
+    setInsertRequest({ seq: ++seq, text });
+  return {
+    insertRequest,
+    replyTarget,
+    requestInsert,
+    requestMention: (login) => requestInsert(`@${login}`),
+    requestReply: setReplyTarget,
+    clearReply: () => setReplyTarget(null),
+  };
 }
