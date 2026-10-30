@@ -56,6 +56,7 @@ import TitleBar from "./components/TitleBar";
 import ContextMenu from "./components/ContextMenu";
 import ModPopover from "./components/ModPopover";
 import { installContextMenus } from "./lib/appContextMenu";
+import { startChatRouter } from "./lib/chatRouter";
 import { announceModLog, serveCards } from "./lib/cardBridge";
 import { requestMention } from "./stores/composerStore";
 import { jumpToMessage } from "./stores/jumpStore";
@@ -261,9 +262,16 @@ const ChatShell: Component<{ login: string; onSignOut: () => void }> = (
       .catch((err) =>
         console.error("failed to listen for browser streams:", err),
       );
+    // Chat events for the whole window; each feed attaches for its channel.
+    let stopRouter: (() => void) | undefined;
+    void startChatRouter(() => props.login).then((fn) => {
+      if (disposed) fn();
+      else stopRouter = fn;
+    });
     onCleanup(() => {
       disposed = true;
       unlisten?.();
+      stopRouter?.();
     });
   });
 

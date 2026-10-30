@@ -76,6 +76,7 @@ const { closeModPopover, modPopover } =
   await import("../stores/modPopoverStore");
 const { updateSettings } = await import("../stores/settingsStore");
 const { default: ChatFeed } = await import("./ChatFeed");
+const { startChatRouter } = await import("../lib/chatRouter");
 
 let seq = 0;
 const msg = (id: string): ChatMessage =>
@@ -112,7 +113,10 @@ function rowFor(container: HTMLElement, id: string): HTMLElement {
 }
 
 describe("ChatFeed", () => {
-  beforeEach(() => {
+  let stopRouter: () => void;
+
+  beforeEach(async () => {
+    stopRouter = await startChatRouter(() => "me");
     vi.stubGlobal(
       "ResizeObserver",
       class {
@@ -125,6 +129,7 @@ describe("ChatFeed", () => {
   });
 
   afterEach(async () => {
+    stopRouter();
     cleanup();
     clearMessages();
     handlers.clear();

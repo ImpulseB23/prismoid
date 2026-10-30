@@ -15,7 +15,6 @@ import {
   onCleanup,
   onMount,
 } from "solid-js";
-import { listen } from "@tauri-apps/api/event";
 import {
   addMessages,
   clearMessages,
@@ -32,25 +31,19 @@ import {
   viewport,
   type ChatMessage,
 } from "../stores/chatStore";
-import type { ChatEvent } from "../lib/chatEvents";
 import {
   activeChannel,
   channelBanned,
   channelTabs,
   channelStatus,
   focusChannel,
-  markChannelBanned,
-  noteUnread,
   rejoinChannel,
 } from "../stores/channelStore";
 import { clearJump, jumpRequest } from "../stores/jumpStore";
 import { isIgnored, setIgnored, settings } from "../stores/settingsStore";
 import { isHighlighted, isSpotlit } from "../lib/highlight";
-import { createMentionAlert, playChime } from "../lib/mentionAlert";
-import { isMentionFor, recordMention } from "../stores/mentionsStore";
 import { openThread } from "../stores/threadStore";
 import Thread from "./Thread";
-import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import {
   banUser,
   deleteMessage,
@@ -69,7 +62,7 @@ import { messageMenuItems } from "../lib/messageMenu";
 import { openContextMenu } from "../stores/contextMenuStore";
 import { notice, notify } from "../stores/noticeStore";
 import { formatSendError, toSendError } from "../lib/messageInput";
-import { isForChannel } from "../lib/twitchChannel";
+import { attachFeed } from "../lib/chatRouter";
 import { createHistoryGate, loadHistory } from "../lib/chatHistory";
 import { currentEmoteBundle } from "../lib/emoteBundle";
 import {
@@ -80,23 +73,12 @@ import {
 } from "../stores/badgeStore";
 import { loadEmoteBundle, type EmoteBundleSets } from "../stores/emoteStore";
 import { clearChatters, recordChatter } from "../stores/chatterStore";
-import { recordPulse, retainPulse } from "../stores/pulseStore";
+import { retainPulse } from "../stores/pulseStore";
 import { canModerate, noteModerator } from "../stores/roleStore";
 import { clearModLog, recordModAction } from "../stores/modLogStore";
-import { recordHeldMessage, resolveHeldMessage } from "../stores/automodStore";
-import {
-  applyPollUpdate,
-  applyPredictionUpdate,
-} from "../stores/streamManagerStore";
-import { applyAdBreak } from "../stores/adStore";
 import { MODE_ACTIONS, loadChatSettings } from "../stores/chatSettingsStore";
 import { modActionMessage, publicModerationMessage } from "../lib/modActions";
-import {
-  BANNED_HINT,
-  bannedNotice,
-  bannedText,
-  type ChatBanned,
-} from "../lib/chatAccess";
+import { BANNED_HINT, bannedNotice, bannedText } from "../lib/chatAccess";
 import {
   ensureUserInfo,
   isNewAccount,
@@ -104,11 +86,7 @@ import {
   userInfoRevision,
 } from "../stores/userInfoStore";
 import { requestMention, requestReply } from "../stores/composerStore";
-import {
-  isFirstMessage,
-  markFirstMessage,
-  type FirstMessage,
-} from "../stores/firstMessageStore";
+import { isFirstMessage } from "../stores/firstMessageStore";
 import {
   BADGE_GAP_PX,
   MESSAGE_FONT_FAMILY,
@@ -125,7 +103,7 @@ import {
   type PreparedMessage,
 } from "../lib/messageLayout";
 import { nameStyle } from "../lib/paint";
-import { shownPaint, syncPaints } from "../stores/paintStore";
+import { shownPaint } from "../stores/paintStore";
 import { isLight, logo } from "../stores/themeStore";
 import MessagePieces from "./MessagePieces";
 import { openUserCard } from "../lib/userCardWindow";
@@ -199,13 +177,6 @@ export interface ChatFeedProps {
 }
 
 const ChatFeed: Component<ChatFeedProps> = (props) => {
-  const mentionAlert = createMentionAlert({
-    focused: () => document.hasFocus(),
-    chimeWhenFocused: () => settings().chimeAlways,
-    chime: () => playChime(settings().chimeVolume),
-    flash: () =>
-      getCurrentWindow().requestUserAttention(UserAttentionType.Informational),
-  });
   let containerRef: HTMLDivElement | undefined;
   const entryCache = new Map<number, CachedEntry>();
   let lastBadgeRev = 0;
@@ -559,97 +530,36 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       setFontsLoaded(true);
     }
 
-    // listen() is async, so a disposal (hot reload, view torn down) can
-    // land before a registration resolves. A handle that arrives after
-    // that point is released at once; otherwise every later batch would
-    // render once per leaked listener.
-    let disposed = false;
-    const unlisteners: (() => void)[] = [];
-    const retain = (fn: () => void) => {
-      if (disposed) fn();
-      else unlisteners.push(fn);
-    };
-    listen<ChatMessage[]>("chat_messages", (event) => {
-      const id = activeChannel()?.id;
-      const ignored = settings().ignoredLogins;
-      const accepted = event.payload.filter(
-        (m) => isForChannel(m, id) && !ignored.includes(m.username),
-      );
-      // Messages for other tabs only move their unread count; the host's
-      // log holds them until that tab is shown. Every channel's pulse counts
-      // all of its chat, ignored chatters included, whether shown or not.
-      const me = currentUserId();
-      for (const m of event.payload) {
-        if (m.platform === "Twitch" && !m.notice && m.platform_user_id) {
-          recordPulse(m.channel_id, m.platform_user_id, m.arrival_time);
+    const detach = attachFeed({
+      channel: () => activeChannel()?.id,
+      messages: (batch) => {
+        const id = activeChannel()?.id;
+        const ignored = settings().ignoredLogins;
+        const accepted = batch.filter((m) => !ignored.includes(m.username));
+        for (const m of accepted) {
+          recordChatter(
+            m.platform_user_id,
+            m.username,
+            m.display_name,
+            m.arrival_time,
+          );
+          // Our own message wearing the moderator badge is proof of the role
+          // here, including one granted after the Helix list was fetched.
+          if (m.is_mod && m.username === props.login && id !== undefined) {
+            noteModerator(id);
+          }
         }
-        if (me) noteOwnMessage(m, me);
-        if (m.platform === "Twitch" && !isForChannel(m, id) && !m.notice) {
-          noteUnread(m.channel_id);
-        }
-        if (
-          isMentionFor(m, props.login, settings().highlightPhrases, ignored)
-        ) {
-          recordMention(m);
-          if (settings().mentionAlerts) mentionAlert.notify();
-        }
-      }
-      for (const m of accepted) {
-        recordChatter(
-          m.platform_user_id,
-          m.username,
-          m.display_name,
-          m.arrival_time,
+        ensureUserInfo(
+          accepted
+            .filter((m) => m.platform === "Twitch")
+            .map((m) => m.platform_user_id),
         );
-        // Our own message wearing the moderator badge is proof of the role
-        // here, including one granted after the Helix list was fetched.
-        if (m.is_mod && m.username === props.login && id !== undefined) {
-          noteModerator(id);
-        }
-      }
-      ensureUserInfo(
-        accepted
-          .filter((m) => m.platform === "Twitch")
-          .map((m) => m.platform_user_id),
-      );
-      if (!history.offer(accepted)) addMessages(accepted);
-    })
-      .then(retain)
-      .catch((err) =>
-        console.error("failed to listen for chat messages:", err),
-      );
-
-    listen<ChatEvent[]>("chat_events", (event) => {
-      const id = activeChannel()?.id;
-      // Moderators get the full story from channel.moderate; everyone
-      // else sees the effect Twitch reports to the whole channel.
-      const publicRows = settings().showModActions && !canModerate();
-      for (const e of event.payload) {
-        // The AutoMod queue keeps every moderated tab, so a hold in a
-        // background channel is waiting there when the mod switches over.
-        if (e.kind === "automod_held") {
-          recordHeldMessage(e);
-          continue;
-        }
-        if (e.kind === "automod_resolved") {
-          resolveHeldMessage(e);
-          continue;
-        }
-        // Only the user's own channel sends these, and the stream manager
-        // keeps them whichever tab is showing.
-        if (e.kind === "poll_update") {
-          applyPollUpdate(e);
-          continue;
-        }
-        if (e.kind === "prediction_update") {
-          applyPredictionUpdate(e);
-          continue;
-        }
-        if (e.kind === "ad_break") {
-          applyAdBreak(e);
-          continue;
-        }
-        if (id !== undefined && e.channel_id !== id) continue;
+        if (!history.offer(accepted)) addMessages(accepted);
+      },
+      event: (e) => {
+        // Moderators get the full story from channel.moderate; everyone
+        // else sees the effect Twitch reports to the whole channel.
+        const publicRows = settings().showModActions && !canModerate();
         switch (e.kind) {
           case "message_deleted": {
             const target = findMessageById(e.message_id);
@@ -673,8 +583,9 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
               addMessages([publicModerationMessage(e, nextModActionSeq++)]);
             }
             break;
-          case "mod_action":
+          case "mod_action": {
             recordModAction(e);
+            const id = activeChannel()?.id;
             if (MODE_ACTIONS.has(e.action) && id !== undefined) {
               void loadChatSettings(id);
             }
@@ -682,49 +593,19 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
               addMessages([modActionMessage(e, nextModActionSeq++)]);
             }
             break;
+          }
         }
-      }
-    })
-      .then(retain)
-      .catch((err) => console.error("failed to listen for chat events:", err));
-
-    listen<ChatBanned>("chat_banned", (event) => {
-      markChannelBanned(event.payload.broadcaster_id);
-      const channel = activeChannel();
-      if (!channel || event.payload.broadcaster_id !== channel.id) return;
-      addMessages([bannedNotice(channel, nextModActionSeq++)]);
-    })
-      .then(retain)
-      .catch((err) => console.error("failed to listen for chat bans:", err));
-
-    listen<FirstMessage>("first_message", (event) => {
-      markFirstMessage(event.payload.message_id);
-    })
-      .then(retain)
-      .catch((err) =>
-        console.error("failed to listen for first messages:", err),
-      );
-
-    // The host emits a bundle per channel join; only the tab on screen
-    // applies it, the rest are fetched when their tab is shown.
-    listen<EmoteBundle & EmoteBundleSets>("emote_bundle", (event) => {
-      if (event.payload.broadcaster_id === activeChannel()?.id) {
-        applyBundle(event.payload);
-      }
-    })
-      .then(retain)
-      .catch((err) =>
-        console.error("failed to listen for emote bundles:", err),
-      );
-
-    syncPaints()
-      .then(retain)
-      .catch((err) => console.error("failed to listen for 7tv paints:", err));
+      },
+      banned: () => {
+        const channel = activeChannel();
+        if (channel) addMessages([bannedNotice(channel, nextModActionSeq++)]);
+      },
+      bundle: applyBundle,
+    });
 
     onCleanup(() => {
       ro.disconnect();
-      disposed = true;
-      for (const fn of unlisteners) fn();
+      detach();
     });
   });
 
