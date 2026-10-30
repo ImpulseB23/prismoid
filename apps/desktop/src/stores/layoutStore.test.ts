@@ -95,12 +95,52 @@ describe("layoutStore", () => {
     s.split("b");
     const [first, second] = s.panes().map((p) => p.id);
     s.toggleVideo(first!);
-    expect(s.panes().map((p) => p.video === true)).toEqual([true, false]);
+    const videos = (l: typeof s) => l.panes().map((p) => p.videoChannelId);
+    expect(videos(s)).toEqual(["a", null]);
     const again = createLayoutStore(memStorage(store.saved()));
-    expect(again.panes().map((p) => p.video === true)).toEqual([true, false]);
+    expect(videos(again)).toEqual(["a", null]);
     again.toggleVideo(first!);
     again.toggleVideo(second!);
-    expect(again.panes().map((p) => p.video === true)).toEqual([false, true]);
+    expect(videos(again)).toEqual([null, "b"]);
+  });
+
+  it("keeps a channel's stream in the corner while the pane shows another", () => {
+    const s = createLayoutStore(memStorage());
+    s.show("a");
+    s.toggleVideo(s.focusedId());
+    s.show("b");
+    expect(s.panes()[0]).toMatchObject({ channelId: "b", videoChannelId: "a" });
+    // The button on b swaps the corner to b; again hides it.
+    s.toggleVideo(s.focusedId());
+    expect(s.panes()[0]!.videoChannelId).toBe("b");
+    s.toggleVideo(s.focusedId());
+    expect(s.panes()[0]!.videoChannelId).toBeNull();
+  });
+
+  it("stops a stream when its tab closes, shown or not", () => {
+    const s = createLayoutStore(memStorage());
+    s.show("a");
+    s.toggleVideo(s.focusedId());
+    s.show("b");
+    s.drop("a");
+    expect(s.panes()[0]!.videoChannelId).toBeNull();
+    s.toggleVideo(s.focusedId());
+    s.show("c");
+    s.keepOnly(new Set(["c"]));
+    expect(s.panes()[0]!.videoChannelId).toBeNull();
+  });
+
+  it("reads layouts saved with the old video flag", () => {
+    const s = createLayoutStore(
+      memStorage({
+        panes: [
+          { id: "p1", channelId: "a", video: true },
+          { id: "p2", channelId: "b", video: false },
+        ],
+        focused: "p1",
+      }),
+    );
+    expect(s.panes().map((p) => p.videoChannelId)).toEqual(["a", null]);
   });
 
   it("comes back as it was saved and ignores what it cannot use", () => {
@@ -134,9 +174,9 @@ describe("layoutStore", () => {
     s.collapse();
     expect(channels(s)).toEqual(["b"]);
     s.toggleVideo(s.focusedId());
-    expect(s.panes()[0]!.video).toBe(false);
+    expect(s.panes()[0]!.videoChannelId).toBeNull();
     s.setVideo(s.focusedId(), true);
-    expect(s.panes()[0]!.video).toBe(false);
+    expect(s.panes()[0]!.videoChannelId).toBeNull();
   });
 
   it("clears every pane's video", () => {
@@ -146,6 +186,6 @@ describe("layoutStore", () => {
     s.split("b");
     s.setVideo(s.focusedId(), true);
     s.clearVideo();
-    expect(s.panes().map((p) => p.video)).toEqual([false, false]);
+    expect(s.panes().map((p) => p.videoChannelId)).toEqual([null, null]);
   });
 });

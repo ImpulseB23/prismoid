@@ -117,7 +117,7 @@ describe("SplitView", () => {
 
   it("pops the preview out into a window in its place", async () => {
     await mount();
-    const video = () => layout.panes()[0]!.video === true;
+    const video = () => layout.panes()[0]!.videoChannelId !== null;
     layout.togglePaneVideo(layout.panes()[0]!.id);
     fireEvent.click(screen.getByRole("button", { name: "close video" }));
     expect(video()).toBe(false);
@@ -125,6 +125,17 @@ describe("SplitView", () => {
     fireEvent.click(screen.getByRole("button", { name: "pop out" }));
     expect(openVideoWindow).toHaveBeenCalledWith("a", "A's stream");
     expect(video()).toBe(false);
+  });
+
+  it("keeps the first channel's stream in the corner after a tab switch", async () => {
+    await mount();
+    layout.togglePaneVideo(layout.panes()[0]!.id);
+    setActive(channel("b"));
+    expect(shown()).toEqual(["b"]);
+    expect(screen.getByRole("button", { name: "pop out" })).toBeTruthy();
+    // Popping it out from b's chat still opens a's stream.
+    fireEvent.click(screen.getByRole("button", { name: "pop out" }));
+    expect(openVideoWindow).toHaveBeenLastCalledWith("a", "A's stream");
   });
 
   it("never shows a popped out stream in the corner, and takes it back in", async () => {
@@ -137,7 +148,7 @@ describe("SplitView", () => {
     // Back to chat from the window: its channel's pane shows the preview
     // once the window is gone.
     popIn("a");
-    expect(layout.panes()[0]!.video).toBe(true);
+    expect(layout.panes()[0]!.videoChannelId).toBe("a");
     setOut([]);
     expect(screen.getByRole("button", { name: "pop out" })).toBeTruthy();
     popIn("nobody");
@@ -175,7 +186,7 @@ describe("SplitView", () => {
     expect(closeVideoWindows).not.toHaveBeenCalled();
     layout.setPaneVideo(layout.panes()[0]!.id, true);
     await updateSettings({ streamVideo: false });
-    expect(layout.panes()[0]!.video).toBe(false);
+    expect(layout.panes()[0]!.videoChannelId).toBeNull();
     expect(closeVideoWindows).toHaveBeenCalled();
     await updateSettings({ splitView: true, streamVideo: true });
   });

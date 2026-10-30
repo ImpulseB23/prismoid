@@ -20,8 +20,13 @@ import {
 
 const StreamBar: Component = () => {
   onMount(() => onCleanup(startPulse()));
-  const videoOn = () =>
-    panes().find((p) => p.id === focusedPaneId())?.video === true;
+  const videoOn = () => {
+    const id = activeChannel()?.id;
+    return (
+      id !== undefined &&
+      panes().find((p) => p.id === focusedPaneId())?.videoChannelId === id
+    );
+  };
   const out = () => isPoppedOut(activeChannel()?.login ?? "");
   // A stream out in its own window plays only there: the button brings
   // that window forward instead of opening a second player.

@@ -41,15 +41,16 @@ describe("StreamBar", () => {
   });
 
   it("shows and hides the stream in the focused pane", () => {
+    layout.showInFocusedPane("c");
     render(() => <StreamBar />);
     const focused = () =>
       layout.panes().find((p) => p.id === layout.focusedPaneId());
     fireEvent.click(screen.getByRole("button", { name: "Watch the stream" }));
-    expect(focused()?.video).toBe(true);
+    expect(focused()?.videoChannelId).toBe("c");
     const hide = screen.getByRole("button", { name: "Hide the stream" });
     expect(hide.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(hide);
-    expect(focused()?.video).toBe(false);
+    expect(focused()?.videoChannelId).toBeNull();
   });
 
   it("has no video button while stream video is off", async () => {
@@ -70,6 +71,6 @@ describe("StreamBar", () => {
       screen.getByRole("button", { name: "Watching in its own window" }),
     );
     expect(openVideoWindow).toHaveBeenCalledWith("c", "C's stream");
-    expect(focused()?.video).toBeFalsy();
+    expect(focused()?.videoChannelId).toBeFalsy();
   });
 });

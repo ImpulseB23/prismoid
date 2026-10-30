@@ -17,8 +17,12 @@ export interface PaneSlot {
   id: string;
   /** Null until the pane has a channel, e.g. before any tab is open. */
   channelId: string | null;
-  /** The stream's video shows above this pane's chat. */
-  video?: boolean;
+  /**
+   * The channel whose stream plays in this pane's corner. It stays when the
+   * pane switches to another tab, so a stream keeps playing while you read
+   * another chat.
+   */
+  videoChannelId: string | null;
 }
 
 interface Saved {
@@ -52,8 +56,12 @@ export interface LayoutStore {
   drop: (channelId: string) => void;
   /** Drops panes whose channel is no longer open. */
   keepOnly: (channelIds: ReadonlySet<string>) => void;
-  /** Shows or hides the stream video in a pane. */
+  /**
+   * The video button: plays the pane's own channel in its corner, or hides
+   * it when that is what already plays there.
+   */
   toggleVideo: (paneId: string) => void;
+  /** Plays the pane's own channel in its corner, or hides the corner. */
   setVideo: (paneId: string, on: boolean) => void;
   /** Back to the focused pane alone, for when split view is switched off. */
   collapse: () => void;
@@ -80,7 +88,7 @@ export function createLayoutStore(
     return id;
   };
   const [panes, setPanes] = createSignal<PaneSlot[]>(
-    saved?.panes ?? [{ id: "pane-0", channelId: null }],
+    saved?.panes ?? [{ id: "pane-0", channelId: null, videoChannelId: null }],
   );
   const [focusedId, setFocusedId] = createSignal(
     saved?.focused ?? panes()[0]!.id,
@@ -132,7 +140,7 @@ export function createLayoutStore(
     }
     if (!features.split() || panes().length >= MAX_PANES) return false;
     const at = panes().findIndex((p) => p.id === afterId);
-    const pane = { id: newId(), channelId };
+    const pane = { id: newId(), channelId, videoChannelId: null };
     const next = [...panes()];
     next.splice(at < 0 ? next.length : at + 1, 0, pane);
     update(next, pane.id);
@@ -151,7 +159,21 @@ export function createLayoutStore(
     update(next, focused);
   }
 
+  // A closed tab's stream stops wherever it plays.
+  function stopVideoOf(gone: (channelId: string) => boolean): void {
+    if (panes().some((p) => p.videoChannelId && gone(p.videoChannelId))) {
+      update(
+        panes().map((p) =>
+          p.videoChannelId && gone(p.videoChannelId)
+            ? { ...p, videoChannelId: null }
+            : p,
+        ),
+      );
+    }
+  }
+
   function drop(channelId: string): void {
+    stopVideoOf((id) => id === channelId);
     const pane = paneShowing(channelId);
     if (!pane) return;
     if (panes().length > 1) close(pane.id);
@@ -159,6 +181,7 @@ export function createLayoutStore(
   }
 
   function keepOnly(channelIds: ReadonlySet<string>): void {
+    stopVideoOf((id) => !channelIds.has(id));
     for (const p of panes()) {
       if (p.channelId !== null && !channelIds.has(p.channelId)) {
         drop(p.channelId);
@@ -168,12 +191,17 @@ export function createLayoutStore(
 
   function setVideo(paneId: string, on: boolean): void {
     if (on && !features.video()) return;
-    update(panes().map((p) => (p.id === paneId ? { ...p, video: on } : p)));
+    update(
+      panes().map((p) =>
+        p.id === paneId ? { ...p, videoChannelId: on ? p.channelId : null } : p,
+      ),
+    );
   }
 
   function toggleVideo(paneId: string): void {
     const pane = panes().find((p) => p.id === paneId);
-    if (pane) setVideo(paneId, !pane.video);
+    if (!pane?.channelId) return;
+    setVideo(paneId, pane.videoChannelId !== pane.channelId);
   }
 
   return {
@@ -195,11 +223,7 @@ export function createLayoutStore(
       const focused = panes().find((p) => p.id === focusedId());
       if (panes().length > 1 && focused) update([focused]);
     },
-    clearVideo: () => {
-      if (panes().some((p) => p.video)) {
-        update(panes().map((p) => ({ ...p, video: false })));
-      }
-    },
+    clearVideo: () => stopVideoOf(() => true),
   };
 }
 
@@ -209,12 +233,10 @@ function read(storage: StorageLike | null): Saved | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<Saved>;
     const panes = Array.isArray(parsed.panes)
-      ? parsed.panes.filter(
-          (p): p is PaneSlot =>
-            typeof p?.id === "string" &&
-            (p.channelId === null || typeof p.channelId === "string") &&
-            (p.video === undefined || typeof p.video === "boolean"),
-        )
+      ? parsed.panes.flatMap((p: unknown) => {
+          const slot = readSlot(p);
+          return slot ? [slot] : [];
+        })
       : [];
     if (panes.length === 0) return null;
     const kept = panes.slice(0, MAX_PANES);
@@ -227,6 +249,22 @@ function read(storage: StorageLike | null): Saved | null {
   } catch {
     return null;
   }
+}
+
+function readSlot(raw: unknown): PaneSlot | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const p = raw as Record<string, unknown>;
+  if (typeof p.id !== "string") return null;
+  if (p.channelId !== null && typeof p.channelId !== "string") return null;
+  const channelId = p.channelId;
+  // Layouts saved before the corner followed its channel kept a flag.
+  const videoChannelId =
+    typeof p.videoChannelId === "string"
+      ? p.videoChannelId
+      : p.video === true
+        ? channelId
+        : null;
+  return { id: p.id, channelId, videoChannelId };
 }
 
 function defaultStorage(): StorageLike | null {
