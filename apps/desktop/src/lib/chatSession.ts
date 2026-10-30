@@ -1,0 +1,213 @@
+// One chat session per channel a pane shows: that channel's messages and
+// chatters, filled from its stored history and then live from the chat
+// router. Panes showing the same channel share one session, so its
+// messages are added once however many panes draw them; it is dropped
+// when the last pane lets go.
+
+import { createContext, createSignal, useContext } from "solid-js";
+import type { Channel } from "./twitchChannel";
+import { attachFeed } from "./chatRouter";
+import { createHistoryGate, loadHistory } from "./chatHistory";
+import { bannedNotice } from "./chatAccess";
+import { modActionMessage, publicModerationMessage } from "./modActions";
+import { currentEmoteBundle } from "./emoteBundle";
+import {
+  createChatStore,
+  type ChatMessage,
+  type ChatStore,
+} from "../stores/chatStore";
+import { createChatterStore, type ChatterStore } from "../stores/chatterStore";
+import { activeChannel } from "../stores/channelStore";
+import { settings } from "../stores/settingsStore";
+import { currentUserId } from "../stores/authStore";
+import { noteOwnMessage } from "../stores/ownIdentityStore";
+import { ensureUserInfo } from "../stores/userInfoStore";
+import { canModerateIn, noteModerator } from "../stores/roleStore";
+import { recordModAction } from "../stores/modLogStore";
+import { MODE_ACTIONS, loadChatSettings } from "../stores/chatSettingsStore";
+import { loadBadgeBundle, type EmoteBundle } from "../stores/badgeStore";
+import { loadEmoteBundle, type EmoteBundleSets } from "../stores/emoteStore";
+
+export interface ChatSession {
+  readonly channelId: string;
+  readonly chat: ChatStore;
+  readonly chatters: ChatterStore;
+  /** True while the stored tail is loading. */
+  readonly historyLoading: () => boolean;
+}
+
+// Rows made here rather than by the host need their own ordering key.
+// Starting far above any host sequence keeps them at the tail where they
+// arrived, the same trick optimistic sends use.
+let nextLocalSeq = Number.MAX_SAFE_INTEGER - 2 ** 40;
+
+// Badges and emotes are still one set for the window, so only the
+// channel on screen loads its own.
+function applyBundle(channelId: string, bundle: EmoteBundle & EmoteBundleSets) {
+  if (activeChannel()?.id !== channelId) return;
+  loadBadgeBundle(bundle);
+  loadEmoteBundle(bundle);
+}
+
+function openSession(channel: Channel): {
+  session: ChatSession;
+  close: () => void;
+} {
+  const chat = createChatStore();
+  const chatters = createChatterStore();
+  const add = (batch: ChatMessage[]) => {
+    chat.addMessages(batch);
+    // Stored history can hold the user's newest message in a channel when
+    // the live feed does not.
+    const me = currentUserId();
+    if (me) for (const m of batch) noteOwnMessage(m, me);
+  };
+  const history = createHistoryGate(add);
+  history.begin(loadHistory(channel.id));
+
+  const detach = attachFeed({
+    channel: () => channel.id,
+    messages: (batch) => {
+      const me = currentUserId();
+      const ignored = settings().ignoredLogins;
+      const accepted = batch.filter((m) => !ignored.includes(m.username));
+      for (const m of accepted) {
+        chatters.record(
+          m.platform_user_id,
+          m.username,
+          m.display_name,
+          m.arrival_time,
+        );
+        // Our own message wearing the moderator badge is proof of the
+        // role here, including one granted after the Helix list was
+        // fetched.
+        if (m.is_mod && me && m.platform_user_id === me) {
+          noteModerator(channel.id);
+        }
+      }
+      ensureUserInfo(
+        accepted
+          .filter((m) => m.platform === "Twitch")
+          .map((m) => m.platform_user_id),
+      );
+      if (!history.offer(accepted)) chat.addMessages(accepted);
+    },
+    event: (e) => {
+      // Moderators get the full story from channel.moderate; everyone
+      // else sees the effect Twitch reports to the whole channel.
+      const publicRows =
+        settings().showModActions && !canModerateIn(channel.id);
+      switch (e.kind) {
+        case "message_deleted": {
+          const target = chat.findById(e.message_id);
+          chat.markDeleted(e.message_id);
+          if (publicRows) {
+            chat.addMessages([
+              publicModerationMessage(e, nextLocalSeq++, target),
+            ]);
+          }
+          break;
+        }
+        case "user_cleared":
+          chat.markUserCleared(e.target_user_id);
+          if (publicRows) {
+            chat.addMessages([publicModerationMessage(e, nextLocalSeq++)]);
+          }
+          break;
+        case "chat_cleared":
+          chat.markAllDeleted();
+          if (publicRows) {
+            chat.addMessages([publicModerationMessage(e, nextLocalSeq++)]);
+          }
+          break;
+        case "mod_action":
+          recordModAction(e);
+          // The modes panel shows the channel on screen.
+          if (
+            MODE_ACTIONS.has(e.action) &&
+            activeChannel()?.id === channel.id
+          ) {
+            void loadChatSettings(channel.id);
+          }
+          if (settings().showModActions) {
+            chat.addMessages([modActionMessage(e, nextLocalSeq++)]);
+          }
+          break;
+      }
+    },
+    banned: () => chat.addMessages([bannedNotice(channel, nextLocalSeq++)]),
+    bundle: (bundle) => applyBundle(channel.id, bundle),
+  });
+
+  // The host keeps the bundle of every joined channel.
+  currentEmoteBundle(channel.id)
+    .then((bundle) => {
+      if (bundle) applyBundle(channel.id, bundle);
+    })
+    .catch((err: unknown) =>
+      console.error("failed to load emote bundle:", err),
+    );
+
+  return {
+    session: {
+      channelId: channel.id,
+      chat,
+      chatters,
+      historyLoading: history.loading,
+    },
+    close: () => {
+      detach();
+      history.cancel();
+    },
+  };
+}
+
+interface Held {
+  session: ChatSession;
+  close: () => void;
+  holders: number;
+}
+
+const [held, setHeld] = createSignal<ReadonlyMap<string, Held>>(new Map());
+
+/** Opens the channel's session, or shares the one already open. */
+export function holdSession(channel: Channel): ChatSession {
+  const current = held().get(channel.id);
+  if (current) {
+    current.holders++;
+    return current.session;
+  }
+  const opened = { ...openSession(channel), holders: 1 };
+  setHeld((m) => new Map(m).set(channel.id, opened));
+  return opened.session;
+}
+
+/** Lets go of a session from `holdSession`; the last release closes it. */
+export function releaseSession(channelId: string): void {
+  const current = held().get(channelId);
+  if (!current || --current.holders > 0) return;
+  current.close();
+  setHeld((m) => {
+    const next = new Map(m);
+    next.delete(channelId);
+    return next;
+  });
+}
+
+/** The open session for a channel, for surfaces outside any pane. */
+export function sessionFor(
+  channelId: string | undefined,
+): ChatSession | undefined {
+  return channelId === undefined ? undefined : held().get(channelId)?.session;
+}
+
+const SessionContext = createContext<() => ChatSession | undefined>(
+  () => undefined,
+);
+
+export const SessionProvider = SessionContext.Provider;
+
+/** The session of the pane (or card window) this component is in. */
+export function useSession(): () => ChatSession | undefined {
+  return useContext(SessionContext);
+}

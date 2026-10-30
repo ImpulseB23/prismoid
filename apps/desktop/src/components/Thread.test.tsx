@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import type { ChatMessage } from "../stores/chatStore";
+import { SessionProvider, type ChatSession } from "../lib/chatSession";
 
 const msg = (id: string, text: string, thread: string | null): ChatMessage =>
   ({
@@ -18,12 +19,15 @@ const msg = (id: string, text: string, thread: string | null): ChatMessage =>
   }) as unknown as ChatMessage;
 
 const loaded: ChatMessage[] = [];
-vi.mock("../stores/chatStore", () => ({
-  messageRevision: () => 0,
-  findMessageById: (id: string) => loaded.find((m) => m.id === id),
-  searchMessages: (match: (m: ChatMessage) => boolean) =>
-    loaded.filter(match).reverse(),
-}));
+const session = {
+  channelId: "c",
+  chat: {
+    messageRevision: () => 0,
+    findById: (id: string) => loaded.find((m) => m.id === id),
+    search: (match: (m: ChatMessage) => boolean) =>
+      loaded.filter(match).reverse(),
+  },
+} as unknown as ChatSession;
 const reply = vi.fn();
 vi.mock("../stores/composerStore", () => ({
   requestReply: (t: unknown) => reply(t),
@@ -53,7 +57,11 @@ describe("Thread", () => {
     loaded.push(msg("root", "hot take", null));
     loaded.push(msg("r1", "agree", "root"), msg("r2", "nah", "root"));
     loaded.push(msg("x", "unrelated", null));
-    render(() => <Thread />);
+    render(() => (
+      <SessionProvider value={() => session}>
+        <Thread />
+      </SessionProvider>
+    ));
     openThread(loaded[1]!);
     const rows = screen.getAllByRole("listitem");
     expect(rows.map((r) => r.textContent)).toEqual([
@@ -70,7 +78,11 @@ describe("Thread", () => {
 
   it("quotes the original when it is no longer loaded", () => {
     loaded.push(msg("r1", "agree", "gone"));
-    render(() => <Thread />);
+    render(() => (
+      <SessionProvider value={() => session}>
+        <Thread />
+      </SessionProvider>
+    ));
     openThread(loaded[0]!);
     expect(screen.getAllByRole("listitem")[0]!.textContent).toContain(
       "hot take",

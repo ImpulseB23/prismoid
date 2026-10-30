@@ -6,7 +6,17 @@ vi.mock("../stores/channelStore", () => ({
   activeChannel: () => ({ id: "chan", display_name: "Chan" }),
 }));
 
-const { addMessages, clearMessages } = await import("../stores/chatStore");
+const { createChatStore } = await import("../stores/chatStore");
+const { createChatterStore } = await import("../stores/chatterStore");
+// Search looks through the session of the channel on screen.
+let chat = createChatStore();
+vi.mock("../lib/chatSession", () => ({
+  sessionFor: (id: string | undefined) =>
+    id === "chan"
+      ? { channelId: "chan", chat, chatters: createChatterStore() }
+      : undefined,
+}));
+const addMessages = (batch: ChatMessage[]) => chat.addMessages(batch);
 const { default: ChatSearch } = await import("./ChatSearch");
 
 let seq = 0;
@@ -31,7 +41,7 @@ const msg = (username: string, text: string, channel = "chan"): ChatMessage =>
 describe("ChatSearch", () => {
   afterEach(() => {
     cleanup();
-    clearMessages();
+    chat = createChatStore();
   });
 
   it("finds messages in the open channel, newest first", () => {

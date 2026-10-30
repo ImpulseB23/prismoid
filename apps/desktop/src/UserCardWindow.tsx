@@ -16,6 +16,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import UserCard, { type CardUser } from "./components/UserCard";
 import { sendJump, sendMention } from "./lib/cardBridge";
 import { showCardUser, startCardSession } from "./lib/cardSession";
+import { createChatStore } from "./stores/chatStore";
 import { authStatus } from "./stores/authStore";
 import { reapplyZoom, settings } from "./stores/settingsStore";
 import {
@@ -31,6 +32,7 @@ const report = (what: string) => (err: unknown) => console.error(what, err);
 
 const UserCardWindow: Component = () => {
   const [user, setUser] = createSignal<CardUser | null>(null);
+  const [chat, setChat] = createSignal(createChatStore());
   const [pinned, setPinned] = createSignal(false);
 
   createRenderEffect(() => {
@@ -105,7 +107,9 @@ const UserCardWindow: Component = () => {
           disposed = true;
           stop?.();
         });
-        showCardUser(u)
+        const store = createChatStore();
+        setChat(store);
+        showCardUser(u, store)
           .then((s) => {
             if (disposed) s();
             else stop = s;
@@ -212,6 +216,7 @@ const UserCardWindow: Component = () => {
       </div>
       <UserCard
         user={user()}
+        chat={chat()}
         login={login()}
         onClose={() =>
           void closeUserCard().catch(report("failed to close card"))

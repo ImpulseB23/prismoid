@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ChatMessage } from "../stores/chatStore";
+import type { ChatMessage, ChatStore } from "../stores/chatStore";
 import type { ModAction } from "./chatEvents";
 
 const handlers = new Map<string, (e: { payload: unknown }) => void>();
@@ -65,7 +65,7 @@ vi.mock("../stores/settingsStore", async (importOriginal) => ({
 }));
 
 const { showCardUser, startCardSession } = await import("./cardSession");
-const { recentMessagesByUser } = await import("../stores/chatStore");
+const { createChatStore } = await import("../stores/chatStore");
 const { modActionsFor } = await import("../stores/modLogStore");
 const { authStatus } = await import("../stores/authStore");
 
@@ -101,7 +101,12 @@ const card = {
 const tick = () => new Promise((r) => requestAnimationFrame(r));
 
 describe("cardSession", () => {
-  beforeEach(() => handlers.clear());
+  let chat: ChatStore;
+
+  beforeEach(() => {
+    handlers.clear();
+    chat = createChatStore();
+  });
 
   it("starts with the signed-in session", async () => {
     const stop = await startCardSession();
@@ -117,7 +122,7 @@ describe("cardSession", () => {
   });
 
   it("shows their stored and live messages, and nobody else's", async () => {
-    const shown = showCardUser(card);
+    const shown = showCardUser(card, chat);
     await Promise.resolve();
     handlers.get("chat_messages")!({
       payload: [msg("live"), msg("other", "u2"), msg("away", "u1", "x")],
@@ -125,7 +130,7 @@ describe("cardSession", () => {
     releaseHistory([msg("old"), msg("live")]);
     const stop = await shown;
     await tick();
-    expect(recentMessagesByUser("u1", 10).map((m) => m.id)).toEqual([
+    expect(chat.recentByUser("u1", 10).map((m) => m.id)).toEqual([
       "old",
       "live",
     ]);
@@ -133,19 +138,19 @@ describe("cardSession", () => {
   });
 
   it("adds their messages that arrive after history loaded", async () => {
-    const shown = showCardUser(card);
+    const shown = showCardUser(card, chat);
     releaseHistory([]);
     const stop = await shown;
     handlers.get("chat_messages")!({ payload: [msg("later")] });
     await tick();
-    expect(recentMessagesByUser("u1", 10).map((m) => m.id)).toEqual(["later"]);
+    expect(chat.recentByUser("u1", 10).map((m) => m.id)).toEqual(["later"]);
     stop();
   });
 
   it("loads the channel's badges and emotes", async () => {
     const bundle = { channel: "c" };
     emoteBundle.mockResolvedValueOnce(bundle);
-    const shown = showCardUser(card);
+    const shown = showCardUser(card, chat);
     releaseHistory([]);
     const stop = await shown;
     expect(loadBadgeBundle).toHaveBeenCalledWith(bundle);
@@ -156,7 +161,7 @@ describe("cardSession", () => {
   it("still opens when the emotes fail to load", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     emoteBundle.mockRejectedValueOnce(new Error("offline"));
-    const shown = showCardUser(card);
+    const shown = showCardUser(card, chat);
     releaseHistory([]);
     const stop = await shown;
     expect(error).toHaveBeenCalledWith("card emotes", expect.any(Error));
@@ -165,7 +170,7 @@ describe("cardSession", () => {
   });
 
   it("keeps the mod log the main window sends, newest first", async () => {
-    const shown = showCardUser(card);
+    const shown = showCardUser(card, chat);
     releaseHistory([]);
     const stop = await shown;
     const action = (n: number) =>
