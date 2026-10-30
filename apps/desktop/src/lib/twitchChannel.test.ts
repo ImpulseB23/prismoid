@@ -59,7 +59,10 @@ describe("formatChannelError", () => {
     ).toMatch(/sign out/i);
     expect(
       formatChannelError({ kind: "helix", status: 503, message: "" }),
-    ).toContain("503");
+    ).toMatch(/trouble/);
+    expect(
+      formatChannelError({ kind: "helix", status: 400, message: "raw" }),
+    ).not.toContain("raw");
   });
 
   it("explains stream setup refusals", () => {

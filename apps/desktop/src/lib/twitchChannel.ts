@@ -80,7 +80,11 @@ export function formatChannelError(e: unknown): string {
       if (e.status === 401)
         return "Twitch rejected the session. Sign out and back in.";
       if (e.status === 403) return "Twitch says you cannot do that here.";
-      return `Twitch returned an error (${e.status}).`;
+      if (e.status === 429)
+        return "Twitch needs a moment between these. Try again shortly.";
+      if (e.status >= 500)
+        return "Twitch is having trouble right now. Try again in a moment.";
+      return "Twitch would not do that. Try again, or check it on twitch.tv.";
     case "auth":
     case "invalid_setting":
       return e.message;

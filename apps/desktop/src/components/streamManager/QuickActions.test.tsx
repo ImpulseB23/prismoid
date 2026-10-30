@@ -196,7 +196,9 @@ describe("QuickActions", () => {
       target: { value: "blue" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Send announcement" }));
-    expect((await screen.findByRole("alert")).textContent).toContain("429");
+    expect((await screen.findByRole("alert")).textContent).toMatch(
+      /needs a moment/,
+    );
 
     commands.set("twitch_send_announcement", () => undefined);
     fireEvent.click(screen.getByRole("button", { name: "Send announcement" }));
