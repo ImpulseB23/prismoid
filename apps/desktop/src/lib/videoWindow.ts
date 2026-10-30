@@ -34,6 +34,11 @@ export async function openVideoWindow(
   setPoppedOut((s) => new Set(s).add(login));
 }
 
+/** Closes every pop-out, for when stream video is switched off. */
+export function closeVideoWindows(): Promise<void> {
+  return invoke("video_windows_close");
+}
+
 /** Main window: follows pop-outs closing and asking to come back in. */
 export async function followVideoWindows(
   popIn: (login: string) => void,

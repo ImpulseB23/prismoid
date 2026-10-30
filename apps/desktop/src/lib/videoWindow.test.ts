@@ -42,6 +42,11 @@ describe("videoWindow", () => {
     expect(handlers.size).toBe(0);
   });
 
+  it("closes every pop-out", async () => {
+    await video.closeVideoWindows();
+    expect(invoke).toHaveBeenCalledWith("video_windows_close");
+  });
+
   it("hands a stream back to the main window", async () => {
     const popIn = vi.fn();
     await video.followVideoWindows(popIn);

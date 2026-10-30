@@ -32,6 +32,7 @@ vi.mock("../stores/pulseStore", () => ({
 
 const { default: StreamBar } = await import("./StreamBar");
 const layout = await import("../stores/layoutStore");
+const { updateSettings } = await import("../stores/settingsStore");
 
 describe("StreamBar", () => {
   afterEach(() => {
@@ -49,6 +50,15 @@ describe("StreamBar", () => {
     expect(hide.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(hide);
     expect(focused()?.video).toBe(false);
+  });
+
+  it("has no video button while stream video is off", async () => {
+    await updateSettings({ streamVideo: false });
+    render(() => <StreamBar />);
+    expect(
+      screen.queryByRole("button", { name: "Watch the stream" }),
+    ).toBeNull();
+    await updateSettings({ streamVideo: true });
   });
 
   it("brings a popped out stream's window forward instead of a second player", () => {

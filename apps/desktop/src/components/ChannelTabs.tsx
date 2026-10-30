@@ -30,6 +30,7 @@ import {
   splitPane,
 } from "../stores/layoutStore";
 import { item, openContextMenu } from "../stores/contextMenuStore";
+import { settings } from "../stores/settingsStore";
 
 const report = (what: string) => (err: unknown) => console.error(what, err);
 
@@ -199,33 +200,35 @@ const ChannelTabs: Component = () => {
           }}
         </For>
       </div>
-      <button
-        type="button"
-        class="tabs__add"
-        title={
-          canSplitPane()
-            ? "Open a channel next to this one"
-            : "Four chats is the most side by side"
-        }
-        aria-label="Open a channel in a new pane"
-        disabled={!canSplitPane()}
-        onPointerEnter={() => void prefetchLive()}
-        onClick={() => openPicker({ split: true })}
-      >
-        <svg width="14" height="12" viewBox="0 0 14 12" aria-hidden="true">
-          <rect
-            x="0.75"
-            y="0.75"
-            width="12.5"
-            height="10.5"
-            rx="2"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-          />
-          <path d="M7 1v10" stroke="currentColor" stroke-width="1.5" />
-        </svg>
-      </button>
+      <Show when={settings().splitView}>
+        <button
+          type="button"
+          class="tabs__add"
+          title={
+            canSplitPane()
+              ? "Open a channel next to this one"
+              : "Four chats is the most side by side"
+          }
+          aria-label="Open a channel in a new pane"
+          disabled={!canSplitPane()}
+          onPointerEnter={() => void prefetchLive()}
+          onClick={() => openPicker({ split: true })}
+        >
+          <svg width="14" height="12" viewBox="0 0 14 12" aria-hidden="true">
+            <rect
+              x="0.75"
+              y="0.75"
+              width="12.5"
+              height="10.5"
+              rx="2"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            />
+            <path d="M7 1v10" stroke="currentColor" stroke-width="1.5" />
+          </svg>
+        </button>
+      </Show>
       <button
         type="button"
         class="tabs__add"

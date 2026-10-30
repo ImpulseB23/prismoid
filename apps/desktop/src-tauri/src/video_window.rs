@@ -57,6 +57,17 @@ pub async fn video_window_open<R: Runtime>(
     Ok(())
 }
 
+/// Closes every pop-out player, for when stream video is switched off.
+#[tauri::command]
+pub async fn video_windows_close<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    for (label, window) in app.webview_windows() {
+        if label.starts_with(LABEL_PREFIX) {
+            window.close().map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

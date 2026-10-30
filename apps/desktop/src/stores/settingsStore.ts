@@ -35,6 +35,9 @@ export interface Settings {
   pauseChat: PauseChat;
   /** Play animated emotes; off shows their first frame. */
   animatedEmotes: boolean;
+  /** Features that can be switched off whole, UI and background work. */
+  splitView: boolean;
+  streamVideo: boolean;
   /** Hide the live viewer count in the stream bar. */
   hideViewers: boolean;
   hideUptime: boolean;
@@ -118,6 +121,8 @@ export const DEFAULT_SETTINGS: Settings = {
   readableColors: true,
   pauseChat: "scroll",
   animatedEmotes: true,
+  splitView: true,
+  streamVideo: true,
   hideViewers: false,
   hideUptime: false,
   hideChatRate: false,
@@ -320,6 +325,14 @@ function readSettings(storage: StorageLike | null): Settings {
         typeof p.animatedEmotes === "boolean"
           ? p.animatedEmotes
           : DEFAULT_SETTINGS.animatedEmotes,
+      splitView:
+        typeof p.splitView === "boolean"
+          ? p.splitView
+          : DEFAULT_SETTINGS.splitView,
+      streamVideo:
+        typeof p.streamVideo === "boolean"
+          ? p.streamVideo
+          : DEFAULT_SETTINGS.streamVideo,
       hideViewers:
         typeof p.hideViewers === "boolean"
           ? p.hideViewers

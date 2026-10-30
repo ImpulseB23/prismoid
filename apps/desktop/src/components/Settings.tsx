@@ -87,6 +87,7 @@ const THEME_LABELS: Record<Theme, string> = {
 
 const SECTION_LABELS: Record<SettingsSection, string> = {
   account: "Account",
+  features: "Features",
   appearance: "Appearance",
   chat: "Chat",
   highlights: "Mentions & highlights",
@@ -376,6 +377,111 @@ const Settings: Component<SettingsProps> = (props) => {
               )}
             </For>
           </Show>
+          <Show when={settingsSection() === "features"}>
+            <p class="settings__intro">
+              Switch off what you don't use. It disappears and stops running in
+              the background.
+            </p>
+            <label class="settings__row settings__row--toggle">
+              <div class="settings__text">
+                <span class="settings__name">Split view</span>
+                <span class="settings__hint">
+                  Chats side by side, up to four
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                class="switch"
+                checked={settings().splitView}
+                onChange={(e) =>
+                  run(updateSettings({ splitView: e.currentTarget.checked }))
+                }
+              />
+            </label>
+            <label class="settings__row settings__row--toggle">
+              <div class="settings__text">
+                <span class="settings__name">Stream video</span>
+                <span class="settings__hint">
+                  Watch the stream in the corner of the chat or in its own
+                  window
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                class="switch"
+                checked={settings().streamVideo}
+                onChange={(e) =>
+                  run(updateSettings({ streamVideo: e.currentTarget.checked }))
+                }
+              />
+            </label>
+            <label class="settings__row settings__row--toggle">
+              <div class="settings__text">
+                <span class="settings__name">Load earlier messages</span>
+                <span class="settings__hint">
+                  When you open a channel, fetch what was said before you joined
+                  from{" "}
+                  <button
+                    type="button"
+                    class="settings__link"
+                    onClick={() =>
+                      void openUrl(RECENT_MESSAGES_URL).catch((err: unknown) =>
+                        console.error("failed to open link:", err),
+                      )
+                    }
+                  >
+                    recent-messages.robotty.de
+                  </button>
+                  , a community service that logs Twitch chat
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                class="switch"
+                checked={settings().chatBacklog}
+                onChange={(e) =>
+                  run(updateSettings({ chatBacklog: e.currentTarget.checked }))
+                }
+              />
+            </label>
+            <label class="settings__row settings__row--toggle">
+              <div class="settings__text">
+                <span class="settings__name">Follow my browser</span>
+                <span class="settings__hint">
+                  Open the Twitch channel showing in the front browser window
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                class="switch"
+                checked={settings().followBrowser}
+                onChange={(e) =>
+                  run(
+                    updateSettings({ followBrowser: e.currentTarget.checked }),
+                  )
+                }
+              />
+            </label>
+            <label class="settings__row settings__row--toggle">
+              <div class="settings__text">
+                <span class="settings__name">Mention alerts</span>
+                <span class="settings__hint">
+                  A short chime and a flashing taskbar button when someone
+                  mentions you while prismoid is in the background
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                class="switch"
+                checked={settings().mentionAlerts}
+                onChange={(e) =>
+                  run(
+                    updateSettings({ mentionAlerts: e.currentTarget.checked }),
+                  )
+                }
+              />
+            </label>
+          </Show>
           <Show when={settingsSection() === "appearance"}>
             <div class="settings__row settings__row--stack">
               <div class="settings__text">
@@ -506,53 +612,6 @@ const Settings: Component<SettingsProps> = (props) => {
             </label>
           </Show>
           <Show when={settingsSection() === "chat"}>
-            <label class="settings__row settings__row--toggle">
-              <div class="settings__text">
-                <span class="settings__name">Load earlier messages</span>
-                <span class="settings__hint">
-                  When you open a channel, fetch what was said before you joined
-                  from{" "}
-                  <button
-                    type="button"
-                    class="settings__link"
-                    onClick={() =>
-                      void openUrl(RECENT_MESSAGES_URL).catch((err: unknown) =>
-                        console.error("failed to open link:", err),
-                      )
-                    }
-                  >
-                    recent-messages.robotty.de
-                  </button>
-                  , a community service that logs Twitch chat
-                </span>
-              </div>
-              <input
-                type="checkbox"
-                class="switch"
-                checked={settings().chatBacklog}
-                onChange={(e) =>
-                  run(updateSettings({ chatBacklog: e.currentTarget.checked }))
-                }
-              />
-            </label>
-            <label class="settings__row settings__row--toggle">
-              <div class="settings__text">
-                <span class="settings__name">Follow my browser</span>
-                <span class="settings__hint">
-                  Open the Twitch channel showing in the front browser window
-                </span>
-              </div>
-              <input
-                type="checkbox"
-                class="switch"
-                checked={settings().followBrowser}
-                onChange={(e) =>
-                  run(
-                    updateSettings({ followBrowser: e.currentTarget.checked }),
-                  )
-                }
-              />
-            </label>
             <div class="settings__group-label">Stream bar</div>
             <label class="settings__row settings__row--toggle">
               <div class="settings__text">
@@ -622,25 +681,6 @@ const Settings: Component<SettingsProps> = (props) => {
             </label>
           </Show>
           <Show when={settingsSection() === "highlights"}>
-            <label class="settings__row settings__row--toggle">
-              <div class="settings__text">
-                <span class="settings__name">Ping when mentioned</span>
-                <span class="settings__hint">
-                  A short chime and a flashing taskbar button when someone
-                  mentions you while prismoid is in the background
-                </span>
-              </div>
-              <input
-                type="checkbox"
-                class="switch"
-                checked={settings().mentionAlerts}
-                onChange={(e) =>
-                  run(
-                    updateSettings({ mentionAlerts: e.currentTarget.checked }),
-                  )
-                }
-              />
-            </label>
             <Show when={settings().mentionAlerts}>
               <label class="settings__row settings__row--toggle">
                 <div class="settings__text">

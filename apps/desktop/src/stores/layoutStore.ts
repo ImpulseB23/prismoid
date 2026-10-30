@@ -5,6 +5,7 @@
 
 import { createSignal } from "solid-js";
 import type { StorageLike } from "./channelStore";
+import { settings } from "./settingsStore";
 
 export const MAX_PANES = 4;
 const KEY = "prismoid.layout";
@@ -54,10 +55,21 @@ export interface LayoutStore {
   /** Shows or hides the stream video in a pane. */
   toggleVideo: (paneId: string) => void;
   setVideo: (paneId: string, on: boolean) => void;
+  /** Back to the focused pane alone, for when split view is switched off. */
+  collapse: () => void;
+  /** Hides the video in every pane, for when stream video is switched off. */
+  clearVideo: () => void;
+}
+
+/** Whether the split view and stream video features are switched on. */
+export interface LayoutFeatures {
+  split: () => boolean;
+  video: () => boolean;
 }
 
 export function createLayoutStore(
   storage: StorageLike | null = defaultStorage(),
+  features: LayoutFeatures = { split: () => true, video: () => true },
 ): LayoutStore {
   const saved = read(storage);
   let nextId = 0;
@@ -118,7 +130,7 @@ export function createLayoutStore(
       focus(shown.id);
       return false;
     }
-    if (panes().length >= MAX_PANES) return false;
+    if (!features.split() || panes().length >= MAX_PANES) return false;
     const at = panes().findIndex((p) => p.id === afterId);
     const pane = { id: newId(), channelId };
     const next = [...panes()];
@@ -155,6 +167,7 @@ export function createLayoutStore(
   }
 
   function setVideo(paneId: string, on: boolean): void {
+    if (on && !features.video()) return;
     update(panes().map((p) => (p.id === paneId ? { ...p, video: on } : p)));
   }
 
@@ -172,12 +185,21 @@ export function createLayoutStore(
     show: (channelId) => showIn(focusedId(), channelId),
     showIn,
     split,
-    canSplit: () => panes().length < MAX_PANES,
+    canSplit: () => features.split() && panes().length < MAX_PANES,
     close,
     drop,
     keepOnly,
     toggleVideo,
     setVideo,
+    collapse: () => {
+      const focused = panes().find((p) => p.id === focusedId());
+      if (panes().length > 1 && focused) update([focused]);
+    },
+    clearVideo: () => {
+      if (panes().some((p) => p.video)) {
+        update(panes().map((p) => ({ ...p, video: false })));
+      }
+    },
   };
 }
 
@@ -220,7 +242,10 @@ const [draggedTab, setDraggedTab] = createSignal<string | null>(null);
 /** The channel of the tab being dragged, so panes can show drop targets. */
 export { draggedTab, setDraggedTab };
 
-const defaultStore = createLayoutStore();
+const defaultStore = createLayoutStore(defaultStorage(), {
+  split: () => settings().splitView,
+  video: () => settings().streamVideo,
+});
 export const panes = defaultStore.panes;
 export const focusedPaneId = defaultStore.focusedId;
 export const focusedPaneChannel = defaultStore.focusedChannel;
@@ -234,3 +259,5 @@ export const dropPaneChannel = defaultStore.drop;
 export const keepPaneChannels = defaultStore.keepOnly;
 export const togglePaneVideo = defaultStore.toggleVideo;
 export const setPaneVideo = defaultStore.setVideo;
+export const collapsePanes = defaultStore.collapse;
+export const clearPaneVideo = defaultStore.clearVideo;

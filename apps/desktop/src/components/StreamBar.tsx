@@ -105,37 +105,39 @@ const StreamBar: Component = () => {
                     </span>
                   </Show>
                 </span>
-                <button
-                  type="button"
-                  class="stream-bar__video"
-                  classList={{
-                    "stream-bar__video--on": videoOn() && !out(),
-                    "stream-bar__video--out": out(),
-                  }}
-                  aria-pressed={videoOn() || out()}
-                  aria-label={videoLabel()}
-                  title={videoLabel()}
-                  onClick={onVideo}
-                >
-                  <svg
-                    width="16"
-                    height="12"
-                    viewBox="0 0 16 12"
-                    aria-hidden="true"
+                <Show when={settings().streamVideo}>
+                  <button
+                    type="button"
+                    class="stream-bar__video"
+                    classList={{
+                      "stream-bar__video--on": videoOn() && !out(),
+                      "stream-bar__video--out": out(),
+                    }}
+                    aria-pressed={videoOn() || out()}
+                    aria-label={videoLabel()}
+                    title={videoLabel()}
+                    onClick={onVideo}
                   >
-                    <rect
-                      x="0.75"
-                      y="0.75"
-                      width="10.5"
-                      height="10.5"
-                      rx="2"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.5"
-                    />
-                    <path d="M12 4.5l3.25-2v7L12 7.5z" fill="currentColor" />
-                  </svg>
-                </button>
+                    <svg
+                      width="16"
+                      height="12"
+                      viewBox="0 0 16 12"
+                      aria-hidden="true"
+                    >
+                      <rect
+                        x="0.75"
+                        y="0.75"
+                        width="10.5"
+                        height="10.5"
+                        rx="2"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                      />
+                      <path d="M12 4.5l3.25-2v7L12 7.5z" fill="currentColor" />
+                    </svg>
+                  </button>
+                </Show>
               </div>
             )}
           </Show>

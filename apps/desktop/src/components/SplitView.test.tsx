@@ -39,7 +39,9 @@ const openVideoWindow = vi.fn<(login: string, title: string) => Promise<void>>(
 );
 const [out, setOut] = createSignal<string[]>([]);
 let popIn: (login: string) => void = () => {};
+const closeVideoWindows = vi.fn(async () => {});
 vi.mock("../lib/videoWindow", () => ({
+  closeVideoWindows: () => closeVideoWindows(),
   openVideoWindow: (login: string, title: string) =>
     openVideoWindow(login, title),
   isPoppedOut: (login: string) => out().includes(login),
@@ -160,6 +162,22 @@ describe("SplitView", () => {
     fireEvent.drop(first, { dataTransfer: transferB });
     expect(shown()).toEqual(["b", "c"]);
     layout.setDraggedTab(null);
+  });
+
+  it("switching a feature off takes its panes, previews and windows", async () => {
+    await mount();
+    const { updateSettings } = await import("../stores/settingsStore");
+    layout.splitPane("b");
+    layout.setPaneVideo(layout.panes()[0]!.id, true);
+    closeVideoWindows.mockClear();
+    await updateSettings({ splitView: false });
+    expect(shown()).toEqual(["b"]);
+    expect(closeVideoWindows).not.toHaveBeenCalled();
+    layout.setPaneVideo(layout.panes()[0]!.id, true);
+    await updateSettings({ streamVideo: false });
+    expect(layout.panes()[0]!.video).toBe(false);
+    expect(closeVideoWindows).toHaveBeenCalled();
+    await updateSettings({ splitView: true, streamVideo: true });
   });
 
   it("drops panes whose tab did not come back, once restore is done", async () => {
