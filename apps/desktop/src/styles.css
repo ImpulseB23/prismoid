@@ -1209,6 +1209,11 @@ option::checkmark {
   overflow-wrap: anywhere;
 }
 
+.msg-row__notice {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
 .msg-row__trailing {
   position: absolute;
   z-index: 1;
