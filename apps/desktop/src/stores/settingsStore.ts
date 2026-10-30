@@ -39,6 +39,7 @@ export interface Settings {
   splitView: boolean;
   streamVideo: boolean;
   streamManager: boolean;
+  modTools: boolean;
   /** Hide the live viewer count in the stream bar. */
   hideViewers: boolean;
   hideUptime: boolean;
@@ -125,6 +126,7 @@ export const DEFAULT_SETTINGS: Settings = {
   splitView: true,
   streamVideo: true,
   streamManager: true,
+  modTools: true,
   hideViewers: false,
   hideUptime: false,
   hideChatRate: false,
@@ -166,6 +168,8 @@ export interface SettingsAppliers {
   showPaints: (value: boolean) => Promise<void>;
   /** Starts or stops the poll, prediction and ad break feeds. */
   streamManager: (value: boolean) => Promise<void>;
+  /** Starts or stops the moderation and AutoMod feeds. */
+  modTools: (value: boolean) => Promise<void>;
   theme: (value: Theme) => Promise<void>;
 }
 
@@ -201,6 +205,8 @@ const defaultAppliers: SettingsAppliers = {
   showPaints: (v) => invoke("set_seventv_paints", { enabled: v }),
   streamManager: (v) =>
     invoke("set_twitch_feed", { feed: "broadcaster", enabled: v }),
+  modTools: (v) =>
+    invoke("set_twitch_feed", { feed: "moderation", enabled: v }),
   // "system" hands the title bar back to Windows; midnight shares dark chrome.
   theme: (v) =>
     getCurrentWindow().setTheme(
@@ -244,6 +250,9 @@ export function createSettingsStore(
     if (next.streamManager !== current.streamManager) {
       await appliers.streamManager(next.streamManager);
     }
+    if (next.modTools !== current.modTools) {
+      await appliers.modTools(next.modTools);
+    }
     if (next.theme !== current.theme) {
       await appliers.theme(next.theme);
     }
@@ -278,6 +287,7 @@ export function createSettingsStore(
     if (!s.highlightFirstMessages) await appliers.highlightFirstMessages(false);
     if (!s.showPaints) await appliers.showPaints(false);
     if (!s.streamManager) await appliers.streamManager(false);
+    if (!s.modTools) await appliers.modTools(false);
     if (s.theme !== "system") await appliers.theme(s.theme);
   }
 
@@ -347,6 +357,10 @@ function readSettings(storage: StorageLike | null): Settings {
         typeof p.streamManager === "boolean"
           ? p.streamManager
           : DEFAULT_SETTINGS.streamManager,
+      modTools:
+        typeof p.modTools === "boolean"
+          ? p.modTools
+          : DEFAULT_SETTINGS.modTools,
       hideViewers:
         typeof p.hideViewers === "boolean"
           ? p.hideViewers

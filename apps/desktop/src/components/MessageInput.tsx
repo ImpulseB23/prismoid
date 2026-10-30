@@ -51,7 +51,8 @@ import {
   slowModeLeft,
   timeoutLeft,
 } from "../lib/composerMeta";
-import { canModerateIn } from "../stores/roleStore";
+import { canModerateIn, holdsModRole } from "../stores/roleStore";
+import { settings } from "../stores/settingsStore";
 import { formatSeconds } from "../lib/slashCommands";
 import EmotePicker from "./EmotePicker";
 import ChatSettingsMenu from "./ChatSettingsMenu";
@@ -116,7 +117,7 @@ const MessageInput: Component<Props> = (props) => {
   const role = () => {
     const c = session().channel;
     if (c && c.id === currentUserId()) return "Streamer";
-    return moderates() ? "Mod" : null;
+    return c && holdsModRole(c.id) ? "Mod" : null;
   };
   const slowLeft = () => {
     const c = session().channel;
@@ -281,9 +282,11 @@ const MessageInput: Component<Props> = (props) => {
       if (parsed.command.kind !== "me") {
         if (!moderates()) {
           setStatus(
-            moderationNeedsReconnect()
-              ? "Moderation needs new Twitch permissions. Reconnect in Settings."
-              : `You are not a moderator in ${channel.display_name}.`,
+            !settings().modTools && holdsModRole(channel.id)
+              ? "Mod tools are switched off in Settings, Features."
+              : moderationNeedsReconnect()
+                ? "Moderation needs new Twitch permissions. Reconnect in Settings."
+                : `You are not a moderator in ${channel.display_name}.`,
           );
           return;
         }

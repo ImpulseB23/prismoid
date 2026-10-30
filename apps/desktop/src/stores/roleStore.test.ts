@@ -5,11 +5,13 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 import {
   canModerateIn,
   clearRoles,
+  holdsModRole,
   createRoleStore,
   noteModerator,
   reconnectScopes,
 } from "./roleStore";
 import { setAuthStatus } from "./authStore";
+import { updateSettings } from "./settingsStore";
 
 const channel = (id: string) => ({
   broadcaster_id: id,
@@ -73,6 +75,26 @@ describe("roleStore", () => {
     clearRoles();
     setAuthStatus(null);
     expect(canModerateIn("1")).toBe(false);
+  });
+
+  it("hides the tools but keeps the role while mod tools are off", async () => {
+    setAuthStatus({
+      state: "logged_in",
+      login: "me",
+      user_id: "1",
+      missing_scopes: [],
+      enabled_scope_groups: [],
+    });
+    noteModerator("7");
+    await updateSettings({ modTools: false });
+    expect(canModerateIn("7")).toBe(false);
+    expect(holdsModRole("7")).toBe(true);
+    expect(holdsModRole("1")).toBe(true);
+    await updateSettings({ modTools: true });
+    expect(canModerateIn("7")).toBe(true);
+    clearRoles();
+    setAuthStatus(null);
+    expect(holdsModRole("1")).toBe(false);
   });
 
   it("records a role observed live and clears on sign out", async () => {
