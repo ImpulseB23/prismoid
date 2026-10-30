@@ -62,6 +62,7 @@ use crate::sidecar_job::SidecarJob;
 use crate::twitch_auth::{AuthError, AuthManager, TWITCH_CLIENT_ID};
 #[cfg(windows)]
 use crate::twitch_channel::{Channel, ChannelSelection};
+use crate::twitch_feeds::TwitchFeedSetting;
 #[cfg(windows)]
 use tokio::sync::{watch, Notify};
 
@@ -386,6 +387,8 @@ async fn run_once<R: Runtime>(
     app.state::<FirstMessageSetting>()
         .sync(|line| sender.write_raw(line));
     app.state::<PaintSetting>()
+        .sync(|line| sender.write_raw(line));
+    app.state::<TwitchFeedSetting>()
         .sync(|line| sender.write_raw(line));
 
     // The channel task owns every twitch_connect / twitch_disconnect

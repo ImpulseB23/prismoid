@@ -21,6 +21,7 @@ pub mod twitch_auth;
 pub mod twitch_channel;
 pub mod twitch_channel_info;
 pub mod twitch_chat_settings;
+mod twitch_feeds;
 pub mod twitch_irc;
 pub mod twitch_polls;
 pub mod twitch_quick_actions;
@@ -130,6 +131,7 @@ pub fn run() {
             tray::set_close_to_tray,
             tray::show_main_window,
             first_messages::set_first_messages,
+            twitch_feeds::set_twitch_feed,
             twitch_channel::twitch_get_channel,
             twitch_channel::twitch_search_channels,
             twitch_channel::twitch_followed_live,
@@ -352,6 +354,7 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
     app.manage(history.clone());
     app.manage(backlog::BacklogSetting::default());
     app.manage(first_messages::FirstMessageSetting::default());
+    app.manage(twitch_feeds::TwitchFeedSetting::default());
 
     let follow = browser_follow::BrowserFollow::default();
     app.manage(follow.clone());

@@ -39,6 +39,9 @@ const StreamManager: Component = () => {
     }
   });
 
+  // Switched off in Features, the panel goes and must not come back open.
+  onCleanup(() => setStreamManagerOpen(false));
+
   const stream = createStreamStore();
   stream.track(() =>
     streamManagerOpen() ? (currentUserId() ?? undefined) : undefined,

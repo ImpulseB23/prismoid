@@ -281,6 +281,8 @@ func DispatchCommand(ctx context.Context, cmd control.Command, clients map[strin
 		firsts.setEnabled(cmd.Enabled)
 	case "seventv_paints":
 		cosmetics.SetEnabled(cmd.Enabled)
+	case "twitch_feed":
+		HandleTwitchFeed(cmd, session, logger)
 	case "token_refresh":
 		HandleTokenRefresh(cmd, session, logger)
 	case "twitch_resubscribe":
@@ -860,6 +862,17 @@ func HandleTwitchResubscribe(cmd control.Command, session *twitch.Session, logge
 	session.SetAccessToken(cmd.Token)
 	session.Resubscribe()
 	logger.Info().Msg("scopes changed; resubscribing joined channels")
+}
+
+// HandleTwitchFeed switches the EventSub feed behind a feature the user
+// turned on or off.
+func HandleTwitchFeed(cmd control.Command, session *twitch.Session, logger zerolog.Logger) {
+	feed := twitch.Feed(cmd.Feed)
+	if feed != twitch.FeedModeration && feed != twitch.FeedBroadcaster {
+		logger.Warn().Str("feed", cmd.Feed).Msg("unknown twitch_feed; ignoring")
+		return
+	}
+	session.SetFeed(feed, cmd.Enabled)
 }
 
 // HandleYouTubeConnect spawns a YouTube gRPC streamList client for the given

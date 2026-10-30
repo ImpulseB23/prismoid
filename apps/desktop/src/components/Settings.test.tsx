@@ -237,6 +237,7 @@ describe("Settings", () => {
     for (const [name, key] of [
       [/Split view/, "splitView"],
       [/Stream video/, "streamVideo"],
+      [/Stream manager/, "streamManager"],
       [/Mention alerts/, "mentionAlerts"],
     ] as const) {
       fireEvent.click(screen.getByRole("checkbox", { name }));

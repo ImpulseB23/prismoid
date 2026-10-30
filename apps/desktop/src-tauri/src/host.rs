@@ -218,6 +218,27 @@ pub fn build_first_messages_line(enabled: bool) -> serde_json::Result<Vec<u8>> {
     Ok(bytes)
 }
 
+/// Serializes a `twitch_feed` control command line, which switches the
+/// EventSub feed behind one feature on or off.
+pub fn build_twitch_feed_line(
+    feed: crate::twitch_feeds::TwitchFeed,
+    enabled: bool,
+) -> serde_json::Result<Vec<u8>> {
+    #[derive(Serialize)]
+    struct TwitchFeedCmd {
+        cmd: &'static str,
+        feed: crate::twitch_feeds::TwitchFeed,
+        enabled: bool,
+    }
+    let mut bytes = serde_json::to_vec(&TwitchFeedCmd {
+        cmd: "twitch_feed",
+        feed,
+        enabled,
+    })?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
 /// Serializes a `seventv_paints` control command line, which opens or
 /// closes the sidecar's 7TV EventAPI socket.
 pub fn build_seventv_paints_line(enabled: bool) -> serde_json::Result<Vec<u8>> {
