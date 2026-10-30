@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.9.0](https://github.com/ImpulseB23/prismoid/compare/v0.8.5...v0.9.0) (2026-10-30)
+
+
+### Features
+
+* 7tv can be switched off, no emotes, paints or connection while off ([#343](https://github.com/ImpulseB23/prismoid/issues/343)) ([71aabda](https://github.com/ImpulseB23/prismoid/commit/71aabda0495b7f3c982e74c820c651fa7b81ce63))
+* animated emotes switch, still frames from every provider ([#335](https://github.com/ImpulseB23/prismoid/issues/335)) ([976526b](https://github.com/ImpulseB23/prismoid/commit/976526bd55235b05959987d999e1f2f1973a364b))
+* chat identity, pick your name color from the chat gear ([#348](https://github.com/ImpulseB23/prismoid/issues/348)) ([c877bdb](https://github.com/ImpulseB23/prismoid/commit/c877bdb5608b0311fb817061099e19c3d31cceaa))
+* chat settings gear next to the emote button ([#332](https://github.com/ImpulseB23/prismoid/issues/332)) ([b8eace4](https://github.com/ImpulseB23/prismoid/commit/b8eace40c3b60ff9bed78a66662070b6516e8ea6))
+* corner video stays on its channel when you switch tabs ([#349](https://github.com/ImpulseB23/prismoid/issues/349)) ([2d649c1](https://github.com/ImpulseB23/prismoid/commit/2d649c1d88e64b66d6bae5ca26a7d9d9f11a2aa6))
+* drag tabs to reorder them, drag a pane header to swap panes ([#350](https://github.com/ImpulseB23/prismoid/issues/350)) ([de17e81](https://github.com/ImpulseB23/prismoid/commit/de17e81636d019dc241b35e0305c7997ef278ca5))
+* features section, split view and stream video can be switched off ([#338](https://github.com/ImpulseB23/prismoid/issues/338)) ([a793174](https://github.com/ImpulseB23/prismoid/commit/a793174bbd3006af6af6cd8f627ff370822c3ec9))
+* hover cards for badges and names in chat ([#340](https://github.com/ImpulseB23/prismoid/issues/340)) ([ed6a1a9](https://github.com/ImpulseB23/prismoid/commit/ed6a1a9ff1b04482f2f27ac728e4da99b197abb0))
+* mod tools can be switched off, moderation feeds stop with them ([#342](https://github.com/ImpulseB23/prismoid/issues/342)) ([54b7d38](https://github.com/ImpulseB23/prismoid/commit/54b7d381b79677d9a4f09bff18228e17d62f7909))
+* pause chat on hover or while holding alt ([#334](https://github.com/ImpulseB23/prismoid/issues/334)) ([7d88f5b](https://github.com/ImpulseB23/prismoid/commit/7d88f5b5d30b941dd79e611b2c052965991ab20c))
+* pop the stream out into its own window ([#331](https://github.com/ImpulseB23/prismoid/issues/331)) ([26c849d](https://github.com/ImpulseB23/prismoid/commit/26c849dd89ae6c0e2d9a9a7c2ea81b907349b1a8))
+* pop-out stream keeps 16:9 while resizing, no black bars ([#351](https://github.com/ImpulseB23/prismoid/issues/351)) ([fe514a3](https://github.com/ImpulseB23/prismoid/commit/fe514a327bbb6958419b3aefc7b8830fe20e7ea5))
+* readable colors switch in chat settings ([#333](https://github.com/ImpulseB23/prismoid/issues/333)) ([753c4db](https://github.com/ImpulseB23/prismoid/commit/753c4dbd30bbd8bba952e73cac564d84aa81d7d5))
+* settings move into the avatar panel ([#337](https://github.com/ImpulseB23/prismoid/issues/337)) ([ce58aae](https://github.com/ImpulseB23/prismoid/commit/ce58aaebab3f19f935a6de4e58a83e16d477c6c4))
+* split view ([#329](https://github.com/ImpulseB23/prismoid/issues/329)) ([bd91b1d](https://github.com/ImpulseB23/prismoid/commit/bd91b1d9d6fec15cd9878aa632208472b644713a))
+* stream manager can be switched off, its eventsub feeds stop with it ([#341](https://github.com/ImpulseB23/prismoid/issues/341)) ([fe3f28c](https://github.com/ImpulseB23/prismoid/commit/fe3f28c025ff040d3b913b4f823f462edfd87e2e))
+* stream video above a pane's chat ([#330](https://github.com/ImpulseB23/prismoid/issues/330)) ([d0ca71a](https://github.com/ImpulseB23/prismoid/commit/d0ca71aec5fe215ba78aba5131291708e929e21f))
+
+
+### Bug Fixes
+
+* 0.9.0 what's new notes ([#355](https://github.com/ImpulseB23/prismoid/issues/355)) ([46a93ff](https://github.com/ImpulseB23/prismoid/commit/46a93ff61d932b44e9ed9a2be48201140e3e1c78))
+* avatar stays in the header with no channel open ([#336](https://github.com/ImpulseB23/prismoid/issues/336)) ([a74c62f](https://github.com/ImpulseB23/prismoid/commit/a74c62f5786cda0186f84b4d9e15e9406bc4330c))
+* chat manager tab no longer adds a sideways scrollbar ([#347](https://github.com/ImpulseB23/prismoid/issues/347)) ([f5b1890](https://github.com/ImpulseB23/prismoid/commit/f5b18904256916f930be978c68d40014dd0ca32e))
+* menus survive fast chat, scrolled-up chat no longer creeps ([#339](https://github.com/ImpulseB23/prismoid/issues/339)) ([15b682b](https://github.com/ImpulseB23/prismoid/commit/15b682bfa709120645b382aba3016576701222af))
+* pop-out aspect lock is installed on the window's own thread ([#354](https://github.com/ImpulseB23/prismoid/issues/354)) ([12fd23d](https://github.com/ImpulseB23/prismoid/commit/12fd23d2cd21efd61d6f12fbad5937233413ad93))
+* retry twitch's try-again-later drop, send errors read like sentences ([#346](https://github.com/ImpulseB23/prismoid/issues/346)) ([59d0b78](https://github.com/ImpulseB23/prismoid/commit/59d0b78f6c05989895154865893b8ae39f6ff96f))
+* settings move to the https origin ([#320](https://github.com/ImpulseB23/prismoid/issues/320)) ([8cf4f13](https://github.com/ImpulseB23/prismoid/commit/8cf4f1350120c9637aa17f20c14b21f34fa8cac9))
+* sidecar logs reach the log file, dropped sends are logged ([#344](https://github.com/ImpulseB23/prismoid/issues/344)) ([1eb58cb](https://github.com/ImpulseB23/prismoid/commit/1eb58cb9b80bc05b286b052f3e68c532a07365e5))
+* slow mode and other room modes known in every channel, not just where you mod ([#345](https://github.com/ImpulseB23/prismoid/issues/345)) ([39e50c2](https://github.com/ImpulseB23/prismoid/commit/39e50c2f2c4b818fa58371338b4f5a33a4242e6f))
+* subs, gifts and timeouts show in user cards instead of blank rows ([#353](https://github.com/ImpulseB23/prismoid/issues/353)) ([816becf](https://github.com/ImpulseB23/prismoid/commit/816becf60092afa0cf437d0f17172799bce1355c))
+* user cards follow the app zoom and keep a fixed size ([#352](https://github.com/ImpulseB23/prismoid/issues/352)) ([46004e6](https://github.com/ImpulseB23/prismoid/commit/46004e6f066ae7798bc3ba5333aa03b373b0b53f))
+
+
+### Performance
+
+* changed messages no longer re-lay out the whole chat ([#328](https://github.com/ImpulseB23/prismoid/issues/328)) ([8adf413](https://github.com/ImpulseB23/prismoid/commit/8adf413813ca5036039b4f24a2217d4353ef6935))
+
 ## [0.8.5](https://github.com/ImpulseB23/prismoid/compare/v0.8.4...v0.8.5) (2026-10-29)
 
 
