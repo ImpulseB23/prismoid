@@ -69,6 +69,9 @@ func TestFFZ_FetchGlobal(t *testing.T) {
 	if !zreh.Animated || zreh.URL1x != "https://cdn.frankerfacez.com/emote/9/animated/1" {
 		t.Errorf("zreh: %+v", zreh)
 	}
+	if zreh.Static1x != "https://cdn.frankerfacez.com/emote/9/1" || lilz.Static1x != "" {
+		t.Errorf("statics: zreh %q lilz %q", zreh.Static1x, lilz.Static1x)
+	}
 }
 
 func TestFFZ_FetchChannel(t *testing.T) {

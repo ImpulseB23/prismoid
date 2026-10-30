@@ -14,6 +14,9 @@ export interface EmoteMeta {
   width: number;
   height: number;
   animated: boolean;
+  /** Still frames of an animated emote, for when animation is off. */
+  static_1x?: string;
+  static_2x?: string;
   zero_width: boolean;
   /**
    * Uploader, when the provider reports one (7TV, FFZ, BTTV shared emotes).

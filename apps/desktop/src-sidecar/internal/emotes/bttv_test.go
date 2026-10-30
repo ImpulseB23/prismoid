@@ -39,6 +39,13 @@ func TestBTTV_FetchGlobal(t *testing.T) {
 	if pog.URL4x != "https://cdn.betterttv.net/emote/abc/3x.gif" {
 		t.Errorf("URL4x = %q", pog.URL4x)
 	}
+	if pog.Static1x != "https://cdn.betterttv.net/emote/abc/static/1x.webp" ||
+		pog.Static2x != "https://cdn.betterttv.net/emote/abc/static/2x.webp" {
+		t.Errorf("statics = %q %q", pog.Static1x, pog.Static2x)
+	}
+	if set.Emotes[1].Static1x != "" {
+		t.Errorf("still emote got Static1x %q", set.Emotes[1].Static1x)
+	}
 }
 
 func TestBTTV_FetchChannel_MergesSharedAndChannel(t *testing.T) {

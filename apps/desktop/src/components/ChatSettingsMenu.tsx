@@ -96,6 +96,20 @@ const ChatSettingsMenu: Component<ChatSettingsMenuProps> = (props) => {
         </label>
         <label class="settings__row settings__row--toggle">
           <div class="settings__text">
+            <span class="settings__name">Animated emotes</span>
+            <span class="settings__hint">
+              Off shows the first frame of animated emotes
+            </span>
+          </div>
+          <input
+            type="checkbox"
+            class="switch"
+            checked={settings().animatedEmotes}
+            onChange={(e) => save({ animatedEmotes: e.currentTarget.checked })}
+          />
+        </label>
+        <label class="settings__row settings__row--toggle">
+          <div class="settings__text">
             <span class="settings__name">Timestamps</span>
             <span class="settings__hint">
               Show the time next to each message

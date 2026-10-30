@@ -82,6 +82,7 @@ describe("settingsStore", () => {
       alternateRows: false,
       readableColors: true,
       pauseChat: "scroll",
+      animatedEmotes: true,
       hideViewers: false,
       hideUptime: false,
       hideChatRate: false,
@@ -220,6 +221,7 @@ describe("settingsStore", () => {
           showPaints: false,
           readableColors: false,
           pauseChat: "always",
+          animatedEmotes: 0,
         }),
       }),
     );
@@ -231,6 +233,7 @@ describe("settingsStore", () => {
       alternateRows: false,
       readableColors: false,
       pauseChat: "scroll",
+      animatedEmotes: true,
       hideViewers: false,
       hideUptime: false,
       hideChatRate: false,
