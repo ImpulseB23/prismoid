@@ -1,4 +1,4 @@
-// Everything in Settings waiting on the user, most urgent first. The gear
+// Everything in Settings waiting on the user, most urgent first. The avatar
 // shows the first, the Settings nav marks every section listed, and each
 // section marks the row that deals with it.
 
@@ -11,7 +11,7 @@ export type AttentionRow = "reconnect" | "update" | "setup";
 
 export interface Attention {
   text: string;
-  /** Where clicking the gear lands; absent when no setting fixes it. */
+  /** Where Settings opens for it; absent when no setting fixes it. */
   section?: SettingsSection;
   row?: AttentionRow;
 }

@@ -29,12 +29,18 @@ vi.mock("./TwitchReconnect", () => ({
   default: (p: { title: string }) => <p>{p.title}</p>,
 }));
 
+import type { Attention } from "../lib/settingsAttention";
+
 const { default: AccountPanel } = await import("./AccountPanel");
 const { setAuthStatus } = await import("../stores/authStore");
 const { settingsOpen, settingsSection, setSettingsOpen } =
   await import("../stores/settingsPanelStore");
 
-function renderPanel(onSignOut = vi.fn(), onClose = vi.fn()) {
+function renderPanel(
+  onSignOut = vi.fn(),
+  onClose = vi.fn(),
+  attention: Attention | null = null,
+) {
   render(() => (
     <AccountPanel
       open
@@ -42,6 +48,7 @@ function renderPanel(onSignOut = vi.fn(), onClose = vi.fn()) {
       displayName="Viewer"
       picture={undefined}
       badges={[]}
+      attention={attention}
       onClose={onClose}
       onSignOut={onSignOut}
     />
@@ -64,11 +71,15 @@ describe("AccountPanel", () => {
     expect(onSignOut).toHaveBeenCalledOnce();
   });
 
-  it("opens the account settings", () => {
-    const { onClose } = renderPanel();
-    fireEvent.click(screen.getByRole("button", { name: "Account settings" }));
+  it("opens Settings on what needs you", () => {
+    const { onClose } = renderPanel(vi.fn(), vi.fn(), {
+      text: "Restart to finish updating",
+      section: "updates",
+    });
+    expect(screen.getByText("Restart to finish updating")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     expect(settingsOpen()).toBe(true);
-    expect(settingsSection()).toBe("account");
+    expect(settingsSection()).toBe("updates");
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -98,6 +109,7 @@ describe("AccountPanel", () => {
           { set_id: "subscriber", id: "6" },
           { set_id: "unknown", id: "1" },
         ]}
+        attention={null}
         onClose={() => {}}
         onSignOut={() => {}}
       />
