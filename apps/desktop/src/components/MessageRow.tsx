@@ -84,7 +84,13 @@ const MessageRow: Component<MessageRowProps> = (props) => (
               notice may also have the chatter's own words after it. */}
           <Show when={props.msg.notice}>
             {(n) => (
-              <span class="msg-row__notice">
+              <span
+                class="msg-row__notice"
+                classList={{
+                  "msg-row__notice--ban": n().notice_type === "ban",
+                  "msg-row__notice--timeout": n().notice_type === "timeout",
+                }}
+              >
                 {n().system_message}
                 {props.msg.message_text ? " " : ""}
               </span>

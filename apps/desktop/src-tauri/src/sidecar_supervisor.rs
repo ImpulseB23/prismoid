@@ -976,6 +976,11 @@ fn handle_sidecar_stdout<R: Runtime>(
                 tracing::warn!(error = %e, "failed to emit first_message");
             }
         },
+        |clear| {
+            if let Err(e) = app.emit("user_clear", &clear) {
+                tracing::warn!(error = %e, "failed to emit user_clear");
+            }
+        },
         |event| apply_paint_event(event, app),
     )
 }
@@ -1012,12 +1017,13 @@ fn apply_paint_event<R: Runtime>(event: PaintEvent, app: &AppHandle<R>) {
 /// for the corresponding variants. Factored out so it can be unit-tested
 /// without a Tauri runtime (the AppHandle-dependent work happens inside the
 /// closures).
-fn scan_sidecar_stdout<F, G, H, I, P>(
+fn scan_sidecar_stdout<F, G, H, I, C, P>(
     bytes: &[u8],
     mut on_bundle: F,
     mut on_send_result: G,
     mut on_banned: H,
     mut on_first: I,
+    mut on_clear: C,
     mut on_paint: P,
 ) -> bool
 where
@@ -1025,6 +1031,7 @@ where
     G: FnMut(crate::host::SendChatResult),
     H: FnMut(crate::host::ChatBanned),
     I: FnMut(crate::host::FirstMessage),
+    C: FnMut(crate::host::UserClear),
     P: FnMut(crate::seventv_paints::PaintEvent),
 {
     let mut saw_heartbeat = false;
@@ -1039,6 +1046,7 @@ where
             SidecarEvent::ModActionResult(r) => on_send_result(r),
             SidecarEvent::ChatBanned(b) => on_banned(b),
             SidecarEvent::FirstMessage(f) => on_first(f),
+            SidecarEvent::UserClear(c) => on_clear(c),
             SidecarEvent::SevenTvPaint(p) => on_paint(p),
             SidecarEvent::Other(t) => {
                 tracing::debug!(msg_type = %t, "unhandled sidecar control message");
@@ -1551,6 +1559,7 @@ mod tests {
             |_| panic!("no result"),
             |_| panic!("no ban"),
             |_| panic!("no first"),
+            |_| panic!("no clear"),
             |_| panic!("no paint")
         ));
         assert!(!scan_sidecar_stdout(
@@ -1559,6 +1568,7 @@ mod tests {
             |_| panic!("no result"),
             |_| panic!("no ban"),
             |_| panic!("no first"),
+            |_| panic!("no clear"),
             |_| panic!("no paint")
         ));
     }
@@ -1572,6 +1582,7 @@ mod tests {
             |_| panic!("no result"),
             |_| panic!("no ban"),
             |_| panic!("no first"),
+            |_| panic!("no clear"),
             |_| panic!("no paint")
         ));
     }
@@ -1590,6 +1601,7 @@ mod tests {
             |_| panic!("no result"),
             |_| panic!("no ban"),
             |_| panic!("no first"),
+            |_| panic!("no clear"),
             |_| panic!("no paint")
         ));
     }
@@ -1605,6 +1617,7 @@ mod tests {
             |_| panic!("no result"),
             |_| panic!("no ban"),
             |_| panic!("no first"),
+            |_| panic!("no clear"),
             |_| panic!("no paint")
         ));
     }
@@ -1626,6 +1639,7 @@ mod tests {
             |_| panic!("no result"),
             |_| panic!("no ban"),
             |_| panic!("no first"),
+            |_| panic!("no clear"),
             |_| panic!("no paint"),
         );
 
@@ -1645,6 +1659,7 @@ mod tests {
             |_| panic!("no result"),
             |_| panic!("no ban"),
             |_| panic!("no first"),
+            |_| panic!("no clear"),
             |_| panic!("no paint")
         ));
     }
@@ -1659,6 +1674,7 @@ mod tests {
             |r| got = Some(r),
             |_| panic!("no ban"),
             |_| panic!("no first"),
+            |_| panic!("no clear"),
             |_| panic!("no paint"),
         );
         assert!(!saw_heartbeat);
@@ -1678,6 +1694,7 @@ mod tests {
             |_| panic!("no result"),
             |b| got = Some(b),
             |_| panic!("no first"),
+            |_| panic!("no clear"),
             |_| panic!("no paint"),
         );
         assert_eq!(got.expect("ban dispatched").broadcaster_id, "9");
@@ -1693,11 +1710,30 @@ mod tests {
             |_| panic!("no result"),
             |_| panic!("no ban"),
             |f| got = Some(f),
+            |_| panic!("no clear"),
             |_| panic!("no paint"),
         );
         let f = got.expect("first message dispatched");
         assert_eq!(f.channel_id, "9");
         assert_eq!(f.message_id, "m1");
+    }
+
+    #[test]
+    fn scan_sidecar_stdout_dispatches_user_clear() {
+        let line = br#"{"type":"user_clear","payload":{"channel_id":"9","target_user_id":"7","duration_seconds":60}}"#;
+        let mut got = None;
+        scan_sidecar_stdout(
+            line,
+            |_| panic!("no bundle"),
+            |_| panic!("no result"),
+            |_| panic!("no ban"),
+            |_| panic!("no first"),
+            |c| got = Some(c),
+            |_| panic!("no paint"),
+        );
+        let c = got.expect("clear dispatched");
+        assert_eq!(c.target_user_id, "7");
+        assert_eq!(c.duration_seconds, Some(60));
     }
 
     #[test]
@@ -1711,6 +1747,7 @@ mod tests {
             |_| panic!("no result"),
             |_| panic!("no ban"),
             |_| panic!("no first"),
+            |_| panic!("no clear"),
             |p| got.push(p),
         );
         assert!(matches!(
@@ -1880,7 +1917,7 @@ mod tests {
             |bytes| {
                 stdout_calls.set(stdout_calls.get() + 1);
                 // Forward to the pure scanner so heartbeat detection is real.
-                scan_sidecar_stdout(bytes, |_| {}, |_| {}, |_| {}, |_| {}, |_| {})
+                scan_sidecar_stdout(bytes, |_| {}, |_| {}, |_| {}, |_| {}, |_| {}, |_| {})
             },
             || kill_calls.set(kill_calls.get() + 1),
             || {},

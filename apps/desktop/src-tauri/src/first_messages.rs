@@ -1,6 +1,6 @@
 //! Switch for first-time chatter highlights. EventSub has no first-message
 //! flag, so the sidecar spots them on an anonymous Twitch IRC connection
-//! of its own; while the setting is off that connection is not opened.
+//! of its own; while the setting is off it does not report them.
 
 use std::sync::{Arc, Mutex, PoisonError};
 

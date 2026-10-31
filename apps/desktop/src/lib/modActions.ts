@@ -1,7 +1,7 @@
 // Turns a channel.moderate event into the one-line notice moderators see
 // in the feed and in a user's history, and into a feed row.
 
-import type { ModAction, PublicModerationEvent } from "./chatEvents";
+import type { ModAction, PublicModerationEvent, UserClear } from "./chatEvents";
 import type { ChatMessage } from "../stores/chatStore";
 import { formatSeconds } from "./slashCommands";
 import { formatViewers } from "./streamInfo";
@@ -106,10 +106,49 @@ function quoted(terms: string[]): string {
   return terms.map((t) => `"${t}"`).join(", ");
 }
 
+/** Rows for bans and timeouts carry their own notice type for the colour. */
+function noticeTypeOf(action: string): string {
+  switch (action) {
+    case "ban":
+    case "shared_chat_ban":
+      return "ban";
+    case "timeout":
+    case "shared_chat_timeout":
+      return "timeout";
+    default:
+      return "mod_action";
+  }
+}
+
+/**
+ * The notice for a user whose messages were cleared, as a viewer knows it.
+ * Without `clear` only the clear itself is known; with it, Twitch IRC said
+ * whether it was a ban or a timeout and how long. Never who or why: Twitch
+ * keeps those for moderators.
+ */
+export function userClearedNotice(
+  name: string,
+  clear?: UserClear,
+): { notice_type: string; system_message: string } {
+  if (!clear) {
+    return {
+      notice_type: "mod_action",
+      system_message: `${name} was timed out or banned`,
+    };
+  }
+  if (clear.duration_seconds === null) {
+    return { notice_type: "ban", system_message: `${name} was banned` };
+  }
+  return {
+    notice_type: "timeout",
+    system_message: `${name} was timed out for ${formatSeconds(clear.duration_seconds)}`,
+  };
+}
+
 /**
  * What a non-moderator can know about a moderation event. Twitch only
  * sends these channels the effect: a user's messages gone, one message
- * gone, or the whole chat, with no moderator, duration or reason.
+ * gone, or the whole chat, with no moderator or reason.
  */
 export function describePublicModeration(
   e: PublicModerationEvent,
@@ -117,7 +156,7 @@ export function describePublicModeration(
 ): string {
   switch (e.kind) {
     case "user_cleared":
-      return `${e.target_user_name || e.target_user_login || "A user"} was timed out or banned`;
+      return userClearedNotice(clearedName(e)).system_message;
     case "message_deleted":
       return deleted
         ? `A message from ${deleted.display_name} was deleted: ${deleted.message_text}`
@@ -127,11 +166,22 @@ export function describePublicModeration(
   }
 }
 
-/** Feed row for a moderation event seen without the moderator feed. */
+function clearedName(e: {
+  target_user_name: string;
+  target_user_login: string;
+}) {
+  return e.target_user_name || e.target_user_login || "A user";
+}
+
+/**
+ * Feed row for a moderation event seen without the moderator feed. A
+ * cleared user's row says ban or timeout when `clear` has already come.
+ */
 export function publicModerationMessage(
   e: PublicModerationEvent,
   arrivalSeq: number,
   deleted?: { display_name: string; message_text: string },
+  clear?: UserClear,
 ): ChatMessage {
   const now = Date.now();
   const target = e.kind === "user_cleared" ? e : null;
@@ -154,10 +204,13 @@ export function publicModerationMessage(
     color: null,
     reply_to: null,
     reply_parent: null,
-    notice: {
-      notice_type: "mod_action",
-      system_message: describePublicModeration(e, deleted),
-    },
+    notice:
+      e.kind === "user_cleared"
+        ? userClearedNotice(clearedName(e), clear)
+        : {
+            notice_type: "mod_action",
+            system_message: describePublicModeration(e, deleted),
+          },
     emote_spans: [],
   };
 }
@@ -187,7 +240,51 @@ export function modActionMessage(
     color: null,
     reply_to: null,
     reply_parent: null,
-    notice: { notice_type: "mod_action", system_message: describeModAction(a) },
+    notice: {
+      notice_type: noticeTypeOf(a.action),
+      system_message: describeModAction(a),
+    },
     emote_spans: [],
+  };
+}
+
+const CLEAR_PAIR_MS = 10_000;
+
+/**
+ * Pairs a viewer's cleared-user row (EventSub) with how the user was
+ * removed (Twitch IRC). They come on separate connections in either order:
+ * `take` hands over a clear that came first, `wait` remembers a row still
+ * missing one, and `arrive` returns that row's id or keeps the clear for
+ * the row to come. Anything unpaired after ten seconds is dropped.
+ */
+export function createClearPairing(now: () => number = Date.now) {
+  const rows = new Map<string, { id: string; at: number }>();
+  const clears = new Map<string, { clear: UserClear; at: number }>();
+  const prune = (m: Map<string, { at: number }>) => {
+    const cutoff = now() - CLEAR_PAIR_MS;
+    for (const [k, v] of m) if (v.at < cutoff) m.delete(k);
+  };
+  return {
+    take(userId: string): UserClear | undefined {
+      prune(clears);
+      const c = clears.get(userId);
+      clears.delete(userId);
+      return c?.clear;
+    },
+    wait(userId: string, rowId: string): void {
+      prune(rows);
+      rows.set(userId, { id: rowId, at: now() });
+    },
+    arrive(clear: UserClear): string | undefined {
+      prune(rows);
+      const row = rows.get(clear.target_user_id);
+      if (row) {
+        rows.delete(clear.target_user_id);
+        return row.id;
+      }
+      prune(clears);
+      clears.set(clear.target_user_id, { clear, at: now() });
+      return undefined;
+    },
   };
 }

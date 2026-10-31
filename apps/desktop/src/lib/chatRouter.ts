@@ -8,7 +8,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import type { ChatMessage } from "../stores/chatStore";
-import type { ChatEvent } from "./chatEvents";
+import type { ChatEvent, UserClear } from "./chatEvents";
 import type { ChatBanned } from "./chatAccess";
 import type { EmoteBundle } from "../stores/badgeStore";
 import type { EmoteBundleSets } from "../stores/emoteStore";
@@ -39,6 +39,8 @@ export interface FeedSink {
   /** Deletions, clears and moderator actions in the feed's channel. */
   event: (e: ChatEvent) => void;
   banned: (ban: ChatBanned) => void;
+  /** How a user cleared in the feed's channel was removed. */
+  userClear: (clear: UserClear) => void;
   bundle: (bundle: Bundle) => void;
 }
 
@@ -132,6 +134,11 @@ export async function startChatRouter(
       markChannelBanned(e.payload.broadcaster_id);
       for (const s of sinks) {
         if (s.channel() === e.payload.broadcaster_id) s.banned(e.payload);
+      }
+    }),
+    listen<UserClear>("user_clear", (e) => {
+      for (const s of sinks) {
+        if (s.channel() === e.payload.channel_id) s.userClear(e.payload);
       }
     }),
     listen<FirstMessage>("first_message", (e) =>

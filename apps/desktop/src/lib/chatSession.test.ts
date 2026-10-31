@@ -183,6 +183,39 @@ describe("chatSession", () => {
     expect(roomModes.load).toHaveBeenCalledTimes(2);
   });
 
+  it("names a viewer's ban or timeout whichever source comes first", async () => {
+    const s = holdSession(channel("a"));
+    releaseHistory([]);
+    const sink = sinks[0]!;
+    const cleared = (user: string) =>
+      sink.event({
+        kind: "user_cleared",
+        channel_id: "a",
+        target_user_id: user,
+        target_user_login: user,
+        target_user_name: user.toUpperCase(),
+      });
+    cleared("x");
+    sink.userClear({
+      channel_id: "a",
+      target_user_id: "x",
+      duration_seconds: 600,
+    });
+    sink.userClear({
+      channel_id: "a",
+      target_user_id: "y",
+      duration_seconds: null,
+    });
+    cleared("y");
+    await tick();
+    expect(
+      s.chat.search((m) => m.notice !== null, 10).map((m) => m.notice),
+    ).toEqual([
+      { notice_type: "ban", system_message: "Y was banned" },
+      { notice_type: "timeout", system_message: "X was timed out for 10m" },
+    ]);
+  });
+
   it("notes a ban and keeps its own badges and emotes, on screen or not", async () => {
     const badge = (version: string) => ({
       set: "subscriber",

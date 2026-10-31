@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { ModAction } from "./chatEvents";
 import {
+  createClearPairing,
   describeModAction,
   describePublicModeration,
   modActionMessage,
   publicModerationMessage,
+  userClearedNotice,
 } from "./modActions";
 
 const base: ModAction = {
@@ -82,6 +84,66 @@ describe("describePublicModeration", () => {
   });
 });
 
+describe("userClearedNotice", () => {
+  const clear = (duration_seconds: number | null) => ({
+    channel_id: "c",
+    target_user_id: "1",
+    duration_seconds,
+  });
+
+  it("says ban or timeout and how long once IRC has said", () => {
+    expect(userClearedNotice("Bob", clear(null))).toEqual({
+      notice_type: "ban",
+      system_message: "Bob was banned",
+    });
+    expect(userClearedNotice("Bob", clear(90))).toEqual({
+      notice_type: "timeout",
+      system_message: "Bob was timed out for 1m 30s",
+    });
+    expect(
+      publicModerationMessage(
+        {
+          kind: "user_cleared",
+          channel_id: "c",
+          target_user_id: "1",
+          target_user_login: "bob",
+          target_user_name: "",
+        },
+        1,
+        undefined,
+        clear(null),
+      ).notice,
+    ).toEqual({ notice_type: "ban", system_message: "bob was banned" });
+  });
+});
+
+describe("createClearPairing", () => {
+  const clear = (user: string) => ({
+    channel_id: "c",
+    target_user_id: user,
+    duration_seconds: 60,
+  });
+
+  it("pairs a row and its clear in either order", () => {
+    const p = createClearPairing(() => 0);
+    p.wait("a", "row-a");
+    expect(p.arrive(clear("a"))).toBe("row-a");
+    expect(p.arrive(clear("a"))).toBeUndefined();
+    expect(p.take("a")).toEqual(clear("a"));
+    expect(p.take("a")).toBeUndefined();
+  });
+
+  it("drops what goes unpaired for ten seconds", () => {
+    let now = 0;
+    const p = createClearPairing(() => now);
+    p.wait("a", "row-a");
+    p.arrive(clear("b"));
+    now = 10_001;
+    expect(p.arrive(clear("a"))).toBeUndefined();
+    expect(p.take("b")).toBeUndefined();
+  });
+});
+
 describe("describeModAction", () => {
   it("names the moderator, the target, the length and the reason", () => {
     expect(
@@ -116,7 +178,11 @@ describe("describeModAction", () => {
 
   it("builds a notice row tied to the target user", () => {
     const row = modActionMessage({ ...base, action: "ban" }, 7);
-    expect(row.notice?.notice_type).toBe("mod_action");
+    expect(row.notice?.notice_type).toBe("ban");
+    expect(modActionMessage(base, 8).notice?.notice_type).toBe("timeout");
+    expect(
+      modActionMessage({ ...base, action: "unban" }, 9).notice?.notice_type,
+    ).toBe("mod_action");
     expect(row.platform_user_id).toBe("42");
     expect(row.arrival_seq).toBe(7);
     expect(row.message_text).toBe("");
