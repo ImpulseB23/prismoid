@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/ImpulseB23/prismoid/compare/v0.9.0...v0.9.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* say ban or timeout and how long, in red and orange ([#357](https://github.com/ImpulseB23/prismoid/issues/357)) ([1580f99](https://github.com/ImpulseB23/prismoid/commit/1580f99a0ea112bf6b2af9c662f1f727a1bf39be))
+
 ## [0.9.0](https://github.com/ImpulseB23/prismoid/compare/v0.8.5...v0.9.0) (2026-10-30)
 
 
