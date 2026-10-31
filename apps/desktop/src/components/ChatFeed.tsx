@@ -797,6 +797,8 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                     "msg--celebration": CELEBRATIONS.has(
                       row().msg.notice?.notice_type ?? "",
                     ),
+                    "msg--ban": row().msg.notice?.notice_type === "ban",
+                    "msg--timeout": row().msg.notice?.notice_type === "timeout",
                     "msg--deleted": row().msg.deleted === true,
                     "msg--alt":
                       settings().alternateRows && row().monoIndex % 2 === 1,

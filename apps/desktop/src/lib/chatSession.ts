@@ -9,7 +9,12 @@ import type { Channel } from "./twitchChannel";
 import { attachFeed } from "./chatRouter";
 import { createHistoryGate, loadHistory } from "./chatHistory";
 import { bannedNotice } from "./chatAccess";
-import { modActionMessage, publicModerationMessage } from "./modActions";
+import {
+  createClearPairing,
+  modActionMessage,
+  publicModerationMessage,
+  userClearedNotice,
+} from "./modActions";
 import { currentEmoteBundle } from "./emoteBundle";
 import {
   createChatStore,
@@ -92,6 +97,11 @@ function openSession(channel: Channel): {
   };
   const history = createHistoryGate(add);
   history.begin(loadHistory(channel.id));
+  const clears = createClearPairing();
+  // Moderators get the full story from channel.moderate; everyone else
+  // sees the effect Twitch reports to the whole channel.
+  const publicRows = () =>
+    settings().showModActions && !canModerateIn(channel.id);
 
   const detach = attachFeed({
     channel: () => channel.id,
@@ -121,15 +131,11 @@ function openSession(channel: Channel): {
       if (!history.offer(accepted)) chat.addMessages(accepted);
     },
     event: (e) => {
-      // Moderators get the full story from channel.moderate; everyone
-      // else sees the effect Twitch reports to the whole channel.
-      const publicRows =
-        settings().showModActions && !canModerateIn(channel.id);
       switch (e.kind) {
         case "message_deleted": {
           const target = chat.findById(e.message_id);
           chat.markDeleted(e.message_id);
-          if (publicRows) {
+          if (publicRows()) {
             chat.addMessages([
               publicModerationMessage(e, nextLocalSeq++, target),
             ]);
@@ -138,13 +144,21 @@ function openSession(channel: Channel): {
         }
         case "user_cleared":
           chat.markUserCleared(e.target_user_id);
-          if (publicRows) {
-            chat.addMessages([publicModerationMessage(e, nextLocalSeq++)]);
+          if (publicRows()) {
+            const clear = clears.take(e.target_user_id);
+            const row = publicModerationMessage(
+              e,
+              nextLocalSeq++,
+              undefined,
+              clear,
+            );
+            chat.addMessages([row]);
+            if (!clear) clears.wait(e.target_user_id, row.id);
           }
           break;
         case "chat_cleared":
           chat.markAllDeleted();
-          if (publicRows) {
+          if (publicRows()) {
             chat.addMessages([publicModerationMessage(e, nextLocalSeq++)]);
           }
           break;
@@ -162,6 +176,18 @@ function openSession(channel: Channel): {
       }
     },
     banned: () => chat.addMessages([bannedNotice(channel, nextLocalSeq++)]),
+    userClear: (clear) => {
+      if (!publicRows()) return;
+      const rowId = clears.arrive(clear);
+      if (rowId === undefined) return;
+      chat.update(rowId, (row) => ({
+        ...row,
+        notice: userClearedNotice(
+          row.display_name || row.username || "A user",
+          clear,
+        ),
+      }));
+    },
     bundle: applyBundle,
   });
 

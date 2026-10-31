@@ -202,8 +202,8 @@ pub fn build_twitch_connect_line(creds: &TwitchCreds) -> serde_json::Result<Vec<
     Ok(bytes)
 }
 
-/// Serializes a `first_messages` control command line, which starts or
-/// stops the sidecar's first-time chatter watcher.
+/// Serializes a `first_messages` control command line, which turns the
+/// sidecar's first-time chatter reports on or off.
 pub fn build_first_messages_line(enabled: bool) -> serde_json::Result<Vec<u8>> {
     #[derive(Serialize)]
     struct FirstMessagesCmd {
@@ -711,6 +711,9 @@ pub enum SidecarEvent {
     /// `{"type":"first_message","payload":FirstMessage}`. Twitch IRC
     /// tagged the message as its chatter's first in the channel.
     FirstMessage(FirstMessage),
+    /// `{"type":"user_clear","payload":UserClear}`. Twitch IRC said how a
+    /// user whose messages were cleared was removed.
+    UserClear(UserClear),
     /// `{"type":"seventv_paint","payload":Paint}` or
     /// `{"type":"seventv_entitlement","payload":PaintEntitlement}` from the
     /// sidecar's 7TV EventAPI socket.
@@ -739,6 +742,18 @@ pub struct ChatBanned {
 pub struct FirstMessage {
     pub channel_id: String,
     pub message_id: String,
+}
+
+/// Payload of a `user_clear` notification, forwarded to the webview as the
+/// `user_clear` event. EventSub tells viewers only that a user's messages
+/// were cleared; this says whether it was a timeout, and how long, or a ban
+/// (`duration_seconds` is `None`).
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct UserClear {
+    pub channel_id: String,
+    pub target_user_id: String,
+    #[serde(default)]
+    pub duration_seconds: Option<u32>,
 }
 
 /// Parsed payload of a `send_chat_result` notification. Mirrors the
@@ -841,6 +856,16 @@ pub fn parse_sidecar_event(bytes: &[u8]) -> SidecarEvent {
                 Ok(f) => SidecarEvent::FirstMessage(f),
                 Err(e) => {
                     tracing::warn!(error = %e, "first_message payload decode failed");
+                    SidecarEvent::Invalid
+                }
+            }
+        }
+        "user_clear" => {
+            let payload = env.payload.unwrap_or(serde_json::Value::Null);
+            match serde_json::from_value::<UserClear>(payload) {
+                Ok(c) => SidecarEvent::UserClear(c),
+                Err(e) => {
+                    tracing::warn!(error = %e, "user_clear payload decode failed");
                     SidecarEvent::Invalid
                 }
             }
@@ -1310,6 +1335,31 @@ mod tests {
         }
         assert!(matches!(
             parse_sidecar_event(br#"{"type":"first_message","payload":{"channel_id":"42"}}"#),
+            SidecarEvent::Invalid
+        ));
+    }
+
+    #[test]
+    fn parse_sidecar_event_decodes_user_clear() {
+        let timeout = br#"{"type":"user_clear","payload":{"channel_id":"1","target_user_id":"9","duration_seconds":600}}"#;
+        match parse_sidecar_event(timeout) {
+            SidecarEvent::UserClear(c) => {
+                assert_eq!(c.channel_id, "1");
+                assert_eq!(c.target_user_id, "9");
+                assert_eq!(c.duration_seconds, Some(600));
+            }
+            _ => panic!("expected UserClear variant"),
+        }
+        let ban = br#"{"type":"user_clear","payload":{"channel_id":"1","target_user_id":"9","duration_seconds":null}}"#;
+        assert!(matches!(
+            parse_sidecar_event(ban),
+            SidecarEvent::UserClear(UserClear {
+                duration_seconds: None,
+                ..
+            })
+        ));
+        assert!(matches!(
+            parse_sidecar_event(br#"{"type":"user_clear","payload":{"channel_id":"1"}}"#),
             SidecarEvent::Invalid
         ));
     }

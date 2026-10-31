@@ -9,6 +9,7 @@ import (
 	"math/rand/v2"
 	"net"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,11 +25,13 @@ const (
 	joinWindow = 10 * time.Second
 )
 
-// FirstMessageWatcher spots a chatter's first message in a channel.
-// EventSub has no such flag but IRC tags it `first-msg=1`, and the IRC `id`
-// is the EventSub message_id, so the host can match the two. One anonymous
-// read-only connection serves every channel; Join and Part may be called
-// from any goroutine, running or not, and a running watcher follows them.
+// FirstMessageWatcher reads what EventSub leaves out for a viewer: a
+// chatter's first message in a channel, which IRC tags `first-msg=1` (the
+// IRC `id` is the EventSub message_id, so the host can match the two), and
+// whether a cleared user was timed out, and for how long, or banned. One
+// anonymous read-only connection serves every channel; Join and Part may be
+// called from any goroutine, running or not, and a running watcher follows
+// them.
 type FirstMessageWatcher struct {
 	// Addr overrides the Twitch IRC endpoint; "" uses the default.
 	Addr string
@@ -36,6 +39,9 @@ type FirstMessageWatcher struct {
 	Dial func(ctx context.Context, addr string) (net.Conn, error)
 	// OnFirst gets the channel's room-id and the message id.
 	OnFirst func(channelID, messageID string)
+	// OnClear gets the channel's room-id, the user's id and the timeout
+	// length in seconds, 0 for a ban.
+	OnClear func(channelID, userID string, seconds int)
 	Log     zerolog.Logger
 
 	mu       sync.Mutex
@@ -44,9 +50,10 @@ type FirstMessageWatcher struct {
 	limiter  joinLimiter
 }
 
-func NewFirstMessageWatcher(onFirst func(channelID, messageID string), log zerolog.Logger) *FirstMessageWatcher {
+func NewFirstMessageWatcher(onFirst func(channelID, messageID string), onClear func(channelID, userID string, seconds int), log zerolog.Logger) *FirstMessageWatcher {
 	return &FirstMessageWatcher{
 		OnFirst:  onFirst,
+		OnClear:  onClear,
 		Log:      log,
 		channels: make(map[string]struct{}),
 		wake:     make(chan struct{}, 1),
@@ -156,6 +163,8 @@ func (w *FirstMessageWatcher) session(ctx context.Context) error {
 			return errIRCReconnect
 		case "PRIVMSG":
 			w.handlePrivmsg(line)
+		case "CLEARCHAT":
+			w.handleClearchat(line)
 		}
 	}
 }
@@ -170,6 +179,25 @@ func (w *FirstMessageWatcher) handlePrivmsg(line string) {
 		return
 	}
 	w.OnFirst(room, id)
+}
+
+// handleClearchat reports a user's timeout or ban. A CLEARCHAT without a
+// target clears the whole chat, which EventSub already says in full.
+func (w *FirstMessageWatcher) handleClearchat(line string) {
+	tags := parseIRCTags(line)
+	room, user := tags["room-id"], tags["target-user-id"]
+	if room == "" || user == "" {
+		return
+	}
+	seconds := 0
+	if d, ok := tags["ban-duration"]; ok {
+		n, err := strconv.Atoi(d)
+		if err != nil || n <= 0 {
+			return
+		}
+		seconds = n
+	}
+	w.OnClear(room, user, seconds)
 }
 
 // syncChannels keeps this connection's joins equal to the wanted set. A

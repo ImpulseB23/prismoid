@@ -66,6 +66,7 @@ function feed(channel: string | undefined) {
     messages: vi.fn<FeedSink["messages"]>(),
     event: vi.fn<FeedSink["event"]>(),
     banned: vi.fn<FeedSink["banned"]>(),
+    userClear: vi.fn<FeedSink["userClear"]>(),
     bundle: vi.fn<FeedSink["bundle"]>(),
   };
   return { sink, detach: attachFeed(sink) };
@@ -150,6 +151,15 @@ describe("chatRouter", () => {
 
     emit("first_message", { channel_id: "a", message_id: "m" });
     expect(firsts.markFirstMessage).toHaveBeenCalledWith("m");
+
+    const clear = {
+      channel_id: "b",
+      target_user_id: "7",
+      duration_seconds: null,
+    };
+    emit("user_clear", clear);
+    expect(b.userClear).toHaveBeenCalledWith(clear);
+    expect(a.userClear).not.toHaveBeenCalled();
   });
 
   it("stops routing to a feed once it detaches", () => {

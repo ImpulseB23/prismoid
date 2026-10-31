@@ -65,6 +65,7 @@
   --color-green: #4db332;
   --color-green-light: #6bc955;
   --color-amber: #e0a82e;
+  --color-orange: #e0661b;
   /* Selection: switches that are on, the picked chip, active modes. The
      violet of the logo's prism; amber is kept for warnings. */
   --select: #6f38c9;
@@ -2926,6 +2927,24 @@ option::checkmark {
 .msg__notice {
   font-weight: 500;
   color: var(--text-muted);
+}
+
+.msg--ban {
+  border-left-color: var(--color-red);
+}
+
+.msg--ban .msg__notice,
+.msg-row__notice--ban {
+  color: var(--color-red);
+}
+
+.msg--timeout {
+  border-left-color: var(--color-orange);
+}
+
+.msg--timeout .msg__notice,
+.msg-row__notice--timeout {
+  color: var(--color-orange);
 }
 
 .msg--deleted {

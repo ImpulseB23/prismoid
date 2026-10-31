@@ -217,7 +217,8 @@ func RunCommandLoop(ctx context.Context, scanner *bufio.Scanner, encoder *json.E
 	// One EventSub socket carries every joined Twitch channel; Twitch caps
 	// sockets at three per user, so a socket per channel would cap tabs.
 	session := twitch.NewSession(ctx, out, logger.With().Str("component", "eventsub").Logger(), notify)
-	firsts := newFirstMessages(ctx, notify, logger)
+	firsts := newFirstMessages(notify, logger)
+	go firsts.run(ctx)
 	cosmetics := emotes.NewSevenTVEvents(ctx, notify, logger.With().Str("component", "7tv-events").Logger())
 	bundles := newEmoteBundles(notify, logger)
 

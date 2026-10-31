@@ -204,6 +204,8 @@ export interface ChatStore {
   markUserCleared: (platformUserId: string) => void;
   /** Marks everything deleted (chat clear). */
   markAllDeleted: () => void;
+  /** Swaps a confirmed message for `change(it)`. No-op if it is gone. */
+  update: (id: string, change: (msg: ChatMessage) => ChatMessage) => void;
 }
 
 export const DEFAULT_MAX_MESSAGES = 5000;
@@ -585,6 +587,13 @@ export function createChatStore(maxMessages = DEFAULT_MAX_MESSAGES): ChatStore {
     markWhere(() => true);
   }
 
+  function update(id: string, change: (msg: ChatMessage) => ChatMessage): void {
+    const mono = monoOf(id);
+    if (mono === undefined) return;
+    replace(mono, change(ring[mono % maxMessages]!));
+    bumpMessageRevision();
+  }
+
   return {
     viewport,
     messageRevision,
@@ -602,5 +611,6 @@ export function createChatStore(maxMessages = DEFAULT_MAX_MESSAGES): ChatStore {
     markDeleted,
     markUserCleared,
     markAllDeleted,
+    update,
   };
 }

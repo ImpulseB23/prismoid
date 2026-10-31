@@ -69,6 +69,17 @@ export type PublicModerationEvent =
     }
   | { kind: "chat_cleared"; channel_id: string };
 
+/**
+ * Payload of the host's `user_clear` event, read from Twitch IRC since
+ * EventSub leaves it out for viewers: a cleared user's timeout length, or
+ * null for a ban.
+ */
+export interface UserClear {
+  channel_id: string;
+  target_user_id: string;
+  duration_seconds: number | null;
+}
+
 /** A poll on the user's own channel began, got votes or ended. */
 export type PollUpdate = Poll & { kind: "poll_update" };
 

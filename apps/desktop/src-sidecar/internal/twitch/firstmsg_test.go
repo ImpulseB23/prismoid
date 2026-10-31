@@ -14,8 +14,21 @@ import (
 
 type firstMsg struct{ channel, id string }
 
+type userClear struct {
+	channel, user string
+	seconds       int
+}
+
 func newTestWatcher(addr string, got chan<- firstMsg) *FirstMessageWatcher {
-	w := NewFirstMessageWatcher(func(channel, id string) { got <- firstMsg{channel, id} }, zerolog.Nop())
+	return newClearWatcher(addr, got, make(chan userClear, 8))
+}
+
+func newClearWatcher(addr string, got chan<- firstMsg, clears chan<- userClear) *FirstMessageWatcher {
+	w := NewFirstMessageWatcher(
+		func(channel, id string) { got <- firstMsg{channel, id} },
+		func(channel, user string, seconds int) { clears <- userClear{channel, user, seconds} },
+		zerolog.Nop(),
+	)
 	w.Addr = addr
 	w.Dial = func(ctx context.Context, addr string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "tcp", addr)
@@ -80,7 +93,8 @@ func TestFirstMessageWatcherFollowsJoinsAndFlagsFirstMessages(t *testing.T) {
 	})
 
 	got := make(chan firstMsg, 4)
-	w := newTestWatcher(ln.Addr().String(), got)
+	clears := make(chan userClear, 4)
+	w := newClearWatcher(ln.Addr().String(), got, clears)
 	w.Join("forsen")
 	runWatcher(t, w)
 	expectLines(t, lines, "JOIN #forsen")
@@ -110,6 +124,21 @@ func TestFirstMessageWatcherFollowsJoinsAndFlagsFirstMessages(t *testing.T) {
 	case m := <-got:
 		t.Fatalf("only one first message expected, also got %+v", m)
 	case <-time.After(50 * time.Millisecond):
+	}
+
+	send <- "@room-id=1;tmi-sent-ts=1 :tmi.twitch.tv CLEARCHAT #xqc"
+	send <- "@ban-duration=x;room-id=1;target-user-id=8 :tmi.twitch.tv CLEARCHAT #xqc :f"
+	send <- "@ban-duration=600;room-id=1;target-user-id=9 :tmi.twitch.tv CLEARCHAT #xqc :g"
+	send <- "@room-id=1;target-user-id=10 :tmi.twitch.tv CLEARCHAT #xqc :h"
+	for _, want := range []userClear{{"1", "9", 600}, {"1", "10", 0}} {
+		select {
+		case c := <-clears:
+			if c != want {
+				t.Fatalf("got clear %+v want %+v", c, want)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("clear %+v not reported", want)
+		}
 	}
 }
 

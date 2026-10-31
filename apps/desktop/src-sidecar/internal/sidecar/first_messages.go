@@ -3,6 +3,7 @@ package sidecar
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 
 	"github.com/rs/zerolog"
 
@@ -16,30 +17,53 @@ type FirstMessagePayload struct {
 	MessageID string `json:"message_id"`
 }
 
-// firstMessages owns the shared first-message watcher. The watcher only
-// connects while the host has the feature switched on, but every joined
-// channel is tracked either way, so switching it on joins whatever is
-// already open. Logins are kept by broadcaster id because a disconnect
-// command carries only the id. Used from the command loop goroutine only.
+// UserClearPayload is the body of a `user_clear` notification: how a user
+// whose messages were cleared was removed. DurationSeconds is nil for a ban.
+type UserClearPayload struct {
+	ChannelID       string `json:"channel_id"`
+	TargetUserID    string `json:"target_user_id"`
+	DurationSeconds *int   `json:"duration_seconds"`
+}
+
+// firstMessages owns the shared IRC watcher. It always runs, since every
+// viewer wants to know whether a cleared user was timed out or banned;
+// first messages are only reported while the host has that feature on.
+// Logins are kept by broadcaster id because a disconnect command carries
+// only the id. Used from the command loop goroutine only.
 type firstMessages struct {
-	ctx     context.Context
 	watcher *twitch.FirstMessageWatcher
 	logins  map[string]string
-	stop    context.CancelFunc
-	done    chan struct{}
+	firsts  *atomic.Bool
 	logger  zerolog.Logger
 }
 
-func newFirstMessages(ctx context.Context, notify twitch.Notify, logger zerolog.Logger) *firstMessages {
+func newFirstMessages(notify twitch.Notify, logger zerolog.Logger) *firstMessages {
 	logger = logger.With().Str("component", "first_messages").Logger()
+	// The watcher calls back on its own goroutine.
+	firsts := new(atomic.Bool)
 	onFirst := func(channelID, messageID string) {
-		notify("first_message", FirstMessagePayload{ChannelID: channelID, MessageID: messageID})
+		if firsts.Load() {
+			notify("first_message", FirstMessagePayload{ChannelID: channelID, MessageID: messageID})
+		}
+	}
+	onClear := func(channelID, userID string, seconds int) {
+		p := UserClearPayload{ChannelID: channelID, TargetUserID: userID}
+		if seconds > 0 {
+			p.DurationSeconds = &seconds
+		}
+		notify("user_clear", p)
 	}
 	return &firstMessages{
-		ctx:     ctx,
-		watcher: twitch.NewFirstMessageWatcher(onFirst, logger),
+		watcher: twitch.NewFirstMessageWatcher(onFirst, onClear, logger),
 		logins:  make(map[string]string),
+		firsts:  firsts,
 		logger:  logger,
+	}
+}
+
+func (f *firstMessages) run(ctx context.Context) {
+	if err := f.watcher.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		f.logger.Error().Err(err).Msg("irc watcher exited")
 	}
 }
 
@@ -60,27 +84,6 @@ func (f *firstMessages) part(broadcasterID string) {
 	f.watcher.Part(login)
 }
 
-// setEnabled starts or stops the watcher. Stopping waits for it to exit so
-// a quick off and on never runs two connections at once.
 func (f *firstMessages) setEnabled(on bool) {
-	if on == (f.stop != nil) {
-		return
-	}
-	if !on {
-		f.stop()
-		<-f.done
-		f.stop, f.done = nil, nil
-		f.logger.Info().Msg("first message watcher stopped")
-		return
-	}
-	ctx, cancel := context.WithCancel(f.ctx)
-	done := make(chan struct{})
-	f.stop, f.done = cancel, done
-	go func() {
-		defer close(done)
-		if err := f.watcher.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			f.logger.Error().Err(err).Msg("first message watcher exited")
-		}
-	}()
-	f.logger.Info().Msg("first message watcher started")
+	f.firsts.Store(on)
 }
