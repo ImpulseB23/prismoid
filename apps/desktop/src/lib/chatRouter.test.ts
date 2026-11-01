@@ -29,6 +29,8 @@ const manager = { applyPollUpdate: vi.fn(), applyPredictionUpdate: vi.fn() };
 vi.mock("../stores/streamManagerStore", () => manager);
 const ads = { applyAdBreak: vi.fn() };
 vi.mock("../stores/adStore", () => ads);
+const offline = { noteChannelRaid: vi.fn() };
+vi.mock("../stores/offlineStore", () => offline);
 const firsts = { markFirstMessage: vi.fn() };
 vi.mock("../stores/firstMessageStore", () => firsts);
 const pulse = { recordPulse: vi.fn() };
@@ -123,6 +125,7 @@ describe("chatRouter", () => {
       { kind: "poll_update", channel_id: "a" },
       { kind: "prediction_update", channel_id: "a" },
       { kind: "ad_break", channel_id: "a" },
+      { kind: "raid", channel_id: "a" },
       { kind: "message_deleted", channel_id: "a", message_id: "x" },
       { kind: "chat_cleared", channel_id: "b" },
     ] as unknown as ChatEvent[];
@@ -132,8 +135,9 @@ describe("chatRouter", () => {
     expect(manager.applyPollUpdate).toHaveBeenCalledOnce();
     expect(manager.applyPredictionUpdate).toHaveBeenCalledOnce();
     expect(ads.applyAdBreak).toHaveBeenCalledOnce();
-    expect(a.event.mock.calls).toEqual([[events[5]]]);
-    expect(any.event.mock.calls).toEqual([[events[5]], [events[6]]]);
+    expect(offline.noteChannelRaid).toHaveBeenCalledWith(events[5]);
+    expect(a.event.mock.calls).toEqual([[events[6]]]);
+    expect(any.event.mock.calls).toEqual([[events[6]], [events[7]]]);
   });
 
   it("marks bans, firsts and bundles, telling only that channel's feed", () => {

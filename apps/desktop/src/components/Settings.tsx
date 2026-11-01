@@ -25,6 +25,7 @@ import {
   zoomIn,
   zoomOut,
   zoomReset,
+  OFFLINE_CLOSE_CHOICES,
   type HighlightBadge,
   type Theme,
 } from "../stores/settingsStore";
@@ -496,6 +497,34 @@ const Settings: Component<SettingsProps> = (props) => {
                   run(updateSettings({ chatBacklog: e.currentTarget.checked }))
                 }
               />
+            </label>
+            <label class="settings__row">
+              <div class="settings__text">
+                <span class="settings__name">Close ended streams</span>
+                <span class="settings__hint">
+                  How long a chat stays open after its stream ends. Writing in
+                  it keeps it open longer.
+                </span>
+              </div>
+              <select
+                class="modes__select"
+                value={settings().offlineCloseMinutes}
+                onChange={(e) =>
+                  run(
+                    updateSettings({
+                      offlineCloseMinutes: Number(e.currentTarget.value),
+                    }),
+                  )
+                }
+              >
+                <For each={OFFLINE_CLOSE_CHOICES}>
+                  {(min) => (
+                    <option value={min}>
+                      {min === 0 ? "Never" : `${min} minutes`}
+                    </option>
+                  )}
+                </For>
+              </select>
             </label>
             <label class="settings__row settings__row--toggle">
               <div class="settings__text">

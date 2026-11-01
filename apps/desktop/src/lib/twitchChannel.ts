@@ -256,6 +256,11 @@ export function getStreamInfo(channelId: string): Promise<StreamInfo | null> {
   return invoke("twitch_get_stream_info", { channelId });
 }
 
+/** Which of the channels are live, in one request per hundred. */
+export function getLiveChannels(channelIds: string[]): Promise<string[]> {
+  return invoke("twitch_live_channels", { channelIds });
+}
+
 /** Resolves a login to its id and display name. */
 export function lookupUser(login: string): Promise<Channel> {
   return invoke("twitch_lookup_user", { login });

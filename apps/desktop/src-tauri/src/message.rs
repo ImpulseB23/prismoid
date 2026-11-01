@@ -295,6 +295,15 @@ pub enum ChatEvent {
         subscriber_mode: bool,
         unique_chat_mode: bool,
     },
+    /// The channel raided another, from `channel.raid` v1. `channel_id` is
+    /// the raiding channel, so its chat can offer to follow along.
+    Raid {
+        channel_id: String,
+        to_user_id: String,
+        to_user_login: String,
+        to_user_name: String,
+        viewers: u64,
+    },
 }
 
 /// A message AutoMod is holding. `reason` is `automod`, `blocked_term` or
@@ -642,6 +651,17 @@ struct TwitchClearUserEvent {
 }
 
 #[derive(Debug, Deserialize)]
+struct TwitchRaidEvent {
+    from_broadcaster_user_id: String,
+    to_broadcaster_user_id: String,
+    to_broadcaster_user_login: String,
+    #[serde(default, deserialize_with = "null_default")]
+    to_broadcaster_user_name: String,
+    #[serde(default)]
+    viewers: u64,
+}
+
+#[derive(Debug, Deserialize)]
 struct TwitchChatSettingsEvent {
     #[serde(default, deserialize_with = "null_default")]
     broadcaster_user_id: String,
@@ -760,6 +780,16 @@ pub fn parse_twitch_envelope(bytes: &[u8]) -> Result<Option<TwitchItem>, ParseEr
                 slow_mode_wait_time: e.slow_mode_wait_time_seconds,
                 subscriber_mode: e.subscriber_mode,
                 unique_chat_mode: e.unique_chat_mode,
+            })
+        }
+        "channel.raid" => {
+            let e: TwitchRaidEvent = serde_json::from_value(event_value)?;
+            TwitchItem::Event(ChatEvent::Raid {
+                channel_id: e.from_broadcaster_user_id,
+                to_user_id: e.to_broadcaster_user_id,
+                to_user_login: e.to_broadcaster_user_login,
+                to_user_name: e.to_broadcaster_user_name,
+                viewers: e.viewers,
             })
         }
         "channel.moderate" => {
@@ -1848,6 +1878,35 @@ mod tests {
                 slow_mode_wait_time: Some(10),
                 subscriber_mode: false,
                 unique_chat_mode: false,
+            }
+        );
+    }
+
+    #[test]
+    fn raid_names_the_raiding_channel_and_the_target() {
+        let bytes = br##"{
+            "metadata": { "message_type": "notification", "message_timestamp": "2023-11-06T18:12:05.250Z" },
+            "payload": {
+                "subscription": { "type": "channel.raid" },
+                "event": {
+                    "from_broadcaster_user_id": "1234",
+                    "from_broadcaster_user_login": "cool_user",
+                    "from_broadcaster_user_name": "Cool_User",
+                    "to_broadcaster_user_id": "1337",
+                    "to_broadcaster_user_login": "cooler_user",
+                    "to_broadcaster_user_name": "Cooler_User",
+                    "viewers": 9001
+                }
+            }
+        }"##;
+        assert_eq!(
+            event(bytes),
+            ChatEvent::Raid {
+                channel_id: "1234".into(),
+                to_user_id: "1337".into(),
+                to_user_login: "cooler_user".into(),
+                to_user_name: "Cooler_User".into(),
+                viewers: 9001,
             }
         );
     }

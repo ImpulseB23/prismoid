@@ -80,6 +80,16 @@ export interface UserClear {
   duration_seconds: number | null;
 }
 
+/** The channel raided another; `channel_id` is the raiding channel. */
+export interface RaidEvent {
+  kind: "raid";
+  channel_id: string;
+  to_user_id: string;
+  to_user_login: string;
+  to_user_name: string;
+  viewers: number;
+}
+
 /** A poll on the user's own channel began, got votes or ended. */
 export type PollUpdate = Poll & { kind: "poll_update" };
 
@@ -106,4 +116,5 @@ export type ChatEvent =
   | HeldMessageResolved
   | PollUpdate
   | PredictionUpdate
-  | AdBreakEvent;
+  | AdBreakEvent
+  | RaidEvent;

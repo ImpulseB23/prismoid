@@ -44,6 +44,7 @@ import ChatFeed from "./ChatFeed";
 import CommandCenter from "./CommandCenter";
 import MessageInput from "./MessageInput";
 import StreamVideo from "./StreamVideo";
+import OfflineBar from "./OfflineBar";
 import {
   closeVideoWindows,
   followVideoWindows,
@@ -201,6 +202,7 @@ const SplitView: Component<{ login: string }> = (props) => {
                 </Show>
                 <CommandCenter />
               </div>
+              <OfflineBar channel={channel()} />
               <MessageInput login={props.login} />
             </ChatPane>
           );

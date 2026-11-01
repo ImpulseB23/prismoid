@@ -33,6 +33,7 @@ import {
 import { buildOptimisticMessage, type EmoteMeta } from "../stores/chatStore";
 import { requirePane } from "../lib/pane";
 import { channelBannedIn, keepChannel } from "../stores/channelStore";
+import { noteChatActivity } from "../stores/offlineStore";
 import { bannedText } from "../lib/chatAccess";
 import { lookupUser, formatChannelError } from "../lib/twitchChannel";
 import { banUser, timeoutUser, unbanUser } from "../lib/twitchAuth";
@@ -537,9 +538,13 @@ const MessageInput: Component<Props> = (props) => {
           placeholder={placeholder()}
           disabled={session().channel === null || banned()}
           onInput={(e) => {
-            // Writing in a preview tab keeps it.
+            // Writing in a preview tab keeps it, and holds off closing a
+            // chat whose stream ended.
             const c = session().channel;
-            if (c) keepChannel(c.id);
+            if (c) {
+              keepChannel(c.id);
+              noteChatActivity(c.id);
+            }
             setDraft(
               e.currentTarget.value,
               e.currentTarget.selectionStart ?? e.currentTarget.value.length,

@@ -262,6 +262,27 @@ func Subscribe(ctx context.Context, client *HelixClient, sessionID, broadcasterI
 	return made, nil
 }
 
+// SubscribeRaid creates the channel.raid subscription for raids the channel
+// sends out, so a chat whose stream ended can offer to follow the raid. It
+// needs no authorization, which makes it cost 1 of the 10 Twitch allows a
+// user for such subscriptions; past that it is refused.
+func SubscribeRaid(ctx context.Context, client *HelixClient, sessionID, broadcasterID string) (string, error) {
+	req := SubscriptionRequest{
+		Type:      "channel.raid",
+		Version:   "1",
+		Condition: map[string]string{"from_broadcaster_user_id": broadcasterID},
+		Transport: Transport{Method: "websocket", SessionID: sessionID},
+	}
+	var resp SubscriptionResponse
+	if err := client.Post(ctx, "/eventsub/subscriptions", req, &resp); err != nil {
+		return "", err
+	}
+	if len(resp.Data) == 0 {
+		return "", errors.New("twitch helix: subscription response carried no data")
+	}
+	return resp.Data[0].ID, nil
+}
+
 // DeleteSubscription removes one EventSub subscription by id.
 func DeleteSubscription(ctx context.Context, client *HelixClient, id string) error {
 	q := url.Values{}
