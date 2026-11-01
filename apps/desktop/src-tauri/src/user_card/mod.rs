@@ -328,6 +328,7 @@ mod tests {
             badges: vec![Badge {
                 set_id: "moderator".into(),
                 id: "1".into(),
+                info: String::new(),
             }],
         }
     }

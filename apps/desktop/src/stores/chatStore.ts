@@ -80,7 +80,8 @@ export interface ChatMessage {
    */
   channel_id: string;
   message_text: string;
-  badges: { set_id: string; id: string }[];
+  /** `info` is Twitch's detail, the months subscribed on a sub badge. */
+  badges: { set_id: string; id: string; info?: string }[];
   is_mod: boolean;
   is_subscriber: boolean;
   is_broadcaster: boolean;

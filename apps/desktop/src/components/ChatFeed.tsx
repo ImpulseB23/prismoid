@@ -1165,7 +1165,7 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                               }
                               alt={b.badge.title}
                               onPointerEnter={(e) =>
-                                hoverBadge(e.currentTarget, b.badge)
+                                hoverBadge(e.currentTarget, b.badge, b.detail)
                               }
                               onPointerLeave={endChatHover}
                               width={row().prepared.metrics.badgeSize}

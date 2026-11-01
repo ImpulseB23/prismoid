@@ -18,6 +18,10 @@ pub enum Platform {
 pub struct Badge {
     pub set_id: String,
     pub id: String,
+    /// Twitch's extra detail, which for a subscriber badge is the exact
+    /// number of months subscribed. Empty elsewhere.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub info: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -212,6 +216,8 @@ struct TwitchBadge {
     set_id: String,
     #[serde(default, deserialize_with = "null_default")]
     id: String,
+    #[serde(default, deserialize_with = "null_default")]
+    info: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -702,6 +708,7 @@ fn convert_badges(badges: Vec<TwitchBadge>) -> Vec<Badge> {
         .map(|b| Badge {
             set_id: b.set_id,
             id: b.id,
+            info: b.info,
         })
         .collect()
 }
@@ -1014,17 +1021,20 @@ pub fn parse_youtube_message(bytes: &[u8]) -> Result<Option<UnifiedMessage>, Par
         badges.push(Badge {
             set_id: String::from("youtube/owner"),
             id: String::from("1"),
+            info: String::new(),
         });
     } else if author.is_chat_moderator.unwrap_or(false) {
         badges.push(Badge {
             set_id: String::from("youtube/moderator"),
             id: String::from("1"),
+            info: String::new(),
         });
     }
     if is_subscriber {
         badges.push(Badge {
             set_id: String::from("youtube/member"),
             id: String::from("1"),
+            info: String::new(),
         });
     }
 
@@ -1156,6 +1166,7 @@ pub fn parse_kick_event(bytes: &[u8]) -> Result<Option<UnifiedMessage>, ParseErr
         .map(|b| Badge {
             set_id: format!("kick/{}", b.badge_type),
             id: String::from("1"),
+            info: String::new(),
         })
         .collect();
 
