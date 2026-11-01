@@ -40,6 +40,8 @@ const StreamBar: Component = () => {
     }
     togglePaneVideo(focusedPaneId());
   };
+  const chatting = (channelId: string) =>
+    streamInfo()?.is_live === true || activeChatters(channelId) > 0;
   const videoLabel = () =>
     out()
       ? "Watching in its own window"
@@ -78,6 +80,8 @@ const StreamBar: Component = () => {
                   {s().title}
                 </span>
 
+                {/* Offline, viewers and uptime go and the chat numbers stay
+                    only while people are still talking. */}
                 <span class="stream-bar__stats">
                   <Show when={s().is_live && !settings().hideViewers}>
                     <span class="stream-bar__stat" title="Watching now">
@@ -93,7 +97,7 @@ const StreamBar: Component = () => {
                       )}
                     </Show>
                   </Show>
-                  <Show when={!settings().hideChatRate}>
+                  <Show when={!settings().hideChatRate && chatting(channelId)}>
                     <span
                       class="stream-bar__stat"
                       title="Chat messages in the last minute"
@@ -101,7 +105,7 @@ const StreamBar: Component = () => {
                       {messagesPerMinute(channelId)} msg/min
                     </span>
                   </Show>
-                  <Show when={!settings().hideChatters}>
+                  <Show when={!settings().hideChatters && chatting(channelId)}>
                     <span
                       class="stream-bar__stat"
                       title="People who chatted in the last 5 minutes"
@@ -110,7 +114,14 @@ const StreamBar: Component = () => {
                     </span>
                   </Show>
                 </span>
-                <Show when={settings().streamVideo}>
+                {/* Nothing to watch offline; a player already open keeps its
+                    button so it can still be closed or found. */}
+                <Show
+                  when={
+                    settings().streamVideo &&
+                    (s().is_live || videoOn() || out())
+                  }
+                >
                   <button
                     type="button"
                     class="stream-bar__video"

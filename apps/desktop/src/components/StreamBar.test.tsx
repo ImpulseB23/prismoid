@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 
+const live = { now: true, chatters: 0 };
 vi.mock("../stores/streamStore", () => ({
   streamLoading: () => false,
   streamClock: () => 0,
   streamInfo: () => ({
-    is_live: true,
+    is_live: live.now,
     title: "Finals",
     game_name: "Counter-Strike",
     viewer_count: 28000,
@@ -27,7 +28,7 @@ vi.mock("../lib/videoWindow", () => ({
 vi.mock("../stores/pulseStore", () => ({
   startPulse: () => () => {},
   messagesPerMinute: () => 0,
-  activeChatters: () => 0,
+  activeChatters: () => live.chatters,
 }));
 
 const { default: StreamBar } = await import("./StreamBar");
@@ -38,6 +39,27 @@ describe("StreamBar", () => {
   afterEach(() => {
     cleanup();
     popped.out = false;
+    live.now = true;
+    live.chatters = 0;
+  });
+
+  it("drops the watch button and stream numbers offline", () => {
+    live.now = false;
+    render(() => <StreamBar />);
+    expect(
+      screen.queryByRole("button", { name: "Watch the stream" }),
+    ).toBeNull();
+    expect(screen.queryByText(/viewers/)).toBeNull();
+    expect(screen.queryByText(/msg\/min/)).toBeNull();
+  });
+
+  it("keeps the chat numbers offline while people still talk", () => {
+    live.now = false;
+    live.chatters = 3;
+    render(() => <StreamBar />);
+    expect(screen.getByText("3 chatting")).toBeTruthy();
+    expect(screen.getByText(/msg\/min/)).toBeTruthy();
+    expect(screen.queryByText(/viewers/)).toBeNull();
   });
 
   it("shows and hides the stream in the focused pane", () => {
