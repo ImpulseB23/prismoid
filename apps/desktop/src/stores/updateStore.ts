@@ -6,6 +6,8 @@
 import { createSignal } from "solid-js";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { invoke } from "@tauri-apps/api/core";
+import { palette } from "./themeStore";
 
 /** An update found this soon after launch installs on its own, before
  * anyone has started reading chat. Later finds only nudge. */
@@ -63,6 +65,7 @@ export function createUpdateStore(
   restart: () => Promise<void> = relaunch,
   now: () => number = Date.now,
   onFocus: (cb: () => void) => () => void = windowFocus,
+  cover: () => Promise<void> = startSplash,
 ): UpdateStore {
   const [state, setState] = createSignal<UpdateState>({ kind: "idle" });
   let pending: PendingUpdate | null = null;
@@ -175,6 +178,10 @@ export function createUpdateStore(
       }
       if (gen !== generation) return;
       setState({ kind: "ready", version: update.version });
+      // The app quits as the installer starts; the splash covers the gap.
+      await cover().catch((err: unknown) =>
+        console.error("update splash", err),
+      );
       await update.install();
       pending = null;
       await restart();
@@ -232,6 +239,10 @@ async function checkViaPlugin(): Promise<PendingUpdate | null> {
     download: (onEvent) => update.download(onEvent),
     install: () => update.install(),
   };
+}
+
+function startSplash(): Promise<void> {
+  return invoke("update_splash_start", { palette: palette() });
 }
 
 function windowFocus(cb: () => void): () => void {
