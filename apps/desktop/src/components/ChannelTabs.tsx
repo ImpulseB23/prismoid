@@ -19,7 +19,9 @@ import {
   channelTabs,
   closeChannel,
   focusChannel,
+  keepChannel,
   moveChannelTab,
+  previewChannelId,
   unreadCount,
 } from "../stores/channelStore";
 import { openPicker, pickerLoading, prefetchLive } from "../stores/pickerStore";
@@ -134,6 +136,7 @@ const ChannelTabs: Component = () => {
             const active = () => activeChannel()?.id === channel.id;
             const inOtherPane = () => !active() && onScreen(channel.id);
             const unread = () => unreadCount(channel.id);
+            const preview = () => previewChannelId() === channel.id;
             return (
               <div
                 ref={(el) => {
@@ -144,6 +147,7 @@ const ChannelTabs: Component = () => {
                 classList={{
                   "tab--active": active(),
                   "tab--shown": inOtherPane(),
+                  "tab--preview": preview(),
                   "tab--drop-before":
                     dropAt()?.id === channel.id && !dropAt()!.after,
                   "tab--drop-after":
@@ -151,7 +155,11 @@ const ChannelTabs: Component = () => {
                 }}
                 role="tab"
                 aria-selected={active()}
-                title={channel.display_name}
+                title={
+                  preview()
+                    ? `${channel.display_name}: follows your browser. Double-click to keep it.`
+                    : channel.display_name
+                }
                 draggable={true}
                 onDragStart={(e) => {
                   e.dataTransfer?.setData(TAB_DRAG_TYPE, channel.id);
@@ -204,6 +212,7 @@ const ChannelTabs: Component = () => {
                   )
                 }
                 onClick={() => show(channel.id)}
+                onDblClick={() => keepChannel(channel.id)}
                 onAuxClick={(e) => {
                   if (e.button === 1) close(channel.id);
                 }}

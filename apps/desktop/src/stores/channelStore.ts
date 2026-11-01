@@ -1,5 +1,7 @@
 // Open channels (tabs), the one on screen, and a small persisted list of
-// recently opened channels. The host commands are injected so the store
+// recently opened channels. One tab at a time can be a preview: the channel
+// Follow my browser opened, which the next channel the browser shows
+// replaces instead of adding a tab, until the user keeps it. The host commands are injected so the store
 // can be exercised without a runtime; storage is injected for the same
 // reason (see feedback: never mutate globals in tests).
 
@@ -37,6 +39,7 @@ const RECENTS_KEY = "prismoid.channels.recent";
 export const RECENT_DWELL_MS = 2 * 60_000;
 const LAST_KEY = "prismoid.channels.last";
 const TABS_KEY = "prismoid.channels.tabs";
+const PREVIEW_KEY = "prismoid.channels.preview";
 
 export interface ChannelStore {
   /** Open channels in tab order. */
@@ -56,6 +59,15 @@ export interface ChannelStore {
    * otherwise only after it has been on screen for a while.
    */
   select: (login: string, opts?: { remember?: boolean }) => Promise<Channel>;
+  /**
+   * Shows `login` in the preview tab, replacing the channel there, or
+   * shows its tab when it is already open.
+   */
+  preview: (login: string) => Promise<Channel>;
+  /** The preview tab's channel, if there is one. */
+  previewId: () => string | null;
+  /** Makes the preview tab a normal tab, which also counts it as recent. */
+  keep: (channelId: string) => void;
   /** Opens `login` as a tab without showing it, e.g. for a new pane. */
   open: (login: string, opts?: { remember?: boolean }) => Promise<Channel>;
   /**
@@ -104,6 +116,7 @@ export function createChannelStore(
   const [recents, setRecents] = createSignal<RecentChannel[]>(
     readRecents(storage),
   );
+  const [previewId, setPreviewId] = createSignal<string | null>(null);
   let generation = 0;
   let dwell: ReturnType<typeof setTimeout> | undefined;
 
@@ -132,6 +145,8 @@ export function createChannelStore(
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved!);
     setTabs(next);
+    // Dragging a tab somewhere is a choice to keep it.
+    keep(channelId);
     persistTabs();
   }
 
@@ -139,17 +154,47 @@ export function createChannelStore(
     write(storage, TABS_KEY, JSON.stringify(tabs().map((c) => c.login)));
     const a = active();
     if (a) write(storage, LAST_KEY, a.login);
+    const p = tabs().find((c) => c.id === previewId());
+    write(storage, PREVIEW_KEY, p?.login ?? "");
+  }
+
+  function keep(channelId: string): void {
+    if (previewId() !== channelId) return;
+    setPreviewId(null);
+    const channel = tabs().find((c) => c.id === channelId);
+    if (channel) remember(channel);
+    persistTabs();
   }
 
   // A channel opened some other way (the browser, last session) only
   // counts as recent once it has stayed on screen, so a misclick or a
-  // passing browser tab does not land there.
+  // passing browser tab does not land there. A preview tab that stays on
+  // screen that long is kept.
   function watch(channel: Channel | null): void {
     clearTimeout(dwell);
     if (!channel) return;
     dwell = setTimeout(() => {
-      if (active()?.id === channel.id) remember(channel);
+      if (active()?.id !== channel.id) return;
+      if (previewId() === channel.id) keep(channel.id);
+      else remember(channel);
     }, RECENT_DWELL_MS);
+  }
+
+  // Drops what the store keeps per tab for a channel no longer open.
+  function forget(channelId: string): void {
+    if (previewId() === channelId) setPreviewId(null);
+    setBannedIds((s) => {
+      if (!s.has(channelId)) return s;
+      const next = new Set(s);
+      next.delete(channelId);
+      return next;
+    });
+    setUnreadById((m) => {
+      if (!m.has(channelId)) return m;
+      const next = new Map(m);
+      next.delete(channelId);
+      return next;
+    });
   }
 
   function show(channel: Channel): void {
@@ -182,7 +227,10 @@ export function createChannelStore(
       const channel = await commands.join(login);
       if (gen !== generation) return channel;
       addTab(channel);
-      if (opts.remember) remember(channel);
+      if (opts.remember) {
+        keep(channel.id);
+        remember(channel);
+      }
       show(channel);
       return channel;
     } catch (e) {
@@ -192,6 +240,39 @@ export function createChannelStore(
       }
       throw e;
     }
+  }
+
+  async function preview(login: string): Promise<Channel> {
+    const gen = ++generation;
+    setStatus("connecting");
+    setError(null);
+    let channel: Channel;
+    try {
+      channel = await commands.join(login);
+    } catch (e) {
+      if (gen === generation) {
+        setError(e);
+        setStatus(active() ? "ready" : "error");
+      }
+      throw e;
+    }
+    if (gen !== generation) return channel;
+    const list = tabs();
+    let replaced: string | null = null;
+    if (!list.some((c) => c.id === channel.id)) {
+      const at = list.findIndex((c) => c.id === previewId());
+      if (at >= 0) {
+        replaced = list[at]!.id;
+        forget(replaced);
+        setTabs(list.map((c, i) => (i === at ? channel : c)));
+      } else {
+        setTabs([...list, channel]);
+      }
+      setPreviewId(channel.id);
+    }
+    show(channel);
+    if (replaced) await commands.leave(replaced);
+    return channel;
   }
 
   async function open(
@@ -208,6 +289,7 @@ export function createChannelStore(
   async function restore(fallbackLogin: string): Promise<void> {
     const saved = readTabs(storage);
     const last = read(storage, LAST_KEY);
+    const previewLogin = read(storage, PREVIEW_KEY);
     const logins = saved.length > 0 ? saved : [last ?? fallbackLogin];
     const gen = ++generation;
     setStatus("connecting");
@@ -218,6 +300,7 @@ export function createChannelStore(
         const channel = await commands.join(login);
         if (gen !== generation) return;
         addTab(channel);
+        if (login === previewLogin) setPreviewId(channel.id);
         if (login === last || shown === null) shown = channel;
       } catch (e) {
         if (gen !== generation) return;
@@ -247,18 +330,7 @@ export function createChannelStore(
     if (pos < 0) return;
     const remaining = list.filter((c) => c.id !== channelId);
     setTabs(remaining);
-    setBannedIds((s) => {
-      if (!s.has(channelId)) return s;
-      const next = new Set(s);
-      next.delete(channelId);
-      return next;
-    });
-    setUnreadById((m) => {
-      if (!m.has(channelId)) return m;
-      const next = new Map(m);
-      next.delete(channelId);
-      return next;
-    });
+    forget(channelId);
     if (active()?.id === channelId) {
       const next = remaining[pos] ?? remaining.at(-1) ?? null;
       watch(next);
@@ -313,6 +385,9 @@ export function createChannelStore(
     recents,
     lastLogin: () => read(storage, LAST_KEY),
     select,
+    preview,
+    previewId,
+    keep,
     open,
     restore,
     focus,
@@ -408,6 +483,9 @@ export const channelError = defaultStore.error;
 export const recentChannels = defaultStore.recents;
 export const lastChannelLogin = defaultStore.lastLogin;
 export const selectChannel = defaultStore.select;
+export const previewChannel = defaultStore.preview;
+export const previewChannelId = defaultStore.previewId;
+export const keepChannel = defaultStore.keep;
 export const openChannel = defaultStore.open;
 export const restoreChannels = defaultStore.restore;
 export const focusChannel = defaultStore.focus;

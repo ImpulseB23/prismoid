@@ -437,6 +437,11 @@ option::checkmark {
   text-overflow: ellipsis;
 }
 
+/* The tab Follow my browser opened, until it is kept. */
+.tab--preview .tab__name {
+  font-style: italic;
+}
+
 .tab__unread {
   min-width: 18px;
   padding: 0 5px;
