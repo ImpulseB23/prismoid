@@ -354,3 +354,90 @@ describe("pushRecent", () => {
     expect(store.tabs().map((c) => c.login)).toEqual(["b", "c", "a"]);
   });
 });
+
+describe("preview tabs", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("swaps the preview tab in place as the browser moves on", async () => {
+    const commands = fakeCommands();
+    const store = createChannelStore(commands, memStorage());
+    await store.select("kept", { remember: true });
+    await store.preview("a");
+    await store.preview("b");
+    expect(store.tabs().map((c) => c.login)).toEqual(["kept", "b"]);
+    expect(store.previewId()).toBe("id-b");
+    expect(store.active()?.id).toBe("id-b");
+    expect(commands.log).toContain("leave id-a");
+    expect(store.recents().map((r) => r.login)).toEqual(["kept"]);
+  });
+
+  it("shows an open tab instead of previewing it", async () => {
+    const store = createChannelStore(fakeCommands(), memStorage());
+    await store.select("kept", { remember: true });
+    await store.preview("a");
+    await store.preview("kept");
+    expect(store.tabs().map((c) => c.login)).toEqual(["kept", "a"]);
+    expect(store.previewId()).toBe("id-a");
+    expect(store.active()?.id).toBe("id-kept");
+  });
+
+  it("keeps the tab once chosen, which ends the swapping", async () => {
+    const store = createChannelStore(fakeCommands(), memStorage());
+    await store.preview("a");
+    store.keep("id-a");
+    expect(store.previewId()).toBeNull();
+    expect(store.recents().map((r) => r.login)).toEqual(["a"]);
+    await store.preview("b");
+    expect(store.tabs().map((c) => c.login)).toEqual(["a", "b"]);
+
+    // Picking it, dragging it or staying on it keeps it too.
+    await store.select("b", { remember: true });
+    expect(store.previewId()).toBeNull();
+    await store.preview("c");
+    store.move("id-c", 0);
+    expect(store.previewId()).toBeNull();
+    vi.useFakeTimers();
+    await store.preview("d");
+    vi.advanceTimersByTime(RECENT_DWELL_MS);
+    expect(store.previewId()).toBeNull();
+    expect(store.tabs().map((c) => c.login)).toEqual(["c", "a", "b", "d"]);
+  });
+
+  it("forgets the preview when its tab closes", async () => {
+    const store = createChannelStore(fakeCommands(), memStorage());
+    await store.preview("a");
+    await store.close("id-a");
+    expect(store.previewId()).toBeNull();
+    await store.preview("b");
+    expect(store.tabs().map((c) => c.login)).toEqual(["b"]);
+  });
+
+  it("comes back as a preview after a restart", async () => {
+    const storage = memStorage();
+    const first = createChannelStore(fakeCommands(), storage);
+    await first.select("kept", { remember: true });
+    await first.preview("a");
+    const again = createChannelStore(fakeCommands(), storage);
+    await again.restore("fallback");
+    expect(again.tabs().map((c) => c.login)).toEqual(["kept", "a"]);
+    expect(again.previewId()).toBe("id-a");
+  });
+
+  it("records a failed preview without touching the tabs", async () => {
+    const store = createChannelStore(
+      fakeCommands(async (l) => {
+        if (l === "gone") throw new Error("no such channel");
+        return chan(l);
+      }),
+      memStorage(),
+    );
+    await expect(store.preview("gone")).rejects.toThrow("no such channel");
+    expect(store.status()).toBe("error");
+    await store.preview("a");
+    await expect(store.preview("gone")).rejects.toThrow();
+    expect(store.status()).toBe("ready");
+    expect(store.tabs().map((c) => c.login)).toEqual(["a"]);
+  });
+});

@@ -32,7 +32,7 @@ import {
   activeChannel,
   channelTabs,
   restoreChannels,
-  selectChannel,
+  previewChannel,
 } from "./stores/channelStore";
 import { clearHeldMessages } from "./stores/automodStore";
 import { clearStreamManager } from "./stores/streamManagerStore";
@@ -255,7 +255,7 @@ const ChatShell: Component<{ login: string; onSignOut: () => void }> = (
     listen<{ platform: string; login: string }>("browser_stream", (evt) => {
       if (evt.payload.platform !== "twitch") return;
       if (activeChannel()?.login === evt.payload.login) return;
-      void selectChannel(evt.payload.login).catch(() => {});
+      void previewChannel(evt.payload.login).catch(() => {});
     })
       .then((fn) => {
         if (disposed) fn();

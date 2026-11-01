@@ -15,6 +15,10 @@ const [tabs, setTabs] = createSignal<Channel[]>([]);
 const [active, setActive] = createSignal<Channel | null>(null);
 const closeChannel = vi.fn<(id: string) => Promise<void>>(async () => {});
 const focusChannel = vi.fn<(id: string) => Promise<void>>(async () => {});
+const [previewId, setPreviewId] = createSignal<string | null>(null);
+const keepChannel = vi.fn((id: string) => {
+  if (previewId() === id) setPreviewId(null);
+});
 
 vi.mock("../stores/channelStore", () => ({
   activeChannel: () => active(),
@@ -22,6 +26,8 @@ vi.mock("../stores/channelStore", () => ({
   closeChannel: (id: string) => closeChannel(id),
   focusChannel: (id: string) => focusChannel(id),
   unreadCount: () => 0,
+  previewChannelId: () => previewId(),
+  keepChannel: (id: string) => keepChannel(id),
   moveChannelTab: (id: string, index: number) => {
     const list = tabs().filter((c) => c.id !== id);
     const moved = tabs().find((c) => c.id === id)!;
@@ -59,6 +65,17 @@ describe("ChannelTabs", () => {
   });
 
   afterEach(cleanup);
+
+  it("marks the preview tab until a double-click keeps it", async () => {
+    setPreviewId("b");
+    await mount();
+    expect(tab("B").classList.contains("tab--preview")).toBe(true);
+    expect(tab("B").title).toContain("Double-click to keep it");
+    expect(tab("A").classList.contains("tab--preview")).toBe(false);
+    fireEvent.dblClick(tab("B"));
+    expect(keepChannel).toHaveBeenCalledWith("b");
+    expect(tab("B").classList.contains("tab--preview")).toBe(false);
+  });
 
   it("opens a tab in a split from its menu, once", async () => {
     await mount();
