@@ -1,3 +1,4 @@
+import type { JSX } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -44,6 +45,7 @@ const session = {
   >(async () => () => {}),
 };
 vi.mock("./lib/cardSession", () => session);
+vi.mock("./lib/cardFacts", () => ({ preloadCardFacts: async () => {} }));
 const bridge = { sendMention: vi.fn(), sendJump: vi.fn() };
 vi.mock("./lib/cardBridge", () => bridge);
 // The card itself is tested on its own; here it only has to show who it
@@ -52,10 +54,14 @@ vi.mock("./components/UserCard", () => ({
   default: (p: {
     user: CardUser | null;
     onMention: (login: string) => void;
+    controls?: JSX.Element;
   }) => (
-    <button type="button" onClick={() => p.onMention(p.user!.username)}>
-      {p.user ? `${p.user.display_name} (@${p.user.username})` : ""}
-    </button>
+    <>
+      <button type="button" onClick={() => p.onMention(p.user!.username)}>
+        {p.user ? `${p.user.display_name} (@${p.user.username})` : ""}
+      </button>
+      {p.controls}
+    </>
   ),
 }));
 
@@ -140,7 +146,7 @@ describe("UserCardWindow", () => {
     render(() => <UserCardWindow />);
     expect(screen.queryByRole("button", { name: "Minimize card" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Pin card" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Pin card" }));
     expect(card.setCardPinned).toHaveBeenLastCalledWith(true);
     const unpin = await screen.findByRole("button", { name: "Unpin card" });
     expect(unpin.getAttribute("aria-pressed")).toBe("true");

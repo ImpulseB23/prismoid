@@ -21,7 +21,7 @@ const LABEL_PREFIX: &str = "user-card-";
 const SHOW_EVENT: &str = "user_card_show";
 // The card's layout in CSS pixels. The window is that times the app's zoom,
 // so it holds the same content at every zoom and text size.
-const CONTENT_WIDTH: f64 = 320.0;
+const CONTENT_WIDTH: f64 = 440.0;
 const CONTENT_HEIGHT: f64 = 480.0;
 /// Bounds on the zoom setting the app sends, against a bad value.
 const MIN_ZOOM: f64 = 0.5;
@@ -373,10 +373,10 @@ mod tests {
 
     #[test]
     fn card_size_follows_the_monitor_scale_and_the_zoom() {
-        assert_eq!(card_size(1.0, 1.0), (320, 480));
-        assert_eq!(card_size(1.5, 1.0), (480, 720));
-        assert_eq!(card_size(1.0, 1.5), (480, 720));
-        assert_eq!(card_size(1.5, 1.5), (720, 1080));
+        assert_eq!(card_size(1.0, 1.0), (440, 480));
+        assert_eq!(card_size(1.5, 1.0), (660, 720));
+        assert_eq!(card_size(1.0, 1.5), (660, 720));
+        assert_eq!(card_size(1.5, 1.5), (990, 1080));
     }
 
     #[test]
@@ -592,8 +592,8 @@ mod tests {
         assert_eq!(
             host.calls(),
             [
-                "create user-card-1 1440,100 a x1.5",
-                "reuse user-card-1 1440,100 b x1.5 true"
+                "create user-card-1 1260,100 a x1.5",
+                "reuse user-card-1 1260,100 b x1.5 true"
             ]
         );
     }
@@ -605,7 +605,7 @@ mod tests {
         open_on(&host, &cards, user("a"), 1.0).await.unwrap();
         cards.lock().set_pinned("user-card-1", true);
         open_on(&host, &cards, user("b"), 1.0).await.unwrap();
-        assert_eq!(host.calls()[1], "create user-card-2 1440,100 b x1.5");
+        assert_eq!(host.calls()[1], "create user-card-2 1260,100 b x1.5");
         assert_eq!(cards.lock().user("user-card-1").unwrap().username, "a");
     }
 
@@ -618,7 +618,7 @@ mod tests {
         let cards = UserCards::default();
         open_on(&host, &cards, user("a"), 1.0).await.unwrap();
         open_on(&host, &cards, user("b"), 1.0).await.unwrap();
-        assert_eq!(host.calls()[2], "create user-card-2 1440,100 b x1.5");
+        assert_eq!(host.calls()[2], "create user-card-2 1260,100 b x1.5");
         assert!(cards.lock().user("user-card-1").is_none());
     }
 

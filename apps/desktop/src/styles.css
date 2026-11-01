@@ -1480,6 +1480,7 @@ option::checkmark {
 /* User card */
 /* The card fills its own window under the title bar. */
 .user-card {
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -1499,18 +1500,20 @@ option::checkmark {
   flex-shrink: 0;
 }
 
+/* Compact like a chat client's popup: the header, stats and actions stay
+   small so most of the card is the chatter's messages. */
 .user-card__hero {
   display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 16px 10px 12px 16px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 6px 12px;
 }
 
 .user-card__avatar {
   flex-shrink: 0;
-  width: 64px;
-  height: 64px;
-  border-radius: 14px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   object-fit: cover;
   background: var(--bg-surface);
 }
@@ -1520,7 +1523,7 @@ option::checkmark {
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
-  font-size: 24px;
+  font-size: 16px;
   font-weight: 600;
   text-transform: uppercase;
 }
@@ -1529,14 +1532,15 @@ option::checkmark {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-top: 4px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  row-gap: 2px;
 }
 
 .user-card__name {
   overflow-wrap: anywhere;
-  font-size: 20px;
+  font-size: 15px;
   font-weight: 650;
   line-height: 1.2;
 }
@@ -1550,65 +1554,186 @@ option::checkmark {
 .user-card__login {
   color: var(--text-faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .user-card__badges {
+  flex-basis: 100%;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 6px;
+  gap: 3px;
 }
 
 .user-card__badge {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
+/* The clamp clips at the padding edge, so the gaps are margins: padding
+   would let a sliver of the next line show. */
 .user-card__bio {
-  margin: 0;
-  padding: 0 16px 12px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin: 0 12px 6px;
   color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
-/* Each stat sizes to its value and wraps to a new row when the card runs
-   out of width. The 1px gap shows the border color through as dividers,
-   so they stay right however the stats wrap. */
-.user-card__stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1px;
-  margin: 0 16px 12px;
-  background: var(--border);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  overflow: hidden;
+.user-card__bio--long {
+  cursor: pointer;
 }
 
+.user-card__bio--long:hover {
+  color: var(--text);
+}
+
+.user-card__bio--open {
+  display: block;
+}
+
+/* One fact a line, values lined up: nothing shifts when a value changes
+   and nothing is left alone in a column. */
+.user-card__stats {
+  display: grid;
+  row-gap: 2px;
+  margin: 0;
+  padding: 0 12px 8px;
+  font-size: 12px;
+}
+
+/* A fixed label column, so every value starts at the same place and the
+   facts read as a table. */
 .user-card__stat {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 12px;
-  background: var(--bg-raised);
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  align-items: baseline;
+  min-width: 0;
+}
+
+.user-card__stat dd {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .user-card__stat dt {
   color: var(--text-faint);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .user-card__stat dd {
   margin: 0;
   white-space: nowrap;
+  font-weight: 500;
+}
+
+.user-card__copy {
+  color: inherit;
+  font: inherit;
+  font-family: var(--font-mono);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.user-card__copy:hover {
+  color: var(--text);
+}
+
+.user-card__copy--done {
+  color: var(--color-green-light);
+  font-family: inherit;
+  text-decoration: none;
+}
+
+.user-card__avatar-btn {
+  flex-shrink: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.user-card__controls {
+  display: flex;
+  align-self: flex-start;
+  margin-left: auto;
+}
+
+.user-card__avatar-big {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 5;
+  height: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  cursor: pointer;
+}
+
+.user-card__avatar-big img {
+  height: 100%;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+/* The card's messages, set like chat lines: time, badges, name, text.
+   Plain text: it selects, and the right-click menu jumps or copies. */
+.card-lines {
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
   font-size: 13px;
+  line-height: 20px;
+}
+
+.card-line {
+  padding: 1px 12px;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+
+.card-line:hover {
+  background: var(--hover);
+}
+
+.card-line--mention {
+  background: var(--prism-tint);
+}
+
+.card-line--deleted {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.card-line__time {
+  margin-right: 5px;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* The base style makes images blocks; inside a line they flow with the
+   text, or each badge would break the line. */
+.card-line__badge {
+  display: inline-block;
+  margin-right: 3px;
+  vertical-align: -2px;
+}
+
+.card-line__name {
+  font-weight: 650;
+}
+
+.card-line__sep {
+  color: var(--text-muted);
+}
+
+.card-line__notice {
+  color: var(--text-muted);
   font-weight: 500;
 }
 
@@ -1616,23 +1741,35 @@ option::checkmark {
   color: var(--color-amber);
 }
 
+.user-card__sub {
+  margin: 0;
+  padding: 0 12px 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.user-card__sub--current {
+  color: var(--text);
+  font-weight: 500;
+}
+
 .user-card__actions {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-  padding: 0 16px 14px;
+  gap: 4px;
+  padding: 0 12px 8px;
 }
 
 .user-card__action {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 5px;
-  padding: 9px 4px 8px;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11px;
   transition:
     background 0.15s,
     border-color 0.15s,
@@ -1653,40 +1790,48 @@ option::checkmark {
 
 .user-card__note,
 .user-card__notice {
-  margin: 0 16px 12px;
-  padding: 8px 12px;
+  margin: 0 12px 8px;
+  padding: 6px 10px;
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
   color: var(--text-muted);
   font-size: 13px;
 }
 
+/* One line: unban, the timeouts, ban. Small enough that the messages
+   keep most of the card. */
 .user-card__mod {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0 16px 14px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg);
-}
-
-.user-card__reason {
-  width: 100%;
+  margin: 0 12px 8px;
 }
 
 .user-card__mod-row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+  align-items: stretch;
+  gap: 4px;
+  height: 24px;
+}
+
+.user-card__mod-row .segmented {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+}
+
+.user-card__mod-row .segmented__btn {
+  flex: 1;
+  min-width: 0;
+  padding: 0 2px;
+  font-size: 11px;
+}
+
+.user-card__mod-row .btn--small {
+  height: auto;
+  padding: 0 8px;
+  font-size: 11px;
 }
 
 .user-card__mod-end {
   display: flex;
-  gap: 6px;
-  margin-left: auto;
 }
 
 .btn--armed {

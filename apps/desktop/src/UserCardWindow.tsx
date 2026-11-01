@@ -14,8 +14,12 @@ import {
 } from "solid-js";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import UserCard, { type CardUser } from "./components/UserCard";
+import ContextMenu from "./components/ContextMenu";
+import EmoteCard from "./components/EmoteCard";
+import EmoteTooltip from "./components/EmoteTooltip";
 import { sendJump, sendMention } from "./lib/cardBridge";
 import { showCardUser, startCardSession } from "./lib/cardSession";
+import { preloadCardFacts } from "./lib/cardFacts";
 import { createChatStore } from "./stores/chatStore";
 import { createBadgeStore } from "./stores/badgeStore";
 import { authStatus } from "./stores/authStore";
@@ -59,21 +63,35 @@ const UserCardWindow: Component = () => {
       disposed = true;
       unlisten?.();
     });
+    // The card shows, or moves to the next person, only once their profile
+    // and sub are in, so it never opens half drawn. The newest wins.
+    let seq = 0;
+    let revealed = false;
+    const reveal = () => {
+      if (revealed || disposed) return;
+      revealed = true;
+      void cardReady().catch(report("failed to show card"));
+    };
+    const show = async (u: CardUser | null) => {
+      const mine = ++seq;
+      if (u) await preloadCardFacts(u);
+      if (mine !== seq || disposed) return;
+      setUser(u);
+      reveal();
+    };
     onCardUser((u) => {
       announced = true;
-      setUser(u);
+      void show(u);
     })
       .then((next) => {
         if (disposed) next();
         else unlisten = next;
         return currentCardUser();
       })
-      .then((u) => {
-        if (!announced) setUser(u);
-      })
-      .catch(report("failed to load user card"))
-      .finally(() => {
-        if (!disposed) void cardReady().catch(report("failed to show card"));
+      .then((u) => (announced ? undefined : show(u)))
+      .catch((err: unknown) => {
+        report("failed to load user card")(err);
+        reveal();
       });
   });
 
@@ -163,61 +181,6 @@ const UserCardWindow: Component = () => {
 
   return (
     <div class="app">
-      <div class="header" data-tauri-drag-region>
-        <span data-tauri-drag-region>{user()?.display_name}</span>
-        <div class="header__spacer" data-tauri-drag-region />
-        <button
-          type="button"
-          class="icon-btn"
-          classList={{ "icon-btn--active": pinned() }}
-          aria-pressed={pinned()}
-          aria-label={pinned() ? "Unpin card" : "Pin card"}
-          title={pinned() ? "Unpin" : "Pin, so it stays open"}
-          onClick={togglePin}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-            <path
-              d="M6 2h4l-.5 4 2.5 2.5v1H9v4.5L8 15l-1-1V9.5H4v-1L6.5 6z"
-              fill="currentColor"
-            />
-          </svg>
-        </button>
-        {/* An unpinned card closes as soon as it loses focus, so only a
-            pinned one can be minimized. */}
-        <Show when={pinned()}>
-          <button
-            type="button"
-            class="icon-btn"
-            aria-label="Minimize card"
-            title="Minimize"
-            onClick={() =>
-              void getCurrentWindow()
-                .minimize()
-                .catch(report("failed to minimize card"))
-            }
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M3 8h10v1.5H3z" fill="currentColor" />
-            </svg>
-          </button>
-        </Show>
-        <button
-          type="button"
-          class="icon-btn"
-          aria-label="Close card"
-          title="Close"
-          onClick={() =>
-            void closeUserCard().catch(report("failed to close card"))
-          }
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-            <path
-              d="M4 3l4 4 4-4 1 1-4 4 4 4-1 1-4-4-4 4-1-1 4-4-4-4z"
-              fill="currentColor"
-            />
-          </svg>
-        </button>
-      </div>
       <UserCard
         user={user()}
         chat={chat()}
@@ -228,7 +191,77 @@ const UserCardWindow: Component = () => {
         }
         onMention={sendMention}
         onJump={(m) => sendJump(m.channel_id, m.id)}
+        controls={
+          <>
+            <button
+              type="button"
+              class="icon-btn"
+              classList={{ "icon-btn--active": pinned() }}
+              aria-pressed={pinned()}
+              aria-label={pinned() ? "Unpin card" : "Pin card"}
+              onClick={togglePin}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                aria-hidden="true"
+              >
+                <path
+                  d="M6 2h4l-.5 4 2.5 2.5v1H9v4.5L8 15l-1-1V9.5H4v-1L6.5 6z"
+                  fill="currentColor"
+                />
+              </svg>
+            </button>
+            {/* An unpinned card closes as soon as it loses focus, so only a
+                pinned one can be minimized. */}
+            <Show when={pinned()}>
+              <button
+                type="button"
+                class="icon-btn"
+                aria-label="Minimize card"
+                onClick={() =>
+                  void getCurrentWindow()
+                    .minimize()
+                    .catch(report("failed to minimize card"))
+                }
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  aria-hidden="true"
+                >
+                  <path d="M3 8h10v1.5H3z" fill="currentColor" />
+                </svg>
+              </button>
+            </Show>
+            <button
+              type="button"
+              class="icon-btn"
+              aria-label="Close card"
+              onClick={() =>
+                void closeUserCard().catch(report("failed to close card"))
+              }
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                aria-hidden="true"
+              >
+                <path
+                  d="M4 3l4 4 4-4 1 1-4 4 4 4-1 1-4-4-4 4-1-1 4-4-4-4z"
+                  fill="currentColor"
+                />
+              </svg>
+            </button>
+          </>
+        }
       />
+      <ContextMenu />
+      <EmoteCard />
+      <EmoteTooltip />
     </div>
   );
 };

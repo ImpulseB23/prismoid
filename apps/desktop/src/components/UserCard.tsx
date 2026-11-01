@@ -4,6 +4,7 @@
 
 import {
   Component,
+  JSX,
   For,
   Show,
   createEffect,
@@ -11,6 +12,7 @@ import {
   createResource,
   createSignal,
   on,
+  onCleanup,
 } from "solid-js";
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -29,13 +31,15 @@ import { shownPaint } from "../stores/paintStore";
 import { nameContrast } from "../stores/themeStore";
 import type { BadgeStore } from "../stores/badgeStore";
 import type { ChatMessage, ChatStore } from "../stores/chatStore";
+import { currentUserId, moderationNeedsReconnect } from "../stores/authStore";
 import {
-  FOLLOWERS_SCOPE,
-  currentUserId,
-  missingScopes,
-  moderationNeedsReconnect,
-} from "../stores/authStore";
-import { getFollowSince } from "../lib/twitchChannel";
+  describeSub,
+  getFollowerCount,
+  getFollowSince,
+  getSubAge,
+} from "../lib/twitchChannel";
+import { followLookup } from "../lib/cardFacts";
+import { formatViewers } from "../lib/streamInfo";
 import { modActionsFor, modLogRevision } from "../stores/modLogStore";
 import { describeModAction } from "../lib/modActions";
 import { formatSeconds } from "../lib/slashCommands";
@@ -56,7 +60,9 @@ import {
   userInfo,
   userInfoRevision,
 } from "../stores/userInfoStore";
-import MessageRow from "./MessageRow";
+import MessagePieces from "./MessagePieces";
+import { splitMessage } from "../lib/emoteSpans";
+import { item, openContextMenu, separator } from "../stores/contextMenuStore";
 
 export interface CardUser {
   /** Channel the card was opened in; every action targets it. */
@@ -77,11 +83,19 @@ export interface UserCardProps {
   /** Signed-in login, so messages that mention it are highlighted. */
   login: string;
   onClose: () => void;
+  /** The window's own buttons (pin, close), at the header's right. */
+  controls?: JSX.Element;
   /** Starts a reply to them in the main window's chat box. */
   onMention: (login: string) => void;
   /** Shows one of their messages in the main window's chat. */
   onJump: (msg: ChatMessage) => void;
 }
+
+/** One click each, from a second to a week, like a chat client's card. */
+const CARD_TIMEOUTS = [1, 30, 60, 300, 1800, 3600, 86_400, 604_800];
+
+/** Emotes in the card's message lines fit this, in CSS pixels. */
+const CARD_LINE_HEIGHT = 20;
 
 const RECENT_LIMIT = 20;
 
@@ -92,17 +106,25 @@ const UserCard: Component<UserCardProps> = (props) => {
   const [pending, setPending] = createSignal<Pending>("none");
   const [notice, setNotice] = createSignal<string | null>(null);
   const [tab, setTab] = createSignal<Tab>("messages");
-  // Free-text reason sent with the next timeout or ban. Twitch shows it to
-  // other moderators, not to the chatter.
-  const [reason, setReason] = createSignal("");
+  const [copied, setCopied] = createSignal(false);
+  const [bigAvatar, setBigAvatar] = createSignal(false);
+  const [bioOpen, setBioOpen] = createSignal(false);
   let dialogRef: HTMLElement | undefined;
+  let listRef: HTMLDivElement | undefined;
+  // The list follows new messages while it is at the bottom; scrolled up
+  // to read, it stays put.
+  let atEnd = true;
 
   const isSelf = () => props.user?.platform_user_id === currentUserId();
+  // Twitch never lets anyone time out or ban themselves or the channel's
+  // owner, so the card does not offer it.
+  const canTarget = () =>
+    !isSelf() && props.user?.platform_user_id !== props.user?.channel_id;
   // The card acts in the channel it was opened from, whatever is on screen.
   const moderates = () =>
     props.user ? canModerateIn(props.user.channel_id) : false;
 
-  // A new person starts fresh: their messages, no leftover notice or reason.
+  // A new person starts fresh: their messages, no leftover notice.
   createEffect(
     on(
       () => props.user?.platform_user_id,
@@ -111,11 +133,22 @@ const UserCard: Component<UserCardProps> = (props) => {
         setTab("messages");
         setPending("none");
         setNotice(null);
-        setReason("");
+        setCopied(false);
+        setBigAvatar(false);
+        setBioOpen(false);
+        atEnd = true;
         queueMicrotask(() => dialogRef?.focus());
       },
     ),
   );
+
+  const lineBadges = (m: ChatMessage) => {
+    props.badges.revision();
+    return m.badges.flatMap((b) => {
+      const r = props.badges.resolve(b.set_id, b.id);
+      return r ? [r] : [];
+    });
+  };
 
   const badges = createMemo(() => {
     const store = props.badges;
@@ -145,6 +178,12 @@ const UserCard: Component<UserCardProps> = (props) => {
     return u ? chat.recentByUser(u.platform_user_id, RECENT_LIMIT) : [];
   });
 
+  createEffect(
+    on([recent, tab], () => {
+      if (listRef && atEnd) listRef.scrollTop = listRef.scrollHeight;
+    }),
+  );
+
   const ignored = () => {
     settings();
     return props.user ? isIgnored(props.user.username) : false;
@@ -163,19 +202,48 @@ const UserCard: Component<UserCardProps> = (props) => {
     return userInfo(u.platform_user_id);
   };
 
-  // Twitch tells you your own follow, and anyone's in a channel you
-  // moderate once the followers scope is granted; elsewhere it says nothing,
-  // so the stat stays off rather than guessing.
+  // Where Twitch will not say, the stat stays off rather than guessing.
   const [following] = createResource(
-    () => {
-      const u = props.user;
-      if (!u) return false;
-      const own = u.platform_user_id === currentUserId();
-      const mod = moderates() && !missingScopes().includes(FOLLOWERS_SCOPE);
-      return own || mod ? ([u.channel_id, u.platform_user_id] as const) : false;
-    },
+    () => (props.user ? followLookup(props.user) : false),
     ([channel, user]) => getFollowSince(channel, user),
   );
+
+  // ivr.fi knows anyone's sub, and sometimes their follow, in any channel.
+  const channelLogin = () => {
+    userInfoRevision();
+    const u = props.user;
+    if (!u) return undefined;
+    ensureUserInfo([u.channel_id]);
+    return userInfo(u.channel_id)?.login;
+  };
+  const [subage] = createResource(
+    () => {
+      const u = props.user;
+      const channel = channelLogin();
+      return u && channel ? ([u.username, channel] as const) : false;
+    },
+    ([user, channel]) => getSubAge(user, channel),
+  );
+  const sub = () => (subage.state === "ready" ? describeSub(subage()) : null);
+  const [followers] = createResource(
+    () => props.user?.platform_user_id,
+    (id) => getFollowerCount(id),
+  );
+  const followedAt = () =>
+    (following.state === "ready" ? following() : null) ??
+    (subage.state === "ready" ? subage().followed_at : null);
+
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(copiedTimer));
+  const copyId = (id: string) =>
+    navigator.clipboard.writeText(id).then(
+      () => {
+        setCopied(true);
+        clearTimeout(copiedTimer);
+        copiedTimer = setTimeout(() => setCopied(false), 1500);
+      },
+      (err: unknown) => console.error("copy user id", err),
+    );
 
   const history = () => {
     modLogRevision();
@@ -226,10 +294,13 @@ const UserCard: Component<UserCardProps> = (props) => {
           class="user-card"
           aria-label={`${u().display_name} profile`}
           onKeyDown={(e) => {
-            if (e.key === "Escape") close();
+            if (e.key !== "Escape") return;
+            if (bigAvatar()) setBigAvatar(false);
+            else close();
           }}
         >
-          <div class="user-card__hero">
+          {/* The card's window has no title bar: the header moves it. */}
+          <div class="user-card__hero" data-tauri-drag-region="deep">
             <Show
               when={profile()?.profile_image_url}
               fallback={
@@ -239,14 +310,35 @@ const UserCard: Component<UserCardProps> = (props) => {
               }
             >
               {(url) => (
-                <img
-                  class="user-card__avatar"
-                  src={url()}
-                  alt=""
-                  width={64}
-                  height={64}
-                  draggable={false}
-                />
+                <>
+                  <button
+                    type="button"
+                    class="user-card__avatar-btn"
+                    aria-label="Show a bigger picture"
+                    aria-expanded={bigAvatar()}
+                    onClick={() => setBigAvatar((v) => !v)}
+                  >
+                    <img
+                      class="user-card__avatar"
+                      src={url()}
+                      alt=""
+                      width={36}
+                      height={36}
+                      draggable={false}
+                    />
+                  </button>
+                  {/* Over the top of the card, the messages left in view. */}
+                  <Show when={bigAvatar()}>
+                    <button
+                      type="button"
+                      class="user-card__avatar-big"
+                      aria-label="Close the picture"
+                      onClick={() => setBigAvatar(false)}
+                    >
+                      <img src={url()} alt="" draggable={false} />
+                    </button>
+                  </Show>
+                </>
               )}
             </Show>
             <div class="user-card__who">
@@ -278,8 +370,8 @@ const UserCard: Component<UserCardProps> = (props) => {
                         src={b.url_2x || b.url_1x}
                         alt={b.title}
                         title={b.title}
-                        width={18}
-                        height={18}
+                        width={16}
+                        height={16}
                         draggable={false}
                       />
                     )}
@@ -287,10 +379,49 @@ const UserCard: Component<UserCardProps> = (props) => {
                 </div>
               </Show>
             </div>
+            <Show when={props.controls}>
+              <div class="user-card__controls">{props.controls}</div>
+            </Show>
           </div>
 
           <Show when={profile()?.description}>
-            {(d) => <p class="user-card__bio">{d()}</p>}
+            {(d) => {
+              let ref: HTMLParagraphElement | undefined;
+              // Only a bio cut short by the clamp opens on a click.
+              const [long, setLong] = createSignal(false);
+              createEffect(() => {
+                d();
+                if (ref && !bioOpen()) {
+                  setLong(ref.scrollHeight > ref.clientHeight);
+                }
+              });
+              const toggle = () => {
+                if (long()) setBioOpen((v) => !v);
+              };
+              return (
+                <p
+                  ref={(el) => (ref = el)}
+                  class="user-card__bio"
+                  classList={{
+                    "user-card__bio--long": long(),
+                    "user-card__bio--open": bioOpen(),
+                  }}
+                  role={long() ? "button" : undefined}
+                  tabIndex={long() ? 0 : undefined}
+                  aria-expanded={long() ? bioOpen() : undefined}
+                  onClick={() => {
+                    if (!window.getSelection()?.toString()) toggle();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" && e.key !== " ") return;
+                    e.preventDefault();
+                    toggle();
+                  }}
+                >
+                  {d()}
+                </p>
+              );
+            }}
           </Show>
 
           <dl class="user-card__stats">
@@ -307,15 +438,21 @@ const UserCard: Component<UserCardProps> = (props) => {
                 </div>
               )}
             </Show>
-            <Show when={following.state === "ready"}>
-              <div class="user-card__stat">
-                <dt>Following</dt>
-                <dd>
-                  {following()
-                    ? capitalize(formatSince(following()!, Date.now()))
-                    : "Not following"}
-                </dd>
-              </div>
+            <Show when={followers.state === "ready" ? followers() : null}>
+              {(n) => (
+                <div class="user-card__stat">
+                  <dt>Followers</dt>
+                  <dd>{formatViewers(n())}</dd>
+                </div>
+              )}
+            </Show>
+            <Show when={followedAt()}>
+              {(since) => (
+                <div class="user-card__stat">
+                  <dt>Following</dt>
+                  <dd>{capitalize(formatSince(since(), Date.now()))}</dd>
+                </div>
+              )}
             </Show>
             <Show when={history().length > 0}>
               <div class="user-card__stat">
@@ -323,7 +460,32 @@ const UserCard: Component<UserCardProps> = (props) => {
                 <dd>{history().length}</dd>
               </div>
             </Show>
+            <div class="user-card__stat">
+              <dt>ID</dt>
+              <dd>
+                <button
+                  type="button"
+                  class="user-card__copy"
+                  classList={{ "user-card__copy--done": copied() }}
+                  aria-label={`Copy user ID ${u().platform_user_id}`}
+                  onClick={() => void copyId(u().platform_user_id)}
+                >
+                  {copied() ? "Copied" : u().platform_user_id}
+                </button>
+              </dd>
+            </div>
           </dl>
+
+          <Show when={sub()}>
+            {(line) => (
+              <p
+                class="user-card__sub"
+                classList={{ "user-card__sub--current": line().current }}
+              >
+                {line().text}
+              </p>
+            )}
+          </Show>
 
           {/* Mention, highlight and ignore are about someone else. */}
           <Show when={!isSelf()}>
@@ -453,18 +615,25 @@ const UserCard: Component<UserCardProps> = (props) => {
               Moderation needs new Twitch permissions. Reconnect in Settings.
             </div>
           </Show>
-          <Show when={moderates()}>
+          <Show when={moderates() && canTarget()}>
             <div class="user-card__mod">
-              <input
-                type="text"
-                class="settings__input user-card__reason"
-                placeholder="Reason (other mods see it)"
-                value={reason()}
-                onInput={(e) => setReason(e.currentTarget.value)}
-              />
               <div class="user-card__mod-row">
+                <button
+                  type="button"
+                  class="btn btn--small"
+                  disabled={busy()}
+                  onClick={() =>
+                    void runMod(
+                      "unban",
+                      () => unbanUser(u().channel_id, u().platform_user_id),
+                      `Unbanned ${u().display_name}.`,
+                    )
+                  }
+                >
+                  {pending() === "unban" ? "Unbanning…" : "Unban"}
+                </button>
                 <div class="segmented" role="group" aria-label="Timeout">
-                  <For each={settings().timeoutPresets}>
+                  <For each={CARD_TIMEOUTS}>
                     {(seconds) => (
                       <button
                         type="button"
@@ -479,7 +648,7 @@ const UserCard: Component<UserCardProps> = (props) => {
                                 u().channel_id,
                                 u().platform_user_id,
                                 seconds,
-                                reason().trim() || undefined,
+                                undefined,
                               ),
                             `Timed out ${u().display_name} for ${formatSeconds(seconds)}.`,
                           )
@@ -491,20 +660,6 @@ const UserCard: Component<UserCardProps> = (props) => {
                   </For>
                 </div>
                 <span class="user-card__mod-end">
-                  <button
-                    type="button"
-                    class="btn btn--small"
-                    disabled={busy()}
-                    onClick={() =>
-                      void runMod(
-                        "unban",
-                        () => unbanUser(u().channel_id, u().platform_user_id),
-                        `Unbanned ${u().display_name}.`,
-                      )
-                    }
-                  >
-                    {pending() === "unban" ? "Unbanning…" : "Unban"}
-                  </button>
                   <Show
                     when={pending() === "confirm_ban"}
                     fallback={
@@ -528,7 +683,7 @@ const UserCard: Component<UserCardProps> = (props) => {
                             banUser(
                               u().channel_id,
                               u().platform_user_id,
-                              reason().trim() || undefined,
+                              undefined,
                             ),
                           `Banned ${u().display_name}.`,
                         )
@@ -575,7 +730,15 @@ const UserCard: Component<UserCardProps> = (props) => {
             </Show>
           </div>
 
-          <div class="palette__body user-card__list" role="tabpanel">
+          <div
+            ref={(el) => (listRef = el)}
+            class="palette__body user-card__list"
+            role="tabpanel"
+            onScroll={(e) => {
+              const el = e.currentTarget;
+              atEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+            }}
+          >
             <Show when={tab() === "history" && history().length > 0}>
               <For each={history()}>
                 {(a) => (
@@ -597,58 +760,100 @@ const UserCard: Component<UserCardProps> = (props) => {
                   </div>
                 }
               >
-                <ol class="msg-list">
+                <ol class="card-lines">
                   <For each={recent()}>
                     {(m) => (
-                      <MessageRow
-                        msg={m}
-                        hideName
-                        compact
-                        onClick={() => {
-                          close();
-                          props.onJump(m);
+                      <li
+                        class="card-line"
+                        classList={{
+                          "card-line--deleted": m.deleted === true,
+                          "card-line--mention": isHighlighted(
+                            m.message_text,
+                            props.login,
+                            settings().highlightPhrases,
+                          ),
                         }}
-                        mention={isHighlighted(
-                          m.message_text,
-                          props.login,
-                          settings().highlightPhrases,
-                        )}
-                        trailing={
-                          <Show when={!m.deleted && moderates()}>
-                            <button
-                              type="button"
-                              class="msg-row__delete"
-                              title="Delete message"
-                              aria-label="Delete message"
-                              disabled={busy()}
-                              onClick={() =>
-                                void runMod(
-                                  "delete",
-                                  async () => {
-                                    await deleteMessage(m.channel_id, m.id);
-                                    props.chat.markDeleted(m.id);
-                                  },
-                                  "Message deleted.",
-                                )
-                              }
-                            >
-                              <svg
-                                width="10"
-                                height="10"
-                                viewBox="0 0 10 10"
-                                aria-hidden="true"
-                              >
-                                <path
-                                  d="M2 2l6 6M8 2l-6 6"
-                                  stroke="currentColor"
-                                  stroke-width="1.5"
-                                  stroke-linecap="round"
-                                />
-                              </svg>
-                            </button>
-                          </Show>
+                        onContextMenu={(e) =>
+                          openContextMenu(e, [
+                            item("Jump to message", () => {
+                              close();
+                              props.onJump(m);
+                            }),
+                            item(
+                              "Copy message",
+                              () =>
+                                void navigator.clipboard
+                                  .writeText(m.message_text)
+                                  .catch((err: unknown) =>
+                                    console.error("copy message", err),
+                                  ),
+                            ),
+                            ...(moderates() && !m.deleted
+                              ? [
+                                  separator,
+                                  item(
+                                    "Delete message",
+                                    () =>
+                                      void runMod(
+                                        "delete",
+                                        async () => {
+                                          await deleteMessage(
+                                            m.channel_id,
+                                            m.id,
+                                          );
+                                          props.chat.markDeleted(m.id);
+                                        },
+                                        "Message deleted.",
+                                      ),
+                                    true,
+                                  ),
+                                ]
+                              : []),
+                          ])
                         }
-                      />
+                      >
+                        <span class="card-line__time">
+                          {formatTimestamp(m.timestamp)}
+                        </span>
+                        <For each={lineBadges(m)}>
+                          {(b) => (
+                            <img
+                              class="card-line__badge"
+                              src={b.url_1x}
+                              alt={b.title}
+                              width={14}
+                              height={14}
+                              draggable={false}
+                            />
+                          )}
+                        </For>
+                        <Show
+                          when={m.notice}
+                          fallback={
+                            <>
+                              <span
+                                class="card-line__name"
+                                classList={{ "name--painted": name().painted }}
+                                style={name().style}
+                              >
+                                {m.display_name}
+                              </span>
+                              <span class="card-line__sep">: </span>
+                            </>
+                          }
+                        >
+                          {(n) => (
+                            <span class="card-line__notice">
+                              {n().system_message}{" "}
+                            </span>
+                          )}
+                        </Show>
+                        <MessagePieces
+                          pieces={splitMessage(m.message_text, m.emote_spans, {
+                            maxHeight: CARD_LINE_HEIGHT,
+                          })}
+                        />
+                      </li>
                     )}
                   </For>
                 </ol>

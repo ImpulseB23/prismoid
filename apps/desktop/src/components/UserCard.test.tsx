@@ -1,14 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import type { ChatMessage, ChatStore } from "../stores/chatStore";
+import { contextMenu } from "../stores/contextMenuStore";
 
 const said = (id: string, text: string) =>
   ({
     id,
     channel_id: "1",
     timestamp: 0,
+    display_name: "Viewer",
     message_text: text,
     emote_spans: [],
+    badges: [],
+    notice: null,
   }) as unknown as ChatMessage;
 
 const follows = { since: null as string | null };
@@ -19,6 +23,15 @@ vi.mock("../lib/twitchChannel", async (importOriginal) => ({
     followCalls.push([channel, user]);
     return follows.since;
   },
+  getSubAge: async () => ({
+    hidden: false,
+    kind: "paid",
+    tier: "1",
+    months: 21,
+    streak: 12,
+    followed_at: null,
+  }),
+  getFollowerCount: async () => 1200,
 }));
 const mod = {
   timeoutUser: vi.fn(async () => {}),
@@ -98,10 +111,12 @@ describe("UserCard", () => {
         }}
       />
     ));
-    const rows = screen.getByRole("main").querySelectorAll(".msg-row");
+    const rows = screen.getByRole("main").querySelectorAll(".card-line");
     expect(rows).toHaveLength(2);
-    expect(rows[0]!.classList.contains("msg-row--mention")).toBe(true);
-    expect(rows[1]!.classList.contains("msg-row--mention")).toBe(false);
+    expect(rows[0]!.classList.contains("card-line--mention")).toBe(true);
+    expect(rows[1]!.classList.contains("card-line--mention")).toBe(false);
+    // The lines read like chat: the name sits before the words.
+    expect(rows[0]!.textContent).toContain("Viewer: ");
   });
 
   it("toggles highlighting everything they say", async () => {
@@ -242,7 +257,14 @@ describe("UserCard moderation", () => {
       />
     ));
     const timeouts = screen.getByRole("group", { name: "Timeout" });
-    fireEvent.click(timeouts.querySelector("button")!);
+    expect(
+      [...timeouts.querySelectorAll("button")].map((b) => b.textContent),
+    ).toEqual(["1s", "30s", "1m", "5m", "30m", "1h", "1d", "7d"]);
+    fireEvent.click(
+      [...timeouts.querySelectorAll("button")].find(
+        (b) => b.textContent === "1m",
+      )!,
+    );
     expect(mod.timeoutUser).toHaveBeenCalledWith(
       viewer.channel_id,
       viewer.platform_user_id,
@@ -265,14 +287,20 @@ describe("UserCard moderation", () => {
     expect(mod.unbanUser).toHaveBeenCalledOnce();
     await screen.findByText(`Unbanned ${viewer.display_name}.`);
 
-    fireEvent.click(
-      screen.getAllByRole("button", { name: "Delete message" })[0]!,
-    );
+    // Deleting and jumping live on a message's right-click menu.
+    const line = screen.getByRole("main").querySelector(".card-line")!;
+    const choose = (label: string) => {
+      fireEvent.contextMenu(line);
+      const items = contextMenu()!.items;
+      const found = items.find((i) => i.kind === "item" && i.label === label);
+      if (found?.kind === "item") found.onSelect();
+    };
+    choose("Delete message");
     expect(mod.deleteMessage).toHaveBeenCalledOnce();
 
     fireEvent.click(screen.getByRole("button", { name: /Mention/ }));
     expect(onMention).toHaveBeenCalledWith(viewer.username);
-    fireEvent.click(screen.getAllByRole("button", { name: /Jump to/ })[0]!);
+    choose("Jump to message");
     expect(onJump).toHaveBeenCalledOnce();
   });
 
