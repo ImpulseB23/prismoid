@@ -64,7 +64,7 @@ pub fn run() {
     let context = tauri::generate_context!();
     #[cfg(windows)]
     if let Some(splash) = update_splash::parse(std::env::args()) {
-        update_splash::run(context, splash);
+        run_update_splash(context, splash);
         return;
     }
 
@@ -206,6 +206,62 @@ pub fn run() {
         .setup(setup)
         .run(context)
         .expect("failed to run prismoid");
+}
+
+/// Splash mode: one small window that covers an update until the new
+/// version is up (see `update_splash`). No plugins, so it never takes the
+/// single-instance lock the new version needs.
+#[cfg(windows)]
+fn run_update_splash(mut context: tauri::Context, splash: update_splash::Splash) {
+    use tauri::webview::PageLoadEvent;
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
+
+    // The config's main window would otherwise open and boot the whole app.
+    context.config_mut().app.windows.clear();
+    // Created before anything else: the installer takes seconds, so the
+    // event exists long before the new version looks for it.
+    let done = match update_splash::Handle::event() {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("update splash event: {e}");
+            return;
+        }
+    };
+    tauri::Builder::default()
+        .setup(move |app| {
+            WebviewWindowBuilder::new(
+                app,
+                update_splash::LABEL,
+                WebviewUrl::App(splash.url().into()),
+            )
+            .title("Updating prismoid")
+            .inner_size(340.0, 230.0)
+            .resizable(false)
+            .maximizable(false)
+            .decorations(false)
+            .center()
+            .visible(false)
+            .data_directory(update_splash::webview_dir())
+            // Shown once drawn, so it never flashes an empty frame.
+            .on_page_load(|window, payload| {
+                if payload.event() == PageLoadEvent::Finished {
+                    let _ = window.show();
+                }
+            })
+            .build()?;
+            let app = app.handle().clone();
+            std::thread::spawn(move || {
+                update_splash::finish(&splash, &done, &update_splash::WAITS, || {
+                    if let Some(window) = app.get_webview_window(update_splash::LABEL) {
+                        let _ = window.eval("location.hash = 'failed'");
+                    }
+                });
+                app.exit(0);
+            });
+            Ok(())
+        })
+        .run(context)
+        .expect("failed to run the update splash");
 }
 
 fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {

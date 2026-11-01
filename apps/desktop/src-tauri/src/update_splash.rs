@@ -11,9 +11,11 @@
 //! for the installer itself to finish and, when no new version checks in,
 //! says so and reopens whichever version is installed, so the app never
 //! just disappears.
+//!
+//! The splash's window and Tauri runtime are set up in `lib.rs`.
 
 #[cfg(windows)]
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 #[cfg(windows)]
 use std::time::Duration;
 
@@ -22,24 +24,41 @@ use std::time::Duration;
 const ARG: &str = "--update-splash";
 /// The splash window, which the frontend renders as the update screen.
 #[cfg(windows)]
-const LABEL: &str = "update-splash";
+pub const LABEL: &str = "update-splash";
 #[cfg(windows)]
 const EVENT: &str = "Local\\org.prismoid.app.update-splash";
-/// How long the old version gets to quit after starting the installer.
+
 #[cfg(windows)]
-const QUIT_WAIT: Duration = Duration::from_secs(30);
-/// Longest an install may run before the splash stops waiting on it.
+pub struct Waits {
+    /// For the old version to quit after starting the installer.
+    quit: Duration,
+    /// Longest an install may run before the splash stops waiting on it.
+    install: Duration,
+    /// For the new version to open once the installer is done.
+    start: Duration,
+    /// For the failure message to be read before the splash closes.
+    read: Duration,
+}
+
 #[cfg(windows)]
-const INSTALL_WAIT: Duration = Duration::from_secs(10 * 60);
-/// How long the new version gets to open once the installer is done.
-#[cfg(windows)]
-const START_WAIT: Duration = Duration::from_secs(30);
+pub const WAITS: Waits = Waits {
+    quit: Duration::from_secs(30),
+    install: Duration::from_secs(10 * 60),
+    start: Duration::from_secs(30),
+    read: Duration::from_secs(3),
+};
 
 /// Holds the exe copy and the splash's own WebView2 data, kept apart from
 /// the app's so the new version never shares a browser process with it.
 #[cfg(windows)]
 fn dir() -> PathBuf {
     std::env::temp_dir().join("prismoid-update")
+}
+
+/// The splash's own WebView2 data folder.
+#[cfg(windows)]
+pub fn webview_dir() -> PathBuf {
+    dir().join("webview")
 }
 
 /// What the old version hands the splash: the palette, its own process id
@@ -50,6 +69,14 @@ pub struct Splash {
     palette: &'static str,
     parent: u32,
     app: PathBuf,
+}
+
+#[cfg(windows)]
+impl Splash {
+    /// The page the splash window loads.
+    pub fn url(&self) -> String {
+        format!("index.html?palette={}", self.palette)
+    }
 }
 
 /// The splash's arguments when they start splash mode.
@@ -74,7 +101,10 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Option<Splash> {
 pub fn update_splash_start(palette: String) -> Result<(), String> {
     #[cfg(windows)]
     {
-        start(if palette == "light" { "light" } else { "dark" }).map_err(|e| e.to_string())
+        let palette = if palette == "light" { "light" } else { "dark" };
+        std::env::current_exe()
+            .and_then(|app| start(&dir(), &app, palette))
+            .map_err(|e| e.to_string())
     }
     #[cfg(not(windows))]
     {
@@ -83,22 +113,21 @@ pub fn update_splash_start(palette: String) -> Result<(), String> {
     }
 }
 
+/// Copies `app` into `dir` and starts the copy in splash mode.
 #[cfg(windows)]
-fn start(palette: &str) -> std::io::Result<()> {
+fn start(dir: &Path, app: &Path, palette: &str) -> std::io::Result<()> {
     use std::os::windows::process::CommandExt;
     use std::process::{Command, Stdio};
     use windows::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, DETACHED_PROCESS};
 
-    let dir = dir();
-    std::fs::create_dir_all(&dir)?;
+    std::fs::create_dir_all(dir)?;
     let exe = dir.join("prismoid-update.exe");
-    let app = std::env::current_exe()?;
-    std::fs::copy(&app, &exe)?;
+    std::fs::copy(app, &exe)?;
     Command::new(&exe)
         .args([ARG, palette, &std::process::id().to_string()])
-        .arg(&app)
+        .arg(app)
         .creation_flags(DETACHED_PROCESS.0 | CREATE_NEW_PROCESS_GROUP.0)
-        .current_dir(&dir)
+        .current_dir(dir)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -106,78 +135,36 @@ fn start(palette: &str) -> std::io::Result<()> {
         .map(drop)
 }
 
-/// Runs the splash until the new version is up, or until it is clear the
-/// install failed and the installed version has been reopened.
+/// Blocks until the update is over. When the install failed, `failed`
+/// shows it, the installed version is reopened, and the message gets time
+/// to be read.
 #[cfg(windows)]
-pub fn run(mut context: tauri::Context, splash: Splash) {
-    use tauri::webview::PageLoadEvent;
-    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
-
-    // The config's main window would otherwise open and boot the whole app.
-    context.config_mut().app.windows.clear();
-    // Created before anything else: the installer takes seconds, so the
-    // event exists long before the new version looks for it.
-    let done = match Handle::event() {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("update splash event: {e}");
-            return;
-        }
-    };
-    let url = format!("index.html?palette={}", splash.palette);
-    tauri::Builder::default()
-        .setup(move |app| {
-            WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App(url.into()))
-                .title("Updating prismoid")
-                .inner_size(340.0, 230.0)
-                .resizable(false)
-                .maximizable(false)
-                .decorations(false)
-                .center()
-                .visible(false)
-                .data_directory(dir().join("webview"))
-                // Shown once drawn, so it never flashes an empty frame.
-                .on_page_load(|window, payload| {
-                    if payload.event() == PageLoadEvent::Finished {
-                        let _ = window.show();
-                    }
-                })
-                .build()?;
-            let app = app.handle().clone();
-            std::thread::spawn(move || {
-                if !installed(&done, splash.parent) {
-                    if let Some(window) = app.get_webview_window(LABEL) {
-                        let _ = window.eval("location.hash = 'failed'");
-                    }
-                    if let Err(e) = reopen(&splash.app) {
-                        eprintln!("reopen {}: {e}", splash.app.display());
-                    }
-                    // Long enough to read before the app is back.
-                    std::thread::sleep(Duration::from_secs(3));
-                }
-                app.exit(0);
-            });
-            Ok(())
-        })
-        .run(context)
-        .expect("failed to run the update splash");
+pub fn finish(splash: &Splash, done: &Handle, waits: &Waits, failed: impl FnOnce()) {
+    if installed(done, splash.parent, waits) {
+        return;
+    }
+    failed();
+    if let Err(e) = reopen(&splash.app) {
+        eprintln!("reopen {}: {e}", splash.app.display());
+    }
+    std::thread::sleep(waits.read);
 }
 
 /// Follows the update to its end: true once the new version checks in,
 /// false once the installer has finished and it still has not.
 #[cfg(windows)]
-fn installed(done: &Handle, parent: u32) -> bool {
+fn installed(done: &Handle, parent: u32, waits: &Waits) -> bool {
     if let Some(old) = Handle::process(parent) {
-        if done.wait_or(Some(&old), QUIT_WAIT) {
+        if done.wait_or(Some(&old), waits.quit) {
             return true;
         }
     }
     if let Some(installer) = installer_of(parent) {
-        if done.wait_or(Some(&installer), INSTALL_WAIT) {
+        if done.wait_or(Some(&installer), waits.install) {
             return true;
         }
     }
-    done.wait_or(None, START_WAIT)
+    done.wait_or(None, waits.start)
 }
 
 /// The installer the old version started: its child, other than this
@@ -233,7 +220,7 @@ fn started(process: windows::Win32::Foundation::HANDLE) -> Option<u64> {
 }
 
 #[cfg(windows)]
-fn reopen(app: &std::path::Path) -> std::io::Result<()> {
+fn reopen(app: &Path) -> std::io::Result<()> {
     use std::os::windows::process::CommandExt;
     use std::process::{Command, Stdio};
     use windows::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, DETACHED_PROCESS};
@@ -252,7 +239,12 @@ fn reopen(app: &std::path::Path) -> std::io::Result<()> {
 #[cfg(windows)]
 pub fn release() {
     Handle::signal();
-    let dir = dir();
+    clear(dir());
+}
+
+/// Deletes `dir` in the background, retrying while it is still in use.
+#[cfg(windows)]
+fn clear(dir: PathBuf) {
     if !dir.exists() {
         return;
     }
@@ -272,7 +264,7 @@ pub fn release() {
 }
 
 #[cfg(windows)]
-struct Handle(windows::Win32::Foundation::HANDLE);
+pub struct Handle(windows::Win32::Foundation::HANDLE);
 
 // Each handle is only used from the one thread it is moved to.
 #[cfg(windows)]
@@ -280,7 +272,8 @@ unsafe impl Send for Handle {}
 
 #[cfg(windows)]
 impl Handle {
-    fn event() -> windows::core::Result<Self> {
+    /// The named event the new version sets; the splash creates it first.
+    pub fn event() -> windows::core::Result<Self> {
         use windows::core::HSTRING;
         use windows::Win32::System::Threading::CreateEventW;
         // SAFETY: a named manual-reset event with default security; the
@@ -381,11 +374,97 @@ mod tests {
         assert!(waiter.join().unwrap());
     }
 
-    #[test]
-    fn finds_the_installer_and_stops_waiting_when_it_ends() {
+    /// An unnamed event, so tests never touch a real splash's.
+    fn unnamed() -> Handle {
         use windows::core::PCWSTR;
         use windows::Win32::System::Threading::CreateEventW;
+        Handle(unsafe { CreateEventW(None, true, false, PCWSTR::null()) }.unwrap())
+    }
 
+    fn cmd() -> PathBuf {
+        PathBuf::from(std::env::var("SystemRoot").unwrap()).join(r"System32\cmd.exe")
+    }
+
+    /// Stands in for the old version: it quits on its own after a moment,
+    /// leaving a child of its own behind as the installer.
+    fn old_version() -> std::process::Child {
+        std::process::Command::new(cmd())
+            .args(["/C", "start /B ping -n 2 127.0.0.1 >NUL"])
+            .spawn()
+            .unwrap()
+    }
+
+    const QUICK: Waits = Waits {
+        quit: Duration::from_secs(20),
+        install: Duration::from_secs(20),
+        start: Duration::from_millis(100),
+        read: Duration::ZERO,
+    };
+
+    #[test]
+    fn a_new_version_that_checks_in_ends_the_splash_quietly() {
+        use windows::Win32::System::Threading::SetEvent;
+        let done = unnamed();
+        unsafe { SetEvent(done.0) }.unwrap();
+        let splash = Splash {
+            palette: "dark",
+            parent: u32::MAX,
+            app: PathBuf::from("never-started.exe"),
+        };
+        let mut failed = false;
+        finish(&splash, &done, &QUICK, || failed = true);
+        assert!(!failed);
+    }
+
+    #[test]
+    fn a_failed_install_is_shown_and_the_app_reopened() {
+        let mut old = old_version();
+        let splash = Splash {
+            palette: "dark",
+            parent: old.id(),
+            app: cmd(),
+        };
+        let mut failed = false;
+        finish(&splash, &unnamed(), &QUICK, || failed = true);
+        assert!(failed);
+        old.wait().unwrap();
+        assert!(reopen(Path::new("missing-prismoid.exe")).is_err());
+    }
+
+    #[test]
+    fn start_copies_the_app_out_and_runs_the_copy() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("update");
+        start(&target, &cmd(), "dark").unwrap();
+        assert!(target.join("prismoid-update.exe").is_file());
+    }
+
+    #[test]
+    fn clear_removes_the_splash_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("update");
+        std::fs::create_dir_all(target.join("webview")).unwrap();
+        std::fs::write(target.join("prismoid-update.exe"), b"").unwrap();
+        clear(target.clone());
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while target.exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!target.exists());
+        clear(target);
+        assert_eq!(
+            Splash {
+                palette: "light",
+                parent: 1,
+                app: PathBuf::new()
+            }
+            .url(),
+            "index.html?palette=light"
+        );
+    }
+
+    #[test]
+    fn finds_the_installer_and_stops_waiting_when_it_ends() {
         // A child of this test process that ends on its own, standing in
         // for the installer the old version starts.
         let mut child = std::process::Command::new("cmd")
@@ -393,9 +472,8 @@ mod tests {
             .spawn()
             .unwrap();
         let installer = installer_of(std::process::id()).expect("child found");
-        // An unnamed event nobody sets, so only the child ending stops it.
-        let event = Handle(unsafe { CreateEventW(None, true, false, PCWSTR::null()) }.unwrap());
-        assert!(!event.wait_or(Some(&installer), Duration::from_secs(20)));
+        // Nobody sets the event, so only the child ending stops the wait.
+        assert!(!unnamed().wait_or(Some(&installer), Duration::from_secs(20)));
         child.wait().unwrap();
     }
 }
