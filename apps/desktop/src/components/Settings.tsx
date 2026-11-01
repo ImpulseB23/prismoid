@@ -93,7 +93,7 @@ const SECTION_LABELS: Record<SettingsSection, string> = {
   chat: "Chat",
   highlights: "Mentions & highlights",
   moderation: "Moderation",
-  window: "Window",
+  window: "Windows",
   updates: "Updates",
   help: "Help",
 };

@@ -48,7 +48,7 @@ describe("Settings", () => {
         onSignOut={() => {}}
       />
     ));
-    fireEvent.click(screen.getByRole("button", { name: "Window" }));
+    fireEvent.click(screen.getByRole("button", { name: "Windows" }));
     const startup = screen.getByRole("checkbox", {
       name: /Start with Windows/,
     }) as HTMLInputElement;
