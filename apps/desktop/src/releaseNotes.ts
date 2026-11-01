@@ -17,6 +17,36 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.11.0",
+    headline: "Know who you're looking at",
+    features: [
+      {
+        title: "A user card with the whole story",
+        body: "Click a name and the card opens complete: picture, bio, account age, followers, and their sub to the channel with tier, months and streak, or how long they were subbed before. Click the picture to see it bigger, click a long bio to read all of it, and hover emotes in their messages. Opening the same person again is instant.",
+      },
+      {
+        title: "Updates before the app opens",
+        body: "When Prismoid starts, a small window checks for an update first. If there is one, it downloads and installs it right there and opens the new version, so you never start on an old one.",
+      },
+    ],
+    improvements: [
+      "Hover a sub badge in chat to see how many months.",
+      "Threads, mentions, search and every other popout share one tidy size, and shadows are back in the dark themes.",
+      "Offline channels drop the watch button and the viewer numbers. The chat numbers stay while people are still talking.",
+      "The card follows new messages while you're at the bottom of it.",
+      "A preview tab closes when you move on, unless you typed in it or stayed a while.",
+      "The plus button sits right after your last tab.",
+      "Settings has a Windows section for starting with Windows and the other system options.",
+    ],
+    fixes: [
+      "User cards no longer open behind the app when it's pinned on top, and stay open when you alt-tab.",
+      "Mod actions Twitch refuses show a plain reason instead of Twitch's error text, and you can't time out yourself or the streamer from a card.",
+      "Text in mentions, search and threads can be selected and copied again.",
+      "Deleted messages are cleared from saved history when Prismoid restarts.",
+      "Tabs sit level with the buttons next to them.",
+    ],
+  },
+  {
     version: "0.10.1",
     headline: "Your settings, back where you left them",
     features: [],
