@@ -121,6 +121,9 @@ export type HighlightBadge = (typeof HIGHLIGHT_BADGES)[number];
 export const MAX_TIMEOUT_SECONDS = 1_209_600;
 export const MAX_TIMEOUT_PRESETS = 8;
 
+/** What Settings offers for closing ended chats, 0 being never. */
+export const OFFLINE_CLOSE_CHOICES = [0, 2, 5, 10];
+
 export const DEFAULT_SETTINGS: Settings = {
   alwaysOnTop: false,
   zoom: 1,
@@ -471,7 +474,9 @@ function readSettings(storage: StorageLike | null): Settings {
           ? p.streamManagerHeight
           : DEFAULT_SETTINGS.streamManagerHeight,
     };
-  } catch {
+  } catch (err) {
+    // Falling back quietly once hid a load that failed every start.
+    console.error("saved settings unreadable, using defaults", err);
     return DEFAULT_SETTINGS;
   }
 }
@@ -637,9 +642,6 @@ function readTextSize(v: unknown, legacy: boolean): number {
 
 // Twitch accepts slow mode from 1 to 120 seconds and follower age up to
 // three months.
-/** What Settings offers for closing ended chats, 0 being never. */
-export const OFFLINE_CLOSE_CHOICES = [0, 2, 5, 10];
-
 function intIn(v: unknown, min: number, max: number): number | null {
   return typeof v === "number" && Number.isInteger(v) && v >= min && v <= max
     ? v
