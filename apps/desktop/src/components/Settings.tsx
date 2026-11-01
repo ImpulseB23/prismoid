@@ -93,7 +93,7 @@ const SECTION_LABELS: Record<SettingsSection, string> = {
   chat: "Chat",
   highlights: "Mentions & highlights",
   moderation: "Moderation",
-  window: "Window",
+  window: "Windows",
   updates: "Updates",
   help: "Help",
 };
@@ -1059,7 +1059,9 @@ const Settings: Component<SettingsProps> = (props) => {
               />
             </label>
           </Show>
+          {/* How Prismoid fits into Windows itself. */}
           <Show when={settingsSection() === "window"}>
+            <StartupRow run={run} />
             <label class="settings__row settings__row--toggle">
               <div class="settings__text">
                 <span class="settings__name">Keep on top</span>
@@ -1092,7 +1094,6 @@ const Settings: Component<SettingsProps> = (props) => {
                 }
               />
             </label>
-            <StartupRow run={run} />
           </Show>
           <Show when={settingsSection() === "updates"}>
             <UpdateRow marked={rowMarked("update")} />
