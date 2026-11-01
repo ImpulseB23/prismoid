@@ -1,7 +1,9 @@
-// App updates through the Tauri updater: a check at launch that installs
-// on its own if it finds something, and checks every half hour, on focus
-// and from Settings that download quietly and then offer a restart. The
-// plugin calls are injected so the store runs without a runtime.
+// App updates through the Tauri updater while prismoid runs: checks every
+// half hour, on focus and from Settings that download quietly and then
+// offer a restart. Updates found at launch are the startup window's job
+// (see launchUpdate); a launch without it, like autostart into the tray,
+// checks here. The plugin calls are injected so the store runs without a
+// runtime.
 
 import { createSignal } from "solid-js";
 import { check, type Update } from "@tauri-apps/plugin-updater";
@@ -9,9 +11,6 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { invoke } from "@tauri-apps/api/core";
 import { palette } from "./themeStore";
 
-/** An update found this soon after launch installs on its own, before
- * anyone has started reading chat. Later finds only nudge. */
-export const LAUNCH_WINDOW_MS = 4_000;
 export const CHECK_EVERY_MS = 30 * 60 * 1000;
 /** Coming back to the window checks again once the last check is this old. */
 export const FOCUS_RECHECK_MS = 5 * 60 * 1000;
@@ -61,16 +60,16 @@ export interface UpdateStore {
 }
 
 export function createUpdateStore(
-  lookup: () => Promise<PendingUpdate | null> = checkViaPlugin,
+  lookup: () => Promise<PendingUpdate | null> = findUpdate,
   restart: () => Promise<void> = relaunch,
   now: () => number = Date.now,
   onFocus: (cb: () => void) => () => void = windowFocus,
-  cover: () => Promise<void> = startSplash,
+  cover: () => Promise<void> = startUpdateSplash,
+  checkedAtLaunch: () => Promise<boolean> = () => invoke("launch_update_ran"),
 ): UpdateStore {
   const [state, setState] = createSignal<UpdateState>({ kind: "idle" });
   let pending: PendingUpdate | null = null;
   let generation = 0;
-  let launchedAt = 0;
   let lastCheckAt = 0;
   // The quiet download of `pending`, with its progress so far. Installing
   // while it runs waits on it instead of fetching the file twice.
@@ -114,7 +113,7 @@ export function createUpdateStore(
     return run;
   }
 
-  async function runCheck(manual: boolean, atLaunch = false): Promise<void> {
+  async function runCheck(manual: boolean): Promise<void> {
     const current = state().kind;
     if (current === "downloading" || current === "ready") return;
     const gen = ++generation;
@@ -141,8 +140,7 @@ export function createUpdateStore(
           version: update.version,
           notes: update.body ?? null,
         });
-        if (atLaunch && now() - launchedAt <= LAUNCH_WINDOW_MS) void install();
-        else void startFetch(update);
+        void startFetch(update);
       } else {
         pending = null;
         quiet = null;
@@ -209,8 +207,14 @@ export function createUpdateStore(
   }
 
   function schedule(): () => void {
-    launchedAt = now();
-    void runCheck(false, true);
+    // The startup window already looked, unless the app started without it.
+    lastCheckAt = now();
+    void checkedAtLaunch().then(
+      (ran) => {
+        if (!ran) void runCheck(false);
+      },
+      () => void runCheck(false),
+    );
     const every = setInterval(() => void runCheck(false), CHECK_EVERY_MS);
     const stopFocus = onFocus(() => {
       if (now() - lastCheckAt >= FOCUS_RECHECK_MS) void runCheck(false);
@@ -230,8 +234,13 @@ export function createUpdateStore(
   };
 }
 
-async function checkViaPlugin(): Promise<PendingUpdate | null> {
-  const update: Update | null = await check();
+/** The plugin's check, as the store and the startup window use it. */
+export async function findUpdate(
+  timeoutMs?: number,
+): Promise<PendingUpdate | null> {
+  const update: Update | null = await check(
+    timeoutMs === undefined ? undefined : { timeout: timeoutMs },
+  );
   if (!update) return null;
   return {
     version: update.version,
@@ -241,7 +250,8 @@ async function checkViaPlugin(): Promise<PendingUpdate | null> {
   };
 }
 
-function startSplash(): Promise<void> {
+/** Starts the window that covers the install once the app quits. */
+export function startUpdateSplash(): Promise<void> {
   return invoke("update_splash_start", { palette: palette() });
 }
 

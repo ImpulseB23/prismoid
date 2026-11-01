@@ -17,12 +17,16 @@ import {
 
 /** Matches the host's update splash window. */
 export const UPDATE_SPLASH_LABEL = "update-splash";
+/** Matches the host's startup window. */
+export const LAUNCH_UPDATE_LABEL = "launch-update";
 
 export async function boot(label: string, root: HTMLElement): Promise<void> {
   if (label === STORAGE_MOVE_LABEL) return exportOldStorage(localStorage);
   let Root: Component;
   if (label === UPDATE_SPLASH_LABEL) {
     Root = (await import("./UpdateSplash")).default;
+  } else if (label === LAUNCH_UPDATE_LABEL) {
+    Root = (await import("./LaunchUpdate")).default;
   } else if (isCardWindow(label)) {
     Root = (await import("./UserCardWindow")).default;
   } else if (isVideoWindow(label)) {

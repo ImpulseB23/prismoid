@@ -4,6 +4,7 @@ pub mod browser_follow;
 pub mod chat_history;
 mod first_messages;
 mod host;
+mod launch_update;
 pub mod logging;
 mod message;
 pub mod oauth_pkce;
@@ -106,6 +107,7 @@ pub fn run() {
         .manage(tray::CloseToTray::default())
         .manage(user_card::UserCards::default())
         .manage(storage_move::StorageMove::default())
+        .manage(launch_update::LaunchCheck::default())
         .on_window_event(on_window_event)
         .invoke_handler(tauri::generate_handler![
             get_platform,
@@ -114,6 +116,8 @@ pub fn run() {
             reset::reset_all_data,
             uninstall::uninstall_app,
             update_splash::update_splash_start,
+            launch_update::launch_update_done,
+            launch_update::launch_update_ran,
             twitch_auth::commands::twitch_auth_status,
             twitch_auth::commands::twitch_start_login,
             twitch_auth::commands::twitch_complete_login,
@@ -303,8 +307,16 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
     if let Some(window) = app.get_webview_window("main") {
         window.set_decorations(false)?;
     }
+    // A normal start opens in the startup window, which looks for an update
+    // before the app shows. Dev builds do not update; a start into the tray
+    // stays quiet and checks in the background.
     if !tray::launched_minimized(std::env::args()) {
-        tray::show_main(app.handle());
+        if tauri::is_dev() {
+            tray::show_main(app.handle());
+        } else if let Err(e) = launch_update::start(app.handle()) {
+            tracing::error!(error = %e, "startup window failed, opening the app");
+            tray::show_main(app.handle());
+        }
     }
     #[cfg(windows)]
     update_splash::release();
