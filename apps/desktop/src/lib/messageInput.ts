@@ -58,6 +58,24 @@ export function formatSendError(err: SendMessageError): string {
         default:
           return "YouTube did not take the message. Try again in a moment.";
       }
+    case "moderation":
+      if (err.code === "unauthorized" || err.status === 401) {
+        return "Twitch rejected the session. Reconnect in Settings.";
+      }
+      if (err.code === "rate_limited" || err.status === 429) {
+        return "Twitch needs a moment between these. Try again shortly.";
+      }
+      if (err.status === 403)
+        return "You need to be a moderator here for that.";
+      if (err.status === 400) return "Twitch does not allow that here.";
+      if (err.status === 404) return "That is no longer there.";
+      if (err.status === 409) {
+        return "Someone else is changing this right now. Try again.";
+      }
+      if (err.status >= 500) {
+        return "Twitch is having trouble right now. Try again in a moment.";
+      }
+      return "Twitch did not do that. Try again in a moment.";
   }
 }
 
@@ -78,6 +96,7 @@ const VARIANT_GUARDS: Record<
   message_too_long_chars: (v) => typeof v.max_chars === "number",
   helix: (v) => typeof v.code === "string" && typeof v.message === "string",
   youtube: (v) => typeof v.code === "string" && typeof v.message === "string",
+  moderation: (v) => typeof v.code === "string" && typeof v.status === "number",
 };
 
 // Strict guard for objects coming back from Tauri's invoke reject path.

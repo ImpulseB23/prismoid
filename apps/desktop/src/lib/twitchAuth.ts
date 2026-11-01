@@ -106,7 +106,8 @@ export type SendMessageError =
   | { kind: "auth"; message: string }
   | { kind: "json"; message: string }
   | { kind: "helix"; code: string; message: string }
-  | { kind: "youtube"; code: string; message: string };
+  | { kind: "youtube"; code: string; message: string }
+  | { kind: "moderation"; code: string; status: number };
 
 export const MAX_CHAT_MESSAGE_BYTES = 500;
 

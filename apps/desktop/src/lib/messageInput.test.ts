@@ -106,6 +106,24 @@ describe("formatSendError", () => {
   });
 });
 
+describe("formatSendError for mod actions", () => {
+  const mod = (code: string, status: number) =>
+    formatSendError({ kind: "moderation", code, status });
+
+  it("words each refusal by status", () => {
+    expect(mod("unauthorized", 401)).toMatch(/reconnect/i);
+    expect(mod("rate_limited", 429)).toMatch(/a moment/);
+    expect(mod("helix", 403)).toMatch(/moderator/);
+    expect(mod("helix", 400)).toBe("Twitch does not allow that here.");
+    expect(mod("helix", 404)).toBe("That is no longer there.");
+    expect(mod("helix", 409)).toMatch(/someone else/i);
+    expect(mod("helix", 503)).toMatch(/trouble/);
+    expect(mod("helix", 0)).toBe(
+      "Twitch did not do that. Try again in a moment.",
+    );
+  });
+});
+
 describe("toSendError", () => {
   it("passes through valid structured errors", () => {
     const err = { kind: "empty_message" };
@@ -126,6 +144,7 @@ describe("toSendError", () => {
       { kind: "message_too_long_chars", max_chars: 200 },
       { kind: "helix", code: "c", message: "m" },
       { kind: "youtube", code: "c", message: "m" },
+      { kind: "moderation", code: "helix", status: 400 },
     ];
     for (const c of cases) {
       expect(toSendError(c)).toBe(c);

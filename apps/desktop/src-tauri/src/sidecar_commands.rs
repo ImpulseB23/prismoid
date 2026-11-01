@@ -282,6 +282,14 @@ pub enum SendCommandError {
         code: String,
         message: String,
     },
+    /// Twitch refused a moderation command. Helix's own text is written
+    /// for developers and stays in the sidecar's log; the UI words it from
+    /// the status and the sidecar's code (`unauthorized`, `rate_limited`,
+    /// `helix`).
+    Moderation {
+        code: String,
+        status: u16,
+    },
 }
 
 impl SendCommandError {
@@ -326,7 +334,13 @@ impl SendCommandError {
     }
 
     fn from_mod_result(r: SendChatResult) -> Result<(), Self> {
-        Self::from_send_result_with(r, |code, message| Self::Helix { code, message }).map(|_| ())
+        if r.ok {
+            return Ok(());
+        }
+        Err(Self::Moderation {
+            code: r.drop_code,
+            status: r.http_status,
+        })
     }
 
     fn from_send_result_with(
@@ -931,21 +945,19 @@ mod tests {
     }
 
     #[test]
-    fn from_mod_result_maps_failure_to_helix_variant() {
-        match SendCommandError::from_mod_result(make_result(
+    fn from_mod_result_keeps_the_status_and_drops_helix_text() {
+        let mut r = make_result(
             false,
-            "unauthorized",
-            "missing scope",
+            "helix",
+            "twitch helix 400 Bad Request: The user specified in the user_id field may not be banned/timed out.",
             "",
-        ))
-        .unwrap_err()
-        {
-            SendCommandError::Helix { code, message } => {
-                assert_eq!(code, "unauthorized");
-                assert_eq!(message, "missing scope");
-            }
-            other => panic!("expected Helix, got {other:?}"),
-        }
+        );
+        r.http_status = 400;
+        let err = SendCommandError::from_mod_result(r).unwrap_err();
+        assert_eq!(
+            serde_json::to_value(&err).unwrap(),
+            serde_json::json!({"kind": "moderation", "code": "helix", "status": 400})
+        );
     }
 
     #[test]
