@@ -39,19 +39,28 @@ const PatchNotes: Component = () => {
               </span>
               <h2 class="notes__headline">{n().headline}</h2>
             </div>
-            <ul class="notes__features">
-              <For each={n().features}>
-                {(f) => (
-                  <li class="notes__feature">
-                    <span class="notes__title">{f.title}</span>
-                    <span class="notes__body">{f.body}</span>
-                  </li>
-                )}
-              </For>
-            </ul>
+            <Show when={n().features.length > 0}>
+              <h3 class="notes__label">New</h3>
+              <ul class="notes__features">
+                <For each={n().features}>
+                  {(f) => (
+                    <li class="notes__feature">
+                      <span class="notes__title">{f.title}</span>
+                      <span class="notes__body">{f.body}</span>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
+            <Show when={n().improvements.length > 0}>
+              <h3 class="notes__label">Improved</h3>
+              <ul class="notes__lines">
+                <For each={n().improvements}>{(f) => <li>{f}</li>}</For>
+              </ul>
+            </Show>
             <Show when={n().fixes.length > 0}>
-              <div class="dialog__label">Also in this update</div>
-              <ul class="notes__fixes">
+              <h3 class="notes__label">Fixed</h3>
+              <ul class="notes__lines">
                 <For each={n().fixes}>{(f) => <li>{f}</li>}</For>
               </ul>
             </Show>

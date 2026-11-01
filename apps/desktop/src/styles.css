@@ -4198,12 +4198,22 @@ option::checkmark {
   line-height: 1.2;
 }
 
+.notes__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--text-faint);
+  padding: 16px 18px 8px;
+}
+
 .notes__features {
   list-style: none;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 16px 18px 4px;
+  padding: 0 18px;
 }
 
 .notes__feature {
@@ -4225,7 +4235,7 @@ option::checkmark {
   line-height: 1.45;
 }
 
-.notes__fixes {
+.notes__lines {
   padding: 0 18px 0 34px;
   display: flex;
   flex-direction: column;

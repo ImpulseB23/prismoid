@@ -38,7 +38,13 @@ describe("whatsNewStore", () => {
   });
 
   it("opens the patch notes when the new version has them", async () => {
-    const note = { version: "0.6.0", headline: "h", features: [], fixes: [] };
+    const note = {
+      version: "0.6.0",
+      headline: "h",
+      features: [],
+      improvements: [],
+      fixes: [],
+    };
     const store = createWhatsNewStore(
       memStorage({ "prismoid.lastVersion": "0.5.0" }),
       async () => "0.6.0",
@@ -75,7 +81,13 @@ describe("whatsNewStore", () => {
 
   it("treats someone signed in without a recorded version as returning", async () => {
     // Versions before 0.6.0 never recorded one.
-    const note = { version: "0.8.0", headline: "h", features: [], fixes: [] };
+    const note = {
+      version: "0.8.0",
+      headline: "h",
+      features: [],
+      improvements: [],
+      fixes: [],
+    };
     const storage = memStorage();
     const store = createWhatsNewStore(
       storage,

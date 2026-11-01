@@ -7,7 +7,11 @@ import { compareVersions } from "./lib/version";
 export interface ReleaseNote {
   version: string;
   headline: string;
+  /** New, as a title and a sentence or two each. */
   features: { title: string; body: string }[];
+  /** Improved, one line each. */
+  improvements: string[];
+  /** Fixed, one line each. */
   fixes: string[];
 }
 
@@ -15,13 +19,11 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: "0.9.3",
     headline: "Updates that always land",
-    features: [
-      {
-        title: "No more vanishing",
-        body: "If an update can't finish, the small update window says so and Prismoid opens again on its own, ready to try once more.",
-      },
+    features: [],
+    improvements: [],
+    fixes: [
+      "If an update can't finish, Prismoid says so and opens again on its own instead of disappearing.",
     ],
-    fixes: [],
   },
   {
     version: "0.9.2",
@@ -31,10 +33,9 @@ export const RELEASE_NOTES: ReleaseNote[] = [
         title: "Ban or timeout, and for how long",
         body: "When someone gets removed from chat, the line now says whether they were banned or timed out and for how long. Bans show in red, timeouts in orange.",
       },
-      {
-        title: "Updates you can see",
-        body: "From the next update on, a small Prismoid window stays up while the new version installs, so the app no longer just vanishes for a few seconds.",
-      },
+    ],
+    improvements: [
+      "A small Prismoid window stays up while an update installs, so the app no longer just vanishes for a few seconds.",
     ],
     fixes: [],
   },
@@ -63,6 +64,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
         body: "Hover a badge to see it large with its name, or a name to see who it is and how old the account is. Drag tabs to put them in any order.",
       },
     ],
+    improvements: [],
     fixes: [
       "Slow mode counts down in every channel, not only where you mod, so messages no longer get turned away for being too early.",
       "When Twitch briefly refuses a message, Prismoid tries again on its own, and errors read like sentences.",
@@ -89,6 +91,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
         body: "Your message shows up with your name color, badges and emotes the moment you press Enter, instead of catching up a second later.",
       },
     ],
+    improvements: [],
     fixes: [
       "Mentions marks only the ones you have not seen, with a thin line under the message.",
       "Cards follow your zoom and chat text size.",
@@ -115,6 +118,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
         body: "Play the mention chime from Settings, set its volume, and have it ring even while Prismoid is in front.",
       },
     ],
+    improvements: [],
     fixes: [
       "When Settings has a dot, the section and the setting it means are marked too.",
       "Raids and gift bombs get a gold edge in chat.",
@@ -149,6 +153,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
         body: "Prismoid asks Twitch for stream permissions only when you turn a part of the stream manager on, so viewers and mods never see the prompt.",
       },
     ],
+    improvements: [],
     fixes: [
       "Settings no longer slips under the window buttons in fullscreen.",
       "Chat modes no longer get stuck on Loading after switching channels.",
@@ -188,6 +193,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
         body: "Settings opens as a full page with sections. Copy logs, reset or uninstall from Troubleshooting when something goes wrong.",
       },
     ],
+    improvements: [],
     fixes: [
       "Right-click menus that fit the app, everywhere it makes sense.",
       "Mods can delete their own messages, and a More button on each message holds the rest.",
@@ -240,6 +246,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
         body: "Start Prismoid with Windows and let the X tuck it into the tray instead of closing it.",
       },
     ],
+    improvements: [],
     fixes: [
       "A soft chime and a taskbar flash when someone says your name while you're looking elsewhere.",
       "Hover any message for quick Reply and Copy buttons.",
