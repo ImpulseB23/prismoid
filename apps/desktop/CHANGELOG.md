@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.3](https://github.com/ImpulseB23/prismoid/compare/v0.9.2...v0.9.3) (2026-11-01)
+
+
+### Bug Fixes
+
+* reopen the app after a failed update ([#363](https://github.com/ImpulseB23/prismoid/issues/363)) ([a17f99e](https://github.com/ImpulseB23/prismoid/commit/a17f99e2dfceacbe4a809a0229f34786e15c7c4b))
+
 ## [0.9.2](https://github.com/ImpulseB23/prismoid/compare/v0.9.1...v0.9.2) (2026-11-01)
 
 
