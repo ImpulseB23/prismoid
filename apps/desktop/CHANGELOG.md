@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.1](https://github.com/ImpulseB23/prismoid/compare/v0.10.0...v0.10.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* saved settings ignored on every start since 0.10.0 ([#372](https://github.com/ImpulseB23/prismoid/issues/372)) ([80ed406](https://github.com/ImpulseB23/prismoid/commit/80ed4067e2cc5b11402baef6f79a153d9d1bc82a))
+* update button shows as soon as an update is found ([#371](https://github.com/ImpulseB23/prismoid/issues/371)) ([80d4f53](https://github.com/ImpulseB23/prismoid/commit/80d4f53adbfac21316fd0722deae96010f23c1eb))
+
 ## [0.10.0](https://github.com/ImpulseB23/prismoid/compare/v0.9.3...v0.10.0) (2026-11-01)
 
 
