@@ -12,6 +12,7 @@
 //! falls back to the signed-in user's own channel.
 
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -21,6 +22,7 @@ use tauri::State;
 use tokio::sync::watch;
 
 use crate::chat_history::History;
+use crate::ttl_cache::TtlCache;
 use crate::twitch_auth::{AuthError, AuthState, TWITCH_CLIENT_ID};
 use crate::twitch_channel_info::{fetch_channel_info, ChannelInfo};
 
@@ -39,7 +41,16 @@ pub struct ChannelState {
     helix_base: String,
     followers: FollowerCache,
     followed: FollowedCache,
+    profiles: TtlCache<String, UserInfo>,
+    follows: TtlCache<(String, String), Option<String>>,
 }
+
+/// Profiles change rarely and every chatter's is looked up for the feed's
+/// account flags, so they keep for a while and the cap is generous.
+const PROFILE_TTL: Duration = Duration::from_secs(10 * 60);
+const PROFILE_CAP: usize = 5000;
+const FOLLOW_TTL: Duration = Duration::from_secs(5 * 60);
+const FOLLOW_CAP: usize = 500;
 
 /// What the sidecar supervisor watches: every channel to keep joined, in
 /// tab order, and the one the window shows. An empty `joined` means the
@@ -74,6 +85,8 @@ impl ChannelState {
                 helix_base: helix_base.into(),
                 followers: FollowerCache::default(),
                 followed: FollowedCache::default(),
+                profiles: TtlCache::new(PROFILE_TTL, PROFILE_CAP),
+                follows: TtlCache::new(FOLLOW_TTL, FOLLOW_CAP),
             },
             rx,
         )
@@ -1183,6 +1196,50 @@ pub async fn fetch_follow_since(
     Ok(page.data.into_iter().next().map(|r| r.followed_at))
 }
 
+/// How many follow `user_id`'s channel, for the user card. Twitch gives
+/// the total to anyone; repeat lookups come from the same cache channel
+/// search fills.
+#[tauri::command]
+pub async fn twitch_follower_count(
+    auth: State<'_, AuthState>,
+    channels: State<'_, ChannelState>,
+    user_id: String,
+) -> Result<Option<u64>, ChannelError> {
+    cached_follower_count(&channels.followers, user_id, |id| async {
+        let tokens = auth.manager.load_or_refresh().await?;
+        let http = auth.manager.http_client().clone();
+        Ok(
+            follower_total(http, channels.helix_base.clone(), tokens.access_token, id)
+                .await
+                .1,
+        )
+    })
+    .await
+}
+
+/// The follower total from `cache`, or `fetch`'s, kept when Twitch said.
+async fn cached_follower_count<F, Fut>(
+    cache: &FollowerCache,
+    user_id: String,
+    fetch: F,
+) -> Result<Option<u64>, ChannelError>
+where
+    F: FnOnce(String) -> Fut,
+    Fut: Future<Output = Result<Option<u64>, ChannelError>>,
+{
+    if let Some(total) = cache.lock().expect("follower cache poisoned").get(&user_id) {
+        return Ok(Some(*total));
+    }
+    let total = fetch(user_id.clone()).await?;
+    if let Some(total) = total {
+        cache
+            .lock()
+            .expect("follower cache poisoned")
+            .insert(user_id, total);
+    }
+    Ok(total)
+}
+
 #[tauri::command]
 pub async fn twitch_follow_since(
     auth: State<'_, AuthState>,
@@ -1190,16 +1247,22 @@ pub async fn twitch_follow_since(
     channel_id: String,
     user_id: String,
 ) -> Result<Option<String>, ChannelError> {
-    let tokens = auth.manager.load_or_refresh().await?;
-    fetch_follow_since(
-        auth.manager.http_client(),
-        &channels.helix_base,
-        &tokens.access_token,
-        &tokens.user_id,
-        &channel_id,
-        &user_id,
-    )
-    .await
+    let key = (channel_id.clone(), user_id.clone());
+    channels
+        .follows
+        .get_or_try_insert_with(key, || async {
+            let tokens = auth.manager.load_or_refresh().await?;
+            fetch_follow_since(
+                auth.manager.http_client(),
+                &channels.helix_base,
+                &tokens.access_token,
+                &tokens.user_id,
+                &channel_id,
+                &user_id,
+            )
+            .await
+        })
+        .await
 }
 
 #[derive(Deserialize)]
@@ -1378,17 +1441,48 @@ pub async fn twitch_users_info(
     channels: State<'_, ChannelState>,
     ids: Vec<String>,
 ) -> Result<Vec<UserInfo>, ChannelError> {
-    if ids.is_empty() {
-        return Ok(Vec::new());
-    }
-    let tokens = auth.manager.load_or_refresh().await?;
-    fetch_users_info(
-        auth.manager.http_client(),
-        &channels.helix_base,
-        &tokens.access_token,
-        &ids,
-    )
+    let (auth, channels) = (&*auth, &*channels);
+    cached_users_info(&channels.profiles, ids, |missing| async move {
+        let tokens = auth.manager.load_or_refresh().await?;
+        fetch_users_info(
+            auth.manager.http_client(),
+            &channels.helix_base,
+            &tokens.access_token,
+            &missing,
+        )
+        .await
+    })
     .await
+}
+
+/// Profiles for `ids`: the cached ones, plus one batched fetch for the
+/// rest, which are cached in turn.
+async fn cached_users_info<F, Fut>(
+    cache: &TtlCache<String, UserInfo>,
+    ids: Vec<String>,
+    fetch: F,
+) -> Result<Vec<UserInfo>, ChannelError>
+where
+    F: FnOnce(Vec<String>) -> Fut,
+    Fut: Future<Output = Result<Vec<UserInfo>, ChannelError>>,
+{
+    let mut out = Vec::with_capacity(ids.len());
+    let mut missing = Vec::new();
+    for id in ids {
+        match cache.get(&id) {
+            Some(info) => out.push(info),
+            None => missing.push(id),
+        }
+    }
+    if missing.is_empty() {
+        return Ok(out);
+    }
+    let fetched = fetch(missing).await?;
+    for info in &fetched {
+        cache.insert(info.id.clone(), info.clone());
+    }
+    out.extend(fetched);
+    Ok(out)
 }
 
 /// Resolves any Twitch login to its id and names, for slash commands that
@@ -1414,6 +1508,59 @@ pub async fn twitch_lookup_user(
 mod tests {
     use super::*;
     use httpmock::prelude::*;
+
+    fn profile(id: &str) -> UserInfo {
+        UserInfo {
+            id: id.into(),
+            login: id.into(),
+            display_name: id.into(),
+            profile_image_url: String::new(),
+            description: String::new(),
+            created_at: String::new(),
+            broadcaster_type: String::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn profiles_fetch_only_what_the_cache_lacks() {
+        let cache = TtlCache::new(Duration::from_secs(60), 10);
+        cache.insert("a".to_string(), profile("a"));
+        let got = cached_users_info(&cache, vec!["a".into(), "b".into()], |missing| async move {
+            assert_eq!(missing, ["b"]);
+            Ok(vec![profile("b")])
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            got.iter().map(|u| u.id.as_str()).collect::<Vec<_>>(),
+            ["a", "b"]
+        );
+        let cached = cached_users_info(&cache, vec!["b".into()], |_| async {
+            panic!("served from the cache")
+        })
+        .await
+        .unwrap();
+        assert_eq!(cached[0].id, "b");
+    }
+
+    #[tokio::test]
+    async fn follower_counts_keep_answers_and_skip_unknowns() {
+        let cache = FollowerCache::default();
+        let unknown = cached_follower_count(&cache, "u".into(), |_| async { Ok(None) }).await;
+        assert_eq!(unknown.unwrap(), None);
+        let failed = cached_follower_count(&cache, "u".into(), |_| async {
+            Err(ChannelError::InvalidLogin)
+        })
+        .await;
+        assert!(failed.is_err());
+        let got = cached_follower_count(&cache, "u".into(), |_| async { Ok(Some(22)) }).await;
+        assert_eq!(got.unwrap(), Some(22));
+        let again = cached_follower_count(&cache, "u".into(), |_| async {
+            panic!("served from the cache")
+        })
+        .await;
+        assert_eq!(again.unwrap(), Some(22));
+    }
 
     #[test]
     fn normalize_login_accepts_handles_and_case() {

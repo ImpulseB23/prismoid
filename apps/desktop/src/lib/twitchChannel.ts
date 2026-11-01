@@ -261,6 +261,61 @@ export function getLiveChannels(channelIds: string[]): Promise<string[]> {
   return invoke("twitch_live_channels", { channelIds });
 }
 
+/** A chatter's sub to a channel, from ivr.fi (see ivr.rs). */
+export interface SubAge {
+  hidden: boolean;
+  kind: "paid" | "gift" | "prime" | null;
+  tier: string | null;
+  months: number | null;
+  streak: number | null;
+  followed_at: string | null;
+}
+
+/** How many follow the user's channel; null when Twitch would not say. */
+export function getFollowerCount(userId: string): Promise<number | null> {
+  return invoke("twitch_follower_count", { userId });
+}
+
+export function getSubAge(user: string, channel: string): Promise<SubAge> {
+  return invoke("twitch_subage", { user, channel });
+}
+
+function monthsText(n: number): string {
+  return n === 1 ? "1 month" : `${n} months`;
+}
+
+export interface SubLine {
+  text: string;
+  /** Subscribed right now, not only in the past. */
+  current: boolean;
+}
+
+/** The user card's sub line, or null when there is nothing to say. */
+export function describeSub(s: SubAge): SubLine | null {
+  if (s.hidden) return { text: "Sub status hidden", current: false };
+  if (s.tier !== null) {
+    const plan =
+      s.kind === "prime"
+        ? "Prime"
+        : `Tier ${s.tier}${s.kind === "gift" ? " gift" : ""}`;
+    if (s.months === null) return { text: plan, current: true };
+    const streak =
+      s.streak !== null && s.streak !== s.months
+        ? `, ${s.streak}-month streak`
+        : "";
+    return {
+      text: `${plan} - Subscribed for ${monthsText(s.months)}${streak}`,
+      current: true,
+    };
+  }
+  return s.months !== null
+    ? {
+        text: `Previously subscribed for ${monthsText(s.months)}`,
+        current: false,
+      }
+    : null;
+}
+
 /** Resolves a login to its id and display name. */
 export function lookupUser(login: string): Promise<Channel> {
   return invoke("twitch_lookup_user", { login });

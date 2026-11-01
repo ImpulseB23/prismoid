@@ -4,6 +4,7 @@ pub mod browser_follow;
 pub mod chat_history;
 mod first_messages;
 mod host;
+mod ivr;
 mod launch_update;
 pub mod logging;
 mod message;
@@ -19,6 +20,7 @@ mod sidecar_job;
 mod sidecar_supervisor;
 mod storage_move;
 mod tray;
+mod ttl_cache;
 pub mod twitch_ads;
 pub mod twitch_auth;
 pub mod twitch_channel;
@@ -106,6 +108,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(tray::CloseToTray::default())
         .manage(user_card::UserCards::default())
+        .manage(ivr::SubAgeCache::default())
         .manage(storage_move::StorageMove::default())
         .manage(launch_update::LaunchCheck::default())
         .on_window_event(on_window_event)
@@ -159,6 +162,8 @@ pub fn run() {
             twitch_channel::twitch_moderated_channels,
             twitch_channel::twitch_users_info,
             twitch_channel::twitch_follow_since,
+            twitch_channel::twitch_follower_count,
+            ivr::twitch_subage,
             twitch_channel::twitch_own_chat_color,
             twitch_channel::twitch_update_chat_color,
             sidecar_supervisor::current_emote_bundle,

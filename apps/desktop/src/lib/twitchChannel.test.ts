@@ -1,9 +1,80 @@
-import { describe, expect, it } from "vitest";
-import {
+import { describe, expect, it, vi } from "vitest";
+
+const invoke = vi.fn<(cmd: string, args: unknown) => Promise<unknown>>(
+  async () => null,
+);
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: (cmd: string, args: unknown) => invoke(cmd, args),
+}));
+
+const {
+  describeSub,
   formatChannelError,
+  getFollowerCount,
+  getSubAge,
   isForChannel,
   normalizeLogin,
-} from "./twitchChannel";
+} = await import("./twitchChannel");
+type SubAge = import("./twitchChannel").SubAge;
+
+describe("card lookups", () => {
+  it("ask the host by user and channel", async () => {
+    await getFollowerCount("u1");
+    await getSubAge("viewer", "streamer");
+    expect(invoke.mock.calls).toEqual([
+      ["twitch_follower_count", { userId: "u1" }],
+      ["twitch_subage", { user: "viewer", channel: "streamer" }],
+    ]);
+  });
+});
+
+describe("describeSub", () => {
+  const base: SubAge = {
+    hidden: false,
+    kind: "paid",
+    tier: "1",
+    months: 21,
+    streak: 12,
+    followed_at: null,
+  };
+
+  it("describes a current sub with its streak", () => {
+    expect(describeSub(base)).toEqual({
+      text: "Tier 1 - Subscribed for 21 months, 12-month streak",
+      current: true,
+    });
+  });
+
+  it("leaves out a streak that covers every month", () => {
+    expect(
+      describeSub({ ...base, kind: "prime", months: 1, streak: 1 })?.text,
+    ).toBe("Prime - Subscribed for 1 month");
+  });
+
+  it("marks gifts and plans without a month count", () => {
+    expect(describeSub({ ...base, kind: "gift", months: null })).toEqual({
+      text: "Tier 1 gift",
+      current: true,
+    });
+  });
+
+  it("describes an ended sub", () => {
+    expect(describeSub({ ...base, tier: null, months: 2 })).toEqual({
+      text: "Previously subscribed for 2 months",
+      current: false,
+    });
+  });
+
+  it("says nothing for someone who never subbed", () => {
+    expect(describeSub({ ...base, tier: null, months: null })).toBeNull();
+  });
+
+  it("keeps a hidden status hidden", () => {
+    expect(describeSub({ ...base, hidden: true })?.text).toBe(
+      "Sub status hidden",
+    );
+  });
+});
 
 describe("isForChannel", () => {
   it("filters twitch messages by broadcaster id", () => {
