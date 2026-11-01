@@ -33,6 +33,7 @@ ignore:
   - "apps/desktop/src-tauri/src/main.rs" # 3-line binary shim
   - "apps/desktop/src-tauri/src/twitch_auth/commands.rs" # thin #[tauri::command] adapters; logic lives in auth_state.rs
   - "apps/desktop/src-tauri/src/storage_move/commands.rs" # thin #[tauri::command] adapters; logic lives in storage_move/mod.rs
+  - "apps/desktop/src-tauri/src/user_card/commands.rs" # card window commands and wiring; logic lives in user_card/mod.rs
 
 comment:
   layout: "reach,diff,flags"
