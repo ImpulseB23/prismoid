@@ -52,9 +52,11 @@ const chat = {
   ],
   markDeleted: vi.fn(),
 } as unknown as ChatStore;
+const profiles = new Map<string, Record<string, string>>();
 vi.mock("../stores/userInfoStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../stores/userInfoStore")>()),
   ensureUserInfo: () => {},
+  userInfo: (id: string) => profiles.get(id),
 }));
 
 vi.mock("../stores/paintStore", async (importOriginal) => ({
@@ -369,5 +371,127 @@ describe("UserCard mod history", () => {
     ));
     fireEvent.click(screen.getByRole("tab", { name: /Mod history/ }));
     expect(screen.getByText(/Mo timed out Viewer for .*: spam/)).toBeTruthy();
+  });
+
+  describe("with a profile", () => {
+    const props = {
+      chat,
+      login: "me",
+      onClose: () => {},
+      onMention: () => {},
+      onJump: () => {},
+      user: viewer,
+    };
+
+    afterEach(() => profiles.clear());
+
+    const withProfile = () => {
+      profiles.set("42", {
+        id: "42",
+        login: "viewer",
+        display_name: "Viewer",
+        profile_image_url: "https://example.com/a.png",
+        description: "I stream and I chat and I write a very long bio.",
+        created_at: "2012-06-01T00:00:00Z",
+        broadcaster_type: "",
+      });
+      profiles.set("1", { id: "1", login: "streamer" });
+    };
+
+    it("shows the sub line and a bigger picture on a click", async () => {
+      withProfile();
+      render(() => <UserCard {...props} badges={createBadgeStore()} />);
+      await screen.findByText(
+        "Tier 1 - Subscribed for 21 months, 12-month streak",
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Show a bigger picture" }),
+      );
+      fireEvent.keyDown(screen.getByRole("main"), { key: "Escape" });
+      expect(screen.queryByRole("button", { name: "Close the picture" })).toBe(
+        null,
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Show a bigger picture" }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Close the picture" }),
+      );
+      expect(screen.queryByRole("button", { name: "Close the picture" })).toBe(
+        null,
+      );
+    });
+
+    it("opens a bio the clamp cut short", () => {
+      withProfile();
+      const proto = HTMLElement.prototype;
+      const tall = vi
+        .spyOn(proto, "scrollHeight", "get")
+        .mockImplementation(function (this: HTMLElement) {
+          return this.classList.contains("user-card__bio") ? 60 : 0;
+        });
+      const short = vi.spyOn(proto, "clientHeight", "get").mockReturnValue(34);
+      render(() => <UserCard {...props} badges={createBadgeStore()} />);
+      const bio = screen.getByText(/very long bio/);
+      expect(bio.getAttribute("aria-expanded")).toBe("false");
+      fireEvent.click(bio);
+      expect(bio.getAttribute("aria-expanded")).toBe("true");
+      fireEvent.keyDown(bio, { key: "Enter" });
+      expect(bio.getAttribute("aria-expanded")).toBe("false");
+      tall.mockRestore();
+      short.mockRestore();
+    });
+
+    it("copies the id and the message text", async () => {
+      const writeText = vi.fn(async () => {});
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText },
+      });
+      render(() => <UserCard {...props} badges={createBadgeStore()} />);
+      fireEvent.click(screen.getByRole("button", { name: "Copy user ID 42" }));
+      await screen.findByText("Copied");
+      expect(writeText).toHaveBeenCalledWith("42");
+
+      const line = screen.getByRole("main").querySelector(".card-line")!;
+      fireEvent.contextMenu(line);
+      const copy = contextMenu()!.items.find(
+        (i) => i.kind === "item" && i.label === "Copy message",
+      );
+      if (copy?.kind === "item") copy.onSelect();
+      expect(writeText).toHaveBeenLastCalledWith("hey @Me how is it going");
+    });
+
+    it("shows badges and notices on message lines", () => {
+      const lines = {
+        ...chat,
+        recentByUser: () => [
+          {
+            ...said("s", "thanks"),
+            badges: [{ set_id: "subscriber", id: "12" }],
+            notice: { notice_type: "resub", system_message: "Resubscribed." },
+          },
+        ],
+      } as unknown as ChatStore;
+      const badges = {
+        ...createBadgeStore(),
+        resolve: () => ({
+          title: "Subscriber",
+          url_1x: "https://example.com/b1.png",
+          url_2x: "",
+          url_4x: "",
+        }),
+      };
+      render(() => (
+        <UserCard
+          {...props}
+          chat={lines}
+          badges={badges as ReturnType<typeof createBadgeStore>}
+        />
+      ));
+      const line = screen.getByRole("main").querySelector(".card-line")!;
+      expect(line.querySelector(".card-line__badge")).not.toBeNull();
+      expect(line.textContent).toContain("Resubscribed.");
+    });
   });
 });
