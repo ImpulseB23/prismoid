@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/ImpulseB23/prismoid/compare/v0.9.1...v0.9.2) (2026-11-01)
+
+
+### Bug Fixes
+
+* updating splash during installs ([#360](https://github.com/ImpulseB23/prismoid/issues/360)) ([8fa9c60](https://github.com/ImpulseB23/prismoid/commit/8fa9c60f50cbec0ad0abd5449c5389b82d2f0c64))
+
 ## [0.9.1](https://github.com/ImpulseB23/prismoid/compare/v0.9.0...v0.9.1) (2026-10-31)
 
 
