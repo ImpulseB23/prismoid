@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@solidjs/testing-library";
+import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import type { ChatMessage } from "../stores/chatStore";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
@@ -57,5 +57,31 @@ describe("MessageRow", () => {
     ));
     expect(text()).toBe("Resubscribed. love this stream");
     expect(screen.getByText("love this stream")).toBeTruthy();
+  });
+
+  it("takes a click on its text unless text is being selected", () => {
+    const onClick = vi.fn();
+    render(() => (
+      <ol>
+        <MessageRow
+          msg={msg({ message_text: "hello there" })}
+          onClick={onClick}
+        />
+      </ol>
+    ));
+    const body = document.querySelector(".msg-row__text")!;
+    fireEvent.click(body);
+    expect(onClick).toHaveBeenCalledTimes(1);
+
+    // The keyboard's jump button fires once, not again through the row.
+    fireEvent.click(document.querySelector(".msg-row__hit")!);
+    expect(onClick).toHaveBeenCalledTimes(2);
+
+    const range = document.createRange();
+    range.selectNodeContents(body);
+    window.getSelection()!.addRange(range);
+    fireEvent.click(body);
+    expect(onClick).toHaveBeenCalledTimes(2);
+    window.getSelection()!.removeAllRanges();
   });
 });

@@ -1,8 +1,9 @@
 // One chat message in a list outside the feed (search, mentions, threads,
 // the user card): who said it and when on top, the message underneath.
-// Renders as a list item for an `ol.msg-list`. A clickable row gets a
-// button stretched over it, so trailing buttons can sit on top of it
-// without nesting one button in another.
+// Renders as a list item for an `ol.msg-list`. A clickable row takes the
+// click itself, so its text can still be selected and copied; a drag that
+// selects text and clicks on links or buttons inside it do not count. The
+// keyboard reaches it through a jump button that shows when focused.
 
 import { Component, JSX, Show } from "solid-js";
 import type { ChatMessage } from "../stores/chatStore";
@@ -39,6 +40,13 @@ const MessageRow: Component<MessageRowProps> = (props) => (
   >
     <div
       class="msg-row"
+      onClick={(e) => {
+        const click = props.onClick;
+        if (!click) return;
+        if ((e.target as Element).closest("a, button")) return;
+        if (!window.getSelection()?.isCollapsed) return;
+        click();
+      }}
       classList={{
         "msg-row--action": props.onClick !== undefined,
         "msg-row--mention": props.mention === true,
