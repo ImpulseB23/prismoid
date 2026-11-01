@@ -4,6 +4,7 @@
 //! window already fetched.
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::hash::Hash;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -29,6 +30,21 @@ impl<K: Eq + Hash + Clone, V: Clone> TtlCache<K, V> {
 
     pub fn insert(&self, key: K, value: V) {
         self.insert_at(key, value, Instant::now());
+    }
+
+    /// The cached value, or `fetch`'s on a miss. A failed fetch is not
+    /// kept, so the next call tries again.
+    pub async fn get_or_try_insert_with<E, F, Fut>(&self, key: K, fetch: F) -> Result<V, E>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<V, E>>,
+    {
+        if let Some(value) = self.get(&key) {
+            return Ok(value);
+        }
+        let value = fetch().await?;
+        self.insert(key, value.clone());
+        Ok(value)
     }
 
     fn get_at(&self, key: &K, now: Instant) -> Option<V> {
@@ -86,6 +102,21 @@ mod tests {
             cache.get_at(&"newest", t + Duration::from_secs(62)),
             Some(4)
         );
+    }
+
+    #[tokio::test]
+    async fn read_through_fetches_once_and_forgets_failures() {
+        let cache = TtlCache::new(Duration::from_secs(60), 10);
+        let failed: Result<u32, &str> = cache
+            .get_or_try_insert_with("a", || async { Err("down") })
+            .await;
+        assert_eq!(failed, Err("down"));
+        let got: Result<u32, &str> = cache.get_or_try_insert_with("a", || async { Ok(1) }).await;
+        assert_eq!(got, Ok(1));
+        let again: Result<u32, &str> = cache
+            .get_or_try_insert_with("a", || async { panic!("served from the cache") })
+            .await;
+        assert_eq!(again, Ok(1));
     }
 
     #[test]

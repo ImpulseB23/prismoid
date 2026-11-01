@@ -23,6 +23,25 @@ impl Default for SubAgeCache {
     }
 }
 
+impl SubAgeCache {
+    async fn lookup(
+        &self,
+        http: &reqwest::Client,
+        base: &str,
+        user: &str,
+        channel: &str,
+    ) -> Result<SubAge, String> {
+        let key = (user.to_ascii_lowercase(), channel.to_ascii_lowercase());
+        let (u, c) = key.clone();
+        self.0
+            .get_or_try_insert_with(
+                key,
+                || async move { fetch_subage(http, base, &u, &c).await },
+            )
+            .await
+    }
+}
+
 /// What the card shows about `user`'s sub to the channel.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct SubAge {
@@ -108,13 +127,9 @@ pub async fn twitch_subage(
     user: String,
     channel: String,
 ) -> Result<SubAge, String> {
-    let key = (user.to_ascii_lowercase(), channel.to_ascii_lowercase());
-    if let Some(sub) = cache.0.get(&key) {
-        return Ok(sub);
-    }
-    let sub = fetch_subage(auth.manager.http_client(), IVR_BASE, &key.0, &key.1).await?;
-    cache.0.insert(key, sub.clone());
-    Ok(sub)
+    cache
+        .lookup(auth.manager.http_client(), IVR_BASE, &user, &channel)
+        .await
 }
 
 #[cfg(test)]
@@ -197,5 +212,25 @@ mod tests {
             .await
             .unwrap_err();
         assert!(err.contains("503"));
+    }
+
+    #[tokio::test]
+    async fn repeat_lookups_come_from_the_cache_whatever_the_case() {
+        let server = MockServer::start_async().await;
+        let hit = server.mock(|when, then| {
+            when.method(GET).path("/twitch/subage/viewer/streamer");
+            then.status(200)
+                .json_body(serde_json::json!({ "statusHidden": true }));
+        });
+        let cache = SubAgeCache::default();
+        let http = reqwest::Client::new();
+        for user in ["viewer", "Viewer"] {
+            let got = cache
+                .lookup(&http, &server.base_url(), user, "streamer")
+                .await
+                .unwrap();
+            assert!(got.hidden);
+        }
+        hit.assert_calls(1);
     }
 }

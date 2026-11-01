@@ -1,11 +1,32 @@
-import { describe, expect, it } from "vitest";
-import {
+import { describe, expect, it, vi } from "vitest";
+
+const invoke = vi.fn<(cmd: string, args: unknown) => Promise<unknown>>(
+  async () => null,
+);
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: (cmd: string, args: unknown) => invoke(cmd, args),
+}));
+
+const {
   describeSub,
   formatChannelError,
+  getFollowerCount,
+  getSubAge,
   isForChannel,
   normalizeLogin,
-  type SubAge,
-} from "./twitchChannel";
+} = await import("./twitchChannel");
+type SubAge = import("./twitchChannel").SubAge;
+
+describe("card lookups", () => {
+  it("ask the host by user and channel", async () => {
+    await getFollowerCount("u1");
+    await getSubAge("viewer", "streamer");
+    expect(invoke.mock.calls).toEqual([
+      ["twitch_follower_count", { userId: "u1" }],
+      ["twitch_subage", { user: "viewer", channel: "streamer" }],
+    ]);
+  });
+});
 
 describe("describeSub", () => {
   const base: SubAge = {
