@@ -164,6 +164,8 @@ impl History {
         let mut conn = Connection::open(dir.join(FILE_NAME))?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
+        // Removed rows are overwritten on disk, not left in free pages.
+        conn.pragma_update(None, "secure_delete", true)?;
         migrate(&mut conn)?;
         let (tx, rx) = mpsc::channel();
         std::thread::Builder::new()
@@ -597,10 +599,13 @@ impl Store {
         Ok(())
     }
 
+    /// Runs once at start: drops rows past the retention window and every
+    /// message a moderator deleted. Deleted messages stay visible (struck
+    /// through) for the session they happened in, but not past a restart.
     fn prune_old(&self, now_ms: i64) -> rusqlite::Result<()> {
         let keep_ms = i64::try_from(KEEP_FOR.as_millis()).expect("retention fits in i64 ms");
         self.conn.execute(
-            "DELETE FROM messages WHERE effective_ts < ?1",
+            "DELETE FROM messages WHERE effective_ts < ?1 OR deleted = 1",
             params![now_ms - keep_ms],
         )?;
         // Flags whose message is gone, from rows pruned in earlier runs.
@@ -1052,6 +1057,33 @@ mod tests {
             .map(|r| (r.message.id.clone(), r.first_message))
             .collect();
         assert_eq!(flags, [("a".to_string(), true), ("b".to_string(), false)]);
+    }
+
+    #[test]
+    fn a_restart_drops_deleted_messages_and_keeps_the_rest() {
+        let mut s = store();
+        let now = 1_000_000_000_000;
+        s.store(&[
+            msg("gone", "c", "u", now - 1_000, 0),
+            msg("kept", "c", "u", now - 500, 0),
+        ])
+        .unwrap();
+        s.conn
+            .execute(
+                "UPDATE messages SET deleted = 1 WHERE message_id = 'gone'",
+                [],
+            )
+            .unwrap();
+        s.prune_old(now).unwrap();
+        let ids: Vec<String> = s
+            .conn
+            .prepare("SELECT message_id FROM messages")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(ids, ["kept"]);
     }
 
     #[test]
