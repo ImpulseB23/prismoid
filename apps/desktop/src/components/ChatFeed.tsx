@@ -24,6 +24,7 @@ import {
   channelTabs,
   channelStatus,
   focusChannel,
+  keepChannel,
   rejoinChannel,
 } from "../stores/channelStore";
 import { clearJump, jumpRequest } from "../stores/jumpStore";
@@ -553,8 +554,21 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
     onCleanup(() => ro.disconnect());
   });
 
+  // Reading back or looking someone up keeps a preview tab.
+  createEffect(
+    on(
+      stickToBottom,
+      (stuck) => {
+        const c = session().channel;
+        if (!stuck && c) keepChannel(c.id);
+      },
+      { defer: true },
+    ),
+  );
+
   const openCard = (msg: ChatMessage) => {
     if (msg.platform !== "Twitch" || !msg.platform_user_id) return;
+    keepChannel(msg.channel_id);
     openUserCard(
       {
         channel_id: msg.channel_id,

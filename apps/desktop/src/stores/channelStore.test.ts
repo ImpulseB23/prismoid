@@ -373,14 +373,29 @@ describe("preview tabs", () => {
     expect(store.recents().map((r) => r.login)).toEqual(["kept"]);
   });
 
-  it("shows an open tab instead of previewing it", async () => {
-    const store = createChannelStore(fakeCommands(), memStorage());
+  it("shows an open tab instead of previewing it, closing the glance", async () => {
+    const commands = fakeCommands();
+    const store = createChannelStore(commands, memStorage());
     await store.select("kept", { remember: true });
     await store.preview("a");
     await store.preview("kept");
-    expect(store.tabs().map((c) => c.login)).toEqual(["kept", "a"]);
-    expect(store.previewId()).toBe("id-a");
+    expect(store.tabs().map((c) => c.login)).toEqual(["kept"]);
+    expect(store.previewId()).toBeNull();
     expect(store.active()?.id).toBe("id-kept");
+    expect(commands.log).toContain("leave id-a");
+  });
+
+  it("closes a preview tab the user moves on from, unless kept", async () => {
+    const store = createChannelStore(fakeCommands(), memStorage());
+    await store.select("kept", { remember: true });
+    await store.preview("a");
+    await store.focus("id-kept");
+    expect(store.tabs().map((c) => c.login)).toEqual(["kept"]);
+
+    await store.preview("b");
+    store.keep("id-b");
+    await store.focus("id-kept");
+    expect(store.tabs().map((c) => c.login)).toEqual(["kept", "b"]);
   });
 
   it("keeps the tab once chosen, which ends the swapping", async () => {

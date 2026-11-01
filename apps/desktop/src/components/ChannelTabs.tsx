@@ -164,6 +164,8 @@ const ChannelTabs: Component = () => {
                 onDragStart={(e) => {
                   e.dataTransfer?.setData(TAB_DRAG_TYPE, channel.id);
                   setDraggedTab(channel.id);
+                  // Dragging a tab anywhere, a pane included, keeps it.
+                  keepChannel(channel.id);
                 }}
                 onDragEnd={() => {
                   setDraggedTab(null);

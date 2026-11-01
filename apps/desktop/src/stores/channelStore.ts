@@ -1,7 +1,8 @@
 // Open channels (tabs), the one on screen, and a small persisted list of
 // recently opened channels. One tab at a time can be a preview: the channel
 // Follow my browser opened, which the next channel the browser shows
-// replaces instead of adding a tab, until the user keeps it. The host commands are injected so the store
+// replaces instead of adding a tab, and which closes once the user moves
+// on from it, unless they showed interest and so kept it. The host commands are injected so the store
 // can be exercised without a runtime; storage is injected for the same
 // reason (see feedback: never mutate globals in tests).
 
@@ -198,8 +199,13 @@ export function createChannelStore(
   }
 
   function show(channel: Channel): void {
+    const left = active();
     watch(channel);
     setActive(channel);
+    // A preview tab the user moved on from without keeping was a glance.
+    if (left && left.id !== channel.id && left.id === previewId()) {
+      void close(left.id);
+    }
     setUnreadById((m) => {
       if (!m.has(channel.id)) return m;
       const next = new Map(m);

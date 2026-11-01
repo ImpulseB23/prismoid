@@ -31,6 +31,7 @@ vi.mock("../stores/channelStore", () => ({
   focusChannel: vi.fn(async () => {}),
   noteUnread: vi.fn(),
   rejoinChannel: vi.fn(),
+  keepChannel: vi.fn(),
   closeChannel: vi.fn(async () => {}),
 }));
 vi.mock("../stores/userInfoStore", async (importOriginal) => ({
