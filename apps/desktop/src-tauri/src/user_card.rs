@@ -234,8 +234,17 @@ trait Host {
     fn cursor(&self) -> Result<Point, String>;
     /// Work area and scale factor of the monitor under `at`.
     fn work_area(&self, at: Point) -> Option<(Area, f64)>;
+    /// Whether the main window is pinned on top.
+    fn main_on_top(&self) -> bool;
     /// Builds a hidden card; it shows once its webview calls ready.
-    fn create(&self, label: &str, at: Point, user: &CardUser, zoom: f64) -> Result<(), String>;
+    fn create(
+        &self,
+        label: &str,
+        at: Point,
+        user: &CardUser,
+        zoom: f64,
+        on_top: bool,
+    ) -> Result<(), String>;
     /// Moves and resizes an existing card, hands it `user`, and brings it
     /// forward when it is already showing.
     fn reuse(
@@ -245,6 +254,7 @@ trait Host {
         user: &CardUser,
         zoom: f64,
         showing: bool,
+        on_top: bool,
     ) -> Result<(), String>;
 }
 
@@ -264,9 +274,11 @@ async fn open_on(
         }
         None => (cursor, effective_zoom(setting, 1.0)),
     };
+    // A card under a main window pinned on top would open hidden behind it.
+    let on_top = host.main_on_top();
     let reusable = cards.lock().reuse(&user);
     if let Some((label, showing)) = reusable {
-        match host.reuse(&label, at, &user, zoom, showing) {
+        match host.reuse(&label, at, &user, zoom, showing, on_top) {
             Ok(()) => return Ok(()),
             Err(e) => {
                 tracing::warn!(error = %e, label, "user card gone, opening a new one");
@@ -275,7 +287,7 @@ async fn open_on(
         }
     }
     let label = cards.lock().add(user.clone());
-    host.create(&label, at, &user, zoom).map_err(|e| {
+    host.create(&label, at, &user, zoom, on_top).map_err(|e| {
         cards.lock().forget(&label);
         UserCardError::window(e)
     })
@@ -351,6 +363,14 @@ pub fn close_all<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
+/// Whether the main window is pinned on top. A card has to be too, or it
+/// opens hidden behind the window it was opened from.
+fn main_on_top<R: Runtime>(app: &AppHandle<R>) -> bool {
+    app.get_webview_window("main")
+        .and_then(|w| w.is_always_on_top().ok())
+        .unwrap_or(false)
+}
+
 fn bring_forward<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result<()> {
     window.unminimize()?;
     window.show()?;
@@ -416,12 +436,24 @@ impl<R: Runtime> Host for App<R> {
         Some((area, monitor.scale_factor()))
     }
 
-    fn create(&self, label: &str, at: Point, user: &CardUser, zoom: f64) -> Result<(), String> {
+    fn main_on_top(&self) -> bool {
+        main_on_top(&self.0)
+    }
+
+    fn create(
+        &self,
+        label: &str,
+        at: Point,
+        user: &CardUser,
+        zoom: f64,
+        on_top: bool,
+    ) -> Result<(), String> {
         let (width, height) = logical_size(zoom);
         let builder =
             WebviewWindowBuilder::new(&self.0, label, WebviewUrl::App("index.html".into()))
                 .title(&user.display_name)
                 .inner_size(width, height)
+                .always_on_top(on_top)
                 // A fixed size that follows the zoom, so the card always looks
                 // the same.
                 .resizable(false)
@@ -449,6 +481,7 @@ impl<R: Runtime> Host for App<R> {
         user: &CardUser,
         zoom: f64,
         showing: bool,
+        on_top: bool,
     ) -> Result<(), String> {
         let window = self
             .0
@@ -463,6 +496,9 @@ impl<R: Runtime> Host for App<R> {
             .map_err(|e| e.to_string())?;
         window
             .set_title(&user.display_name)
+            .map_err(|e| e.to_string())?;
+        window
+            .set_always_on_top(on_top)
             .map_err(|e| e.to_string())?;
         self.0
             .emit_to(EventTarget::webview_window(label), SHOW_EVENT, user)
@@ -643,6 +679,7 @@ mod tests {
         no_monitor: bool,
         cursor_fails: bool,
         create_fails: bool,
+        on_top: bool,
         gone: Vec<String>,
         calls: RefCell<Vec<String>>,
     }
@@ -659,10 +696,24 @@ mod tests {
             (!self.no_monitor).then_some((AREA, 1.0))
         }
 
-        fn create(&self, label: &str, at: Point, user: &CardUser, zoom: f64) -> Result<(), String> {
+        fn main_on_top(&self) -> bool {
+            self.on_top
+        }
+
+        fn create(
+            &self,
+            label: &str,
+            at: Point,
+            user: &CardUser,
+            zoom: f64,
+            on_top: bool,
+        ) -> Result<(), String> {
             self.calls.borrow_mut().push(format!(
-                "create {label} {},{} {} x{zoom}",
-                at.x, at.y, user.username
+                "create {label} {},{} {} x{zoom}{}",
+                at.x,
+                at.y,
+                user.username,
+                if on_top { " on top" } else { "" }
             ));
             if self.create_fails {
                 return Err("build failed".into());
@@ -677,10 +728,14 @@ mod tests {
             user: &CardUser,
             zoom: f64,
             showing: bool,
+            on_top: bool,
         ) -> Result<(), String> {
             self.calls.borrow_mut().push(format!(
-                "reuse {label} {},{} {} x{zoom} {showing}",
-                at.x, at.y, user.username
+                "reuse {label} {},{} {} x{zoom} {showing}{}",
+                at.x,
+                at.y,
+                user.username,
+                if on_top { " on top" } else { "" }
             ));
             if self.gone.iter().any(|g| g == label) {
                 return Err("gone".into());
@@ -693,6 +748,21 @@ mod tests {
         fn calls(&self) -> Vec<String> {
             self.calls.borrow().clone()
         }
+    }
+
+    #[tokio::test]
+    async fn cards_open_on_top_when_the_main_window_is_pinned() {
+        let host = Fake {
+            on_top: true,
+            ..Fake::default()
+        };
+        let cards = UserCards::default();
+        open_on(&host, &cards, user("a"), 1.0).await.unwrap();
+        cards.lock().mark_ready("user-card-1");
+        open_on(&host, &cards, user("b"), 1.0).await.unwrap();
+        let calls = host.calls();
+        assert!(calls[0].starts_with("create ") && calls[0].ends_with(" on top"));
+        assert!(calls[1].starts_with("reuse ") && calls[1].ends_with(" on top"));
     }
 
     #[tokio::test]
