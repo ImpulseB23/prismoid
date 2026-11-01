@@ -45,6 +45,11 @@ describe("boot", () => {
     expect(text).toContain("Installing");
     expect(document.documentElement.dataset.theme).toBe("light");
     expect(move.importOldStorage).not.toHaveBeenCalled();
+
+    // The host marks a failed install while it reopens the app.
+    location.hash = "failed";
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    expect(document.body.textContent).toContain("Update did not finish");
     history.replaceState(null, "", "/");
   });
 

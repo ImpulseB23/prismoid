@@ -63,8 +63,8 @@ fn get_platform() -> &'static str {
 pub fn run() {
     let context = tauri::generate_context!();
     #[cfg(windows)]
-    if let Some(palette) = update_splash::palette(std::env::args()) {
-        update_splash::run(context, palette);
+    if let Some(splash) = update_splash::parse(std::env::args()) {
+        update_splash::run(context, splash);
         return;
     }
 
