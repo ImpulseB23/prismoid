@@ -259,6 +259,32 @@ const ChannelTabs: Component = () => {
             );
           }}
         </For>
+        {/* Right after the last tab, like a browser's; it stays in view at
+            the edge once the tabs overflow. */}
+        <button
+          type="button"
+          class="tabs__add"
+          data-tour="add-channel"
+          title="Open a channel (Ctrl+K)"
+          aria-label="Open a channel"
+          aria-busy={pickerLoading()}
+          onPointerEnter={() => void prefetchLive()}
+          onClick={() => openPicker()}
+        >
+          <Show
+            when={!pickerLoading()}
+            fallback={<span class="palette__spinner" aria-hidden="true" />}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+              <path
+                d="M6 1.5v9M1.5 6h9"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+              />
+            </svg>
+          </Show>
+        </button>
       </div>
       <Show when={settings().splitView}>
         <button
@@ -289,30 +315,6 @@ const ChannelTabs: Component = () => {
           </svg>
         </button>
       </Show>
-      <button
-        type="button"
-        class="tabs__add"
-        data-tour="add-channel"
-        title="Open a channel (Ctrl+K)"
-        aria-label="Open a channel"
-        aria-busy={pickerLoading()}
-        onPointerEnter={() => void prefetchLive()}
-        onClick={() => openPicker()}
-      >
-        <Show
-          when={!pickerLoading()}
-          fallback={<span class="palette__spinner" aria-hidden="true" />}
-        >
-          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-            <path
-              d="M6 1.5v9M1.5 6h9"
-              stroke="currentColor"
-              stroke-width="1.6"
-              stroke-linecap="round"
-            />
-          </svg>
-        </Show>
-      </button>
     </div>
   );
 };
