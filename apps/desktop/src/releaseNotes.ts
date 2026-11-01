@@ -13,6 +13,21 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.9.2",
+    headline: "Bans and timeouts, spelled out",
+    features: [
+      {
+        title: "Ban or timeout, and for how long",
+        body: "When someone gets removed from chat, the line now says whether they were banned or timed out and for how long. Bans show in red, timeouts in orange.",
+      },
+      {
+        title: "Updates you can see",
+        body: "From the next update on, a small Prismoid window stays up while the new version installs, so the app no longer just vanishes for a few seconds.",
+      },
+    ],
+    fixes: [],
+  },
+  {
     version: "0.9.0",
     headline: "Chats side by side, the stream right there",
     features: [
