@@ -58,7 +58,10 @@ fn privmsg(line: &IrcLine<'_>, channel_id: String) -> Option<IrcItem> {
     let id = line.tag("id")?;
     let username = line.nick()?.to_owned();
     let text = strip_action(line.params.last().copied().unwrap_or_default());
-    let badges = parse_badges(line.tag("badges").unwrap_or_default());
+    let badges = parse_badges(
+        line.tag("badges").unwrap_or_default(),
+        line.tag("badge-info").unwrap_or_default(),
+    );
     let (is_broadcaster, is_mod, is_subscriber) = badge_flags(&badges);
     let (timestamp, arrival_time) = line.times()?;
     let reply_to = line.tag("reply-parent-msg-id").filter(|s| !s.is_empty());
@@ -115,7 +118,10 @@ fn usernotice(line: &IrcLine<'_>, channel_id: String) -> Option<IrcItem> {
     let id = line.tag("id")?;
     let username = line.tag("login").unwrap_or_default().to_owned();
     let text = line.params.get(1).copied().unwrap_or_default();
-    let badges = parse_badges(line.tag("badges").unwrap_or_default());
+    let badges = parse_badges(
+        line.tag("badges").unwrap_or_default(),
+        line.tag("badge-info").unwrap_or_default(),
+    );
     let (is_broadcaster, is_mod, is_subscriber) = badge_flags(&badges);
     let (timestamp, arrival_time) = line.times()?;
 
@@ -174,14 +180,23 @@ fn strip_action(text: &str) -> &str {
         .unwrap_or(text)
 }
 
-fn parse_badges(tag: &str) -> Vec<Badge> {
+/// `badges` lists `set/version`; `badge-info` carries the extra detail by
+/// set, such as `subscriber/20` for twenty months subscribed.
+fn parse_badges(tag: &str, info: &str) -> Vec<Badge> {
+    let infos: Vec<(&str, &str)> = info.split(',').filter_map(|i| i.split_once('/')).collect();
     tag.split(',')
         .filter(|b| !b.is_empty())
         .filter_map(|b| {
             let (set_id, id) = b.split_once('/')?;
+            let info = infos
+                .iter()
+                .find(|(set, _)| *set == set_id)
+                .map(|(_, v)| (*v).to_owned())
+                .unwrap_or_default();
             Some(Badge {
                 set_id: set_id.to_owned(),
                 id: id.to_owned(),
+                info,
             })
         })
         .collect()

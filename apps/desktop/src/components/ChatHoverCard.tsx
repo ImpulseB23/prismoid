@@ -97,6 +97,9 @@ const ChatHoverCard: Component = () => {
               <img src={badgeLarge(b().badge)} alt="" draggable={false} />
             </div>
             <span class="emote-tip__code">{b().badge.title}</span>
+            <Show when={b().detail}>
+              {(d) => <span class="emote-tip__set">{d()}</span>}
+            </Show>
           </HoverTip>
         )}
       </Show>

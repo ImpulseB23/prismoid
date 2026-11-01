@@ -121,6 +121,19 @@ export interface BadgeRender {
   badge: ResolvedBadge;
   setId: string;
   id: string;
+  /** A line under the badge's name when hovered, e.g. "20 months". */
+  detail: string | null;
+}
+
+/** The months on a subscriber badge, the only detail Twitch sends. */
+export function badgeDetail(
+  setId: string,
+  info: string | undefined,
+): string | null {
+  if (setId !== "subscriber" || !info) return null;
+  const months = Number(info);
+  if (!Number.isInteger(months) || months < 1) return null;
+  return months === 1 ? "1 month" : `${months} months`;
 }
 
 export interface PreparedMessage {
@@ -155,7 +168,14 @@ export function prepareMessage(
   const badges: BadgeRender[] = [];
   for (const b of msg.badges) {
     const resolved = resolveBadge(b.set_id, b.id);
-    if (resolved) badges.push({ badge: resolved, setId: b.set_id, id: b.id });
+    if (resolved) {
+      badges.push({
+        badge: resolved,
+        setId: b.set_id,
+        id: b.id,
+        detail: badgeDetail(b.set_id, b.info),
+      });
+    }
   }
 
   const items: RichInlineItem[] = [];

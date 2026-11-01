@@ -25,6 +25,7 @@ const {
   firstLabelWidth,
   TEXT_SIZES,
   measureMessageHeight,
+  badgeDetail,
   prepareMessage,
   textMetrics,
 } = await import("./messageLayout");
@@ -51,6 +52,20 @@ const msg = (over: Partial<ChatMessage> = {}) =>
   }) as unknown as ChatMessage;
 
 const badge = () => ({ title: "Moderator" }) as unknown as ResolvedBadge;
+
+describe("badgeDetail", () => {
+  it("reads the months on a sub badge", () => {
+    expect(badgeDetail("subscriber", "1")).toBe("1 month");
+    expect(badgeDetail("subscriber", "20")).toBe("20 months");
+  });
+
+  it("says nothing for other badges or bad info", () => {
+    expect(badgeDetail("moderator", "1")).toBeNull();
+    expect(badgeDetail("subscriber", undefined)).toBeNull();
+    expect(badgeDetail("subscriber", "0")).toBeNull();
+    expect(badgeDetail("subscriber", "x")).toBeNull();
+  });
+});
 
 describe("textMetrics", () => {
   it("keeps the 15px design proportions at the default size", () => {

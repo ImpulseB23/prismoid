@@ -9,7 +9,12 @@ import { ensureUserInfo } from "./userInfoStore";
 import { preloadImages } from "../lib/preload";
 
 export type ChatHover =
-  | { kind: "badge"; badge: ResolvedBadge; anchor: DOMRect }
+  | {
+      kind: "badge";
+      badge: ResolvedBadge;
+      detail: string | null;
+      anchor: DOMRect;
+    }
   | {
       kind: "user";
       userId: string;
@@ -44,10 +49,15 @@ function show(
   });
 }
 
-export function hoverBadge(el: HTMLElement, badge: ResolvedBadge): void {
+export function hoverBadge(
+  el: HTMLElement,
+  badge: ResolvedBadge,
+  detail: string | null = null,
+): void {
   show(el, preloadImages([badgeLarge(badge)], 400), (anchor) => ({
     kind: "badge",
     badge,
+    detail,
     anchor,
   }));
 }
