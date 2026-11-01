@@ -53,7 +53,7 @@ const AccountPanel: Component<AccountPanelProps> = (props) => {
         <div
           ref={(el) => (dialogRef = el)}
           tabIndex={-1}
-          class="palette account"
+          class="palette"
           role="dialog"
           aria-modal="true"
           aria-label="Your account"

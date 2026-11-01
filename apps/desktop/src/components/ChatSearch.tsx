@@ -100,7 +100,7 @@ const ChatSearch: Component<ChatSearchProps> = (props) => {
     <Show when={props.open}>
       <div class="palette-backdrop" onMouseDown={props.onClose}>
         <div
-          class="palette palette--wide"
+          class="palette"
           role="dialog"
           aria-modal="true"
           aria-label="Search chat"

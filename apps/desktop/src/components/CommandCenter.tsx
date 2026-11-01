@@ -23,6 +23,7 @@ import { activeSummary } from "../lib/chatModes";
 import { clearChat, type SendMessageError } from "../lib/twitchAuth";
 import { formatSendError, toSendError } from "../lib/messageInput";
 import { createConfirmTap } from "../lib/confirmTap";
+import PaletteClose from "./PaletteClose";
 
 type Tab = "held" | "log";
 
@@ -163,26 +164,7 @@ const CommandCenter: Component = () => {
                 {broadcaster() ? "your channel" : "you moderate"}
               </span>
             </span>
-            <button
-              type="button"
-              class="icon-btn"
-              aria-label="Close chat manager"
-              onClick={() => setOpen(false)}
-            >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 12 12"
-                aria-hidden="true"
-              >
-                <path
-                  d="M2 2l8 8M10 2l-8 8"
-                  stroke="currentColor"
-                  stroke-width="1.6"
-                  stroke-linecap="round"
-                />
-              </svg>
-            </button>
+            <PaletteClose onClick={() => setOpen(false)} />
           </div>
 
           <section class="cm__room" aria-label="Room modes">
