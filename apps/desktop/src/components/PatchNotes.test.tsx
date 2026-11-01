@@ -26,6 +26,32 @@ describe("PatchNotes", () => {
     expect(patchNotes()).toBeNull();
   });
 
+  it("groups the notes into new, improved and fixed, leaving out empty ones", () => {
+    render(() => <PatchNotes />);
+    const headings = () =>
+      screen.queryAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    showPatchNotes({
+      version: "9.9.9",
+      headline: "Test",
+      features: [{ title: "Split view", body: "Chats side by side" }],
+      improvements: ["Faster"],
+      fixes: ["No crash"],
+    });
+    expect(headings()).toEqual(["New", "Improved", "Fixed"]);
+    const text = screen.getByRole("dialog").textContent;
+    expect(text).toContain("Chats side by side");
+    expect(text).toContain("No crash");
+
+    showPatchNotes({
+      version: "9.9.10",
+      headline: "Test",
+      features: [],
+      improvements: [],
+      fixes: ["No crash"],
+    });
+    expect(headings()).toEqual(["Fixed"]);
+  });
+
   it("closes on Escape", () => {
     render(() => <PatchNotes />);
     showPatchNotes(RELEASE_NOTES[0]!);
