@@ -17,6 +17,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.10.1",
+    headline: "Your settings, back where you left them",
+    features: [],
+    improvements: ["The update button shows up as soon as an update is found."],
+    fixes: [
+      "0.10.0 forgot your settings on every start and kept asking you to set up Prismoid. They load again now.",
+    ],
+  },
+  {
     version: "0.10.0",
     headline: "Surf streams without the tab pile",
     features: [
