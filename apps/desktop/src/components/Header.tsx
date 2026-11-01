@@ -53,12 +53,12 @@ import {
 import WindowControls from "./WindowControls";
 import Mentions from "./Mentions";
 import AccountAvatar from "./AccountAvatar";
+import UpdateButton from "./UpdateButton";
 import ChatSearch from "./ChatSearch";
 import { installUpdate, updateState } from "../stores/updateStore";
 import { updatedTo, whatsNewUnseen } from "../stores/whatsNewStore";
 import Settings from "./Settings";
 import { settingsAttention } from "../lib/settingsAttention";
-import { displayVersion } from "../lib/version";
 import { logo } from "../stores/themeStore";
 import {
   streamManagerOpen,
@@ -453,26 +453,10 @@ const Header: Component<HeaderProps> = (props) => {
           onSignOut={props.onSignOut}
         />
 
-        {/* Shows once an update has downloaded in the background, so the
-            click is just the restart. */}
-        <Show
-          when={(() => {
-            const u = updateState();
-            return u.kind === "downloaded" ? u : null;
-          })()}
-        >
-          {(u) => (
-            <button
-              type="button"
-              class="icon-btn"
-              title={`Restart to update to ${displayVersion(u().version)}`}
-              aria-label={`Restart to update to ${displayVersion(u().version)}`}
-              onClick={() => void installUpdate()}
-            >
-              <span class="header__update" aria-hidden="true" />
-            </button>
-          )}
-        </Show>
+        <UpdateButton
+          state={updateState()}
+          onInstall={() => void installUpdate()}
+        />
 
         <WindowControls />
       </header>
