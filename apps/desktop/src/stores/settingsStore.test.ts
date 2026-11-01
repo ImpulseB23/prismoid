@@ -512,3 +512,17 @@ describe("settingsStore lists", () => {
     expect(parseList("Prismoid, GG")).toEqual(["Prismoid", "GG"]);
   });
 });
+
+describe("settingsStore at startup", () => {
+  it("loads the saved settings when the app starts", async () => {
+    localStorage.setItem(
+      "prismoid.settings",
+      JSON.stringify({ v: 2, setupDone: true, offlineCloseMinutes: 2 }),
+    );
+    vi.resetModules();
+    const store = await import("./settingsStore");
+    expect(store.settings().setupDone).toBe(true);
+    expect(store.settings().offlineCloseMinutes).toBe(2);
+    localStorage.clear();
+  });
+});
