@@ -191,18 +191,33 @@ impl Cards {
     }
 
     /// True when the blur closes the card, which is then forgotten so a
-    /// click racing the close cannot reuse it. `still_foreground` is the
-    /// OS saying the card is still the active window: the webview loses
-    /// focus to the frame while the card is dragged.
-    fn blurred(&mut self, label: &str, still_foreground: bool) -> bool {
+    /// click racing the close cannot reuse it. Only a click into another
+    /// Prismoid window (`to_app`) does, the way a popup closes when you
+    /// click beside it; switching to another app leaves the card open.
+    fn blurred(&mut self, label: &str, to_app: bool) -> bool {
         let closes = self
             .open
             .get(label)
-            .is_some_and(|c| c.armed && !c.pinned && !still_foreground);
+            .is_some_and(|c| c.armed && !c.pinned && to_app);
         if closes {
             self.open.remove(label);
         }
         closes
+    }
+
+    /// The main window took focus, from another app too: the unpinned card
+    /// the user had looked at closes, as a click into the app would.
+    fn app_focused(&mut self) -> Vec<String> {
+        let labels: Vec<String> = self
+            .open
+            .iter()
+            .filter(|(_, c)| c.armed && !c.pinned)
+            .map(|(label, _)| label.clone())
+            .collect();
+        for label in &labels {
+            self.open.remove(label);
+        }
+        labels
     }
 
     fn forget(&mut self, label: &str) -> bool {
@@ -353,6 +368,16 @@ pub fn user_card_close<R: Runtime>(
     window.destroy().map_err(UserCardError::window)
 }
 
+/// Closes the unpinned card when the user comes back to the main window.
+pub fn main_focused<R: Runtime>(app: &AppHandle<R>) {
+    let labels = app.state::<UserCards>().lock().app_focused();
+    for label in labels {
+        if let Some(window) = app.get_webview_window(&label) {
+            let _ = window.destroy();
+        }
+    }
+}
+
 /// Closes every card; the main window going away takes them with it.
 pub fn close_all<R: Runtime>(app: &AppHandle<R>) {
     let labels = app.state::<UserCards>().lock().drain();
@@ -385,8 +410,8 @@ fn on_card_event<R: Runtime>(app: &AppHandle<R>, label: &str, event: &WindowEven
             let Some(window) = app.get_webview_window(label) else {
                 return;
             };
-            let foreground = holds_foreground(&window);
-            if cards.lock().blurred(label, foreground) {
+            let to_app = focus_went_to_app(&window);
+            if cards.lock().blurred(label, to_app) {
                 let _ = window.destroy();
             }
         }
@@ -397,17 +422,26 @@ fn on_card_event<R: Runtime>(app: &AppHandle<R>, label: &str, event: &WindowEven
     }
 }
 
+/// Whether the window now in front is another of Prismoid's. The card
+/// itself counts as no: its webview loses focus to its own frame while it
+/// is dragged.
 #[cfg(windows)]
-fn holds_foreground<R: Runtime>(window: &WebviewWindow<R>) -> bool {
-    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
-    // SAFETY: GetForegroundWindow takes no arguments and only reads.
-    let foreground = unsafe { GetForegroundWindow() };
-    window.hwnd().is_ok_and(|hwnd| hwnd.0 == foreground.0)
+fn focus_went_to_app<R: Runtime>(window: &WebviewWindow<R>) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    // SAFETY: both only read; the pid is written to a local.
+    let (foreground, pid) = unsafe {
+        let foreground = GetForegroundWindow();
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(foreground, Some(&mut pid));
+        (foreground, pid)
+    };
+    let is_card = window.hwnd().is_ok_and(|hwnd| hwnd.0 == foreground.0);
+    !is_card && pid == std::process::id()
 }
 
 #[cfg(not(windows))]
-fn holds_foreground<R: Runtime>(_window: &WebviewWindow<R>) -> bool {
-    false
+fn focus_went_to_app<R: Runtime>(_window: &WebviewWindow<R>) -> bool {
+    true
 }
 
 struct App<R: Runtime>(AppHandle<R>);
@@ -632,12 +666,26 @@ mod tests {
     fn blur_closes_an_unpinned_card_only_after_it_held_focus() {
         let mut cards = Cards::default();
         let a = cards.add(user("a"));
-        assert!(!cards.blurred(&a, false), "blur while the show settles");
+        assert!(!cards.blurred(&a, true), "blur while the show settles");
         cards.focused(&a);
-        assert!(!cards.blurred(&a, true), "webview blur while dragging");
-        assert!(cards.blurred(&a, false));
+        assert!(!cards.blurred(&a, false), "alt-tab or a drag keeps it");
+        assert!(cards.blurred(&a, true), "a click into the app closes it");
         assert!(cards.user(&a).is_none());
-        assert!(!cards.blurred(&a, false));
+        assert!(!cards.blurred(&a, true));
+    }
+
+    #[test]
+    fn coming_back_to_the_app_closes_only_the_looked_at_unpinned_card() {
+        let mut cards = Cards::default();
+        let pinned = cards.add(user("a"));
+        cards.focused(&pinned);
+        cards.set_pinned(&pinned, true);
+        let settling = cards.add(user("b"));
+        assert!(cards.app_focused().is_empty());
+        cards.focused(&settling);
+        assert_eq!(cards.app_focused(), std::slice::from_ref(&settling));
+        assert!(cards.user(&settling).is_none());
+        assert!(cards.user(&pinned).is_some());
     }
 
     #[test]
@@ -646,7 +694,7 @@ mod tests {
         let a = cards.add(user("a"));
         cards.focused(&a);
         cards.set_pinned(&a, true);
-        assert!(!cards.blurred(&a, false));
+        assert!(!cards.blurred(&a, true));
         assert!(cards.user(&a).is_some());
     }
 
@@ -656,9 +704,9 @@ mod tests {
         let a = cards.add(user("a"));
         cards.focused(&a);
         cards.reuse(&user("b"));
-        assert!(!cards.blurred(&a, false));
+        assert!(!cards.blurred(&a, true));
         cards.focused(&a);
-        assert!(cards.blurred(&a, false));
+        assert!(cards.blurred(&a, true));
     }
 
     #[test]

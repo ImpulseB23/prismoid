@@ -267,8 +267,12 @@ fn run_update_splash(mut context: tauri::Context, splash: update_splash::Splash)
 
 fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
     tray::on_window_event(window, event);
-    if window.label() == "main" && matches!(event, WindowEvent::Destroyed) {
-        user_card::close_all(window.app_handle());
+    if window.label() == "main" {
+        match event {
+            WindowEvent::Destroyed => user_card::close_all(window.app_handle()),
+            WindowEvent::Focused(true) => user_card::main_focused(window.app_handle()),
+            _ => {}
+        }
     }
 }
 
