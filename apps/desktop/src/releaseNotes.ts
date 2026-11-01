@@ -24,6 +24,10 @@ export const RELEASE_NOTES: ReleaseNote[] = [
         title: "Preview tabs",
         body: "With Follow my browser on, a stream you open in the browser shows up as a tab in italics. Click through ten streams and it stays one tab that follows along. Type in it, double-click it or stay on it a couple of minutes and it becomes a regular tab.",
       },
+      {
+        title: "Ended streams tidy up",
+        body: "When a stream ends, its chat counts down five minutes and closes. Keep it open with one click, or just keep talking. If the streamer raided, one click takes you along.",
+      },
     ],
     improvements: [
       "What's New is sorted into new, improved and fixed.",
