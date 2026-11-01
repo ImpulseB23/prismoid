@@ -9,12 +9,12 @@ use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use serde::{Deserialize, Serialize};
-use tauri::{
-    AppHandle, Emitter, EventTarget, LogicalSize, Manager, PhysicalPosition, Runtime, State,
-    WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
-};
 
 use crate::message::Badge;
+
+pub mod commands;
+
+pub use commands::{close_all, main_focused};
 
 const LABEL_PREFIX: &str = "user-card-";
 /// Sent to a reused card with its new user.
@@ -191,18 +191,33 @@ impl Cards {
     }
 
     /// True when the blur closes the card, which is then forgotten so a
-    /// click racing the close cannot reuse it. `still_foreground` is the
-    /// OS saying the card is still the active window: the webview loses
-    /// focus to the frame while the card is dragged.
-    fn blurred(&mut self, label: &str, still_foreground: bool) -> bool {
+    /// click racing the close cannot reuse it. Only a click into another
+    /// Prismoid window (`to_app`) does, the way a popup closes when you
+    /// click beside it; switching to another app leaves the card open.
+    fn blurred(&mut self, label: &str, to_app: bool) -> bool {
         let closes = self
             .open
             .get(label)
-            .is_some_and(|c| c.armed && !c.pinned && !still_foreground);
+            .is_some_and(|c| c.armed && !c.pinned && to_app);
         if closes {
             self.open.remove(label);
         }
         closes
+    }
+
+    /// The main window took focus, from another app too: the unpinned card
+    /// the user had looked at closes, as a click into the app would.
+    fn app_focused(&mut self) -> Vec<String> {
+        let labels: Vec<String> = self
+            .open
+            .iter()
+            .filter(|(_, c)| c.armed && !c.pinned)
+            .map(|(label, _)| label.clone())
+            .collect();
+        for label in &labels {
+            self.open.remove(label);
+        }
+        labels
     }
 
     fn forget(&mut self, label: &str) -> bool {
@@ -228,14 +243,23 @@ impl UserCards {
     }
 }
 
-/// What opening a card does to windows. [`App`] is the real one.
+/// What opening a card does to windows. `commands::App` is the real one.
 trait Host {
     /// Mouse position in physical pixels.
     fn cursor(&self) -> Result<Point, String>;
     /// Work area and scale factor of the monitor under `at`.
     fn work_area(&self, at: Point) -> Option<(Area, f64)>;
+    /// Whether the main window is pinned on top.
+    fn main_on_top(&self) -> bool;
     /// Builds a hidden card; it shows once its webview calls ready.
-    fn create(&self, label: &str, at: Point, user: &CardUser, zoom: f64) -> Result<(), String>;
+    fn create(
+        &self,
+        label: &str,
+        at: Point,
+        user: &CardUser,
+        zoom: f64,
+        on_top: bool,
+    ) -> Result<(), String>;
     /// Moves and resizes an existing card, hands it `user`, and brings it
     /// forward when it is already showing.
     fn reuse(
@@ -245,6 +269,7 @@ trait Host {
         user: &CardUser,
         zoom: f64,
         showing: bool,
+        on_top: bool,
     ) -> Result<(), String>;
 }
 
@@ -264,9 +289,11 @@ async fn open_on(
         }
         None => (cursor, effective_zoom(setting, 1.0)),
     };
+    // A card under a main window pinned on top would open hidden behind it.
+    let on_top = host.main_on_top();
     let reusable = cards.lock().reuse(&user);
     if let Some((label, showing)) = reusable {
-        match host.reuse(&label, at, &user, zoom, showing) {
+        match host.reuse(&label, at, &user, zoom, showing, on_top) {
             Ok(()) => return Ok(()),
             Err(e) => {
                 tracing::warn!(error = %e, label, "user card gone, opening a new one");
@@ -275,7 +302,7 @@ async fn open_on(
         }
     }
     let label = cards.lock().add(user.clone());
-    host.create(&label, at, &user, zoom).map_err(|e| {
+    host.create(&label, at, &user, zoom, on_top).map_err(|e| {
         cards.lock().forget(&label);
         UserCardError::window(e)
     })
@@ -285,195 +312,6 @@ async fn open_on(
 /// one. The position comes from the OS cursor, not the click event, since
 /// webview screen coordinates are DIPs that do not map to physical pixels
 /// across monitors with different scaling.
-#[tauri::command]
-pub async fn user_card_open<R: Runtime>(
-    app: AppHandle<R>,
-    cards: State<'_, UserCards>,
-    user: CardUser,
-    zoom: f64,
-) -> Result<(), UserCardError> {
-    open_on(&App(app), &cards, user, zoom).await
-}
-
-/// The user of the card that calls this.
-#[tauri::command]
-pub fn user_card_current<R: Runtime>(
-    window: WebviewWindow<R>,
-    cards: State<'_, UserCards>,
-) -> Option<CardUser> {
-    cards.lock().user(window.label())
-}
-
-/// Called by a card once it has rendered, so it never shows blank.
-#[tauri::command]
-pub fn user_card_ready<R: Runtime>(
-    window: WebviewWindow<R>,
-    cards: State<'_, UserCards>,
-) -> Result<(), UserCardError> {
-    if !cards.lock().mark_ready(window.label()) {
-        return Err(UserCardError::not_a_card(window.label()));
-    }
-    bring_forward(&window).map_err(UserCardError::window)
-}
-
-#[tauri::command]
-pub fn user_card_set_pinned<R: Runtime>(
-    window: WebviewWindow<R>,
-    cards: State<'_, UserCards>,
-    pinned: bool,
-) -> Result<(), UserCardError> {
-    if cards.lock().set_pinned(window.label(), pinned) {
-        Ok(())
-    } else {
-        Err(UserCardError::not_a_card(window.label()))
-    }
-}
-
-/// Closes the card that calls this.
-#[tauri::command]
-pub fn user_card_close<R: Runtime>(
-    window: WebviewWindow<R>,
-    cards: State<'_, UserCards>,
-) -> Result<(), UserCardError> {
-    if !cards.lock().forget(window.label()) {
-        return Err(UserCardError::not_a_card(window.label()));
-    }
-    window.destroy().map_err(UserCardError::window)
-}
-
-/// Closes every card; the main window going away takes them with it.
-pub fn close_all<R: Runtime>(app: &AppHandle<R>) {
-    let labels = app.state::<UserCards>().lock().drain();
-    for label in labels {
-        if let Some(window) = app.get_webview_window(&label) {
-            let _ = window.destroy();
-        }
-    }
-}
-
-fn bring_forward<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result<()> {
-    window.unminimize()?;
-    window.show()?;
-    window.set_focus()
-}
-
-fn on_card_event<R: Runtime>(app: &AppHandle<R>, label: &str, event: &WindowEvent) {
-    let cards = app.state::<UserCards>();
-    match event {
-        WindowEvent::Focused(true) => cards.lock().focused(label),
-        WindowEvent::Focused(false) => {
-            let Some(window) = app.get_webview_window(label) else {
-                return;
-            };
-            let foreground = holds_foreground(&window);
-            if cards.lock().blurred(label, foreground) {
-                let _ = window.destroy();
-            }
-        }
-        WindowEvent::CloseRequested { .. } | WindowEvent::Destroyed => {
-            cards.lock().forget(label);
-        }
-        _ => {}
-    }
-}
-
-#[cfg(windows)]
-fn holds_foreground<R: Runtime>(window: &WebviewWindow<R>) -> bool {
-    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
-    // SAFETY: GetForegroundWindow takes no arguments and only reads.
-    let foreground = unsafe { GetForegroundWindow() };
-    window.hwnd().is_ok_and(|hwnd| hwnd.0 == foreground.0)
-}
-
-#[cfg(not(windows))]
-fn holds_foreground<R: Runtime>(_window: &WebviewWindow<R>) -> bool {
-    false
-}
-
-struct App<R: Runtime>(AppHandle<R>);
-
-impl<R: Runtime> Host for App<R> {
-    fn cursor(&self) -> Result<Point, String> {
-        let p = self.0.cursor_position().map_err(|e| e.to_string())?;
-        Ok(Point {
-            x: p.x.round() as i32,
-            y: p.y.round() as i32,
-        })
-    }
-
-    fn work_area(&self, at: Point) -> Option<(Area, f64)> {
-        let monitor = self
-            .0
-            .monitor_from_point(f64::from(at.x), f64::from(at.y))
-            .ok()??;
-        let work = monitor.work_area();
-        let area = Area {
-            x: work.position.x,
-            y: work.position.y,
-            width: work.size.width,
-            height: work.size.height,
-        };
-        Some((area, monitor.scale_factor()))
-    }
-
-    fn create(&self, label: &str, at: Point, user: &CardUser, zoom: f64) -> Result<(), String> {
-        let (width, height) = logical_size(zoom);
-        let builder =
-            WebviewWindowBuilder::new(&self.0, label, WebviewUrl::App("index.html".into()))
-                .title(&user.display_name)
-                .inner_size(width, height)
-                // A fixed size that follows the zoom, so the card always looks
-                // the same.
-                .resizable(false)
-                // The main window's origin, so both share localStorage.
-                .use_https_scheme(true)
-                .additional_browser_args(crate::browser_args::BROWSER_ARGS)
-                .visible(false);
-        // Same chrome as the main window: the card draws its own title bar
-        // on Windows.
-        #[cfg(windows)]
-        let builder = builder.decorations(false);
-        let window = builder.build().map_err(|e| e.to_string())?;
-        let app = self.0.clone();
-        let owned = label.to_owned();
-        window.on_window_event(move |event| on_card_event(&app, &owned, event));
-        window
-            .set_position(PhysicalPosition::new(at.x, at.y))
-            .map_err(|e| e.to_string())
-    }
-
-    fn reuse(
-        &self,
-        label: &str,
-        at: Point,
-        user: &CardUser,
-        zoom: f64,
-        showing: bool,
-    ) -> Result<(), String> {
-        let window = self
-            .0
-            .get_webview_window(label)
-            .ok_or_else(|| format!("no window {label}"))?;
-        let (width, height) = logical_size(zoom);
-        window
-            .set_size(LogicalSize::new(width, height))
-            .map_err(|e| e.to_string())?;
-        window
-            .set_position(PhysicalPosition::new(at.x, at.y))
-            .map_err(|e| e.to_string())?;
-        window
-            .set_title(&user.display_name)
-            .map_err(|e| e.to_string())?;
-        self.0
-            .emit_to(EventTarget::webview_window(label), SHOW_EVENT, user)
-            .map_err(|e| e.to_string())?;
-        if showing {
-            bring_forward(&window).map_err(|e| e.to_string())?;
-        }
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
@@ -596,12 +434,26 @@ mod tests {
     fn blur_closes_an_unpinned_card_only_after_it_held_focus() {
         let mut cards = Cards::default();
         let a = cards.add(user("a"));
-        assert!(!cards.blurred(&a, false), "blur while the show settles");
+        assert!(!cards.blurred(&a, true), "blur while the show settles");
         cards.focused(&a);
-        assert!(!cards.blurred(&a, true), "webview blur while dragging");
-        assert!(cards.blurred(&a, false));
+        assert!(!cards.blurred(&a, false), "alt-tab or a drag keeps it");
+        assert!(cards.blurred(&a, true), "a click into the app closes it");
         assert!(cards.user(&a).is_none());
-        assert!(!cards.blurred(&a, false));
+        assert!(!cards.blurred(&a, true));
+    }
+
+    #[test]
+    fn coming_back_to_the_app_closes_only_the_looked_at_unpinned_card() {
+        let mut cards = Cards::default();
+        let pinned = cards.add(user("a"));
+        cards.focused(&pinned);
+        cards.set_pinned(&pinned, true);
+        let settling = cards.add(user("b"));
+        assert!(cards.app_focused().is_empty());
+        cards.focused(&settling);
+        assert_eq!(cards.app_focused(), std::slice::from_ref(&settling));
+        assert!(cards.user(&settling).is_none());
+        assert!(cards.user(&pinned).is_some());
     }
 
     #[test]
@@ -610,7 +462,7 @@ mod tests {
         let a = cards.add(user("a"));
         cards.focused(&a);
         cards.set_pinned(&a, true);
-        assert!(!cards.blurred(&a, false));
+        assert!(!cards.blurred(&a, true));
         assert!(cards.user(&a).is_some());
     }
 
@@ -620,9 +472,9 @@ mod tests {
         let a = cards.add(user("a"));
         cards.focused(&a);
         cards.reuse(&user("b"));
-        assert!(!cards.blurred(&a, false));
+        assert!(!cards.blurred(&a, true));
         cards.focused(&a);
-        assert!(cards.blurred(&a, false));
+        assert!(cards.blurred(&a, true));
     }
 
     #[test]
@@ -643,6 +495,7 @@ mod tests {
         no_monitor: bool,
         cursor_fails: bool,
         create_fails: bool,
+        on_top: bool,
         gone: Vec<String>,
         calls: RefCell<Vec<String>>,
     }
@@ -659,10 +512,24 @@ mod tests {
             (!self.no_monitor).then_some((AREA, 1.0))
         }
 
-        fn create(&self, label: &str, at: Point, user: &CardUser, zoom: f64) -> Result<(), String> {
+        fn main_on_top(&self) -> bool {
+            self.on_top
+        }
+
+        fn create(
+            &self,
+            label: &str,
+            at: Point,
+            user: &CardUser,
+            zoom: f64,
+            on_top: bool,
+        ) -> Result<(), String> {
             self.calls.borrow_mut().push(format!(
-                "create {label} {},{} {} x{zoom}",
-                at.x, at.y, user.username
+                "create {label} {},{} {} x{zoom}{}",
+                at.x,
+                at.y,
+                user.username,
+                if on_top { " on top" } else { "" }
             ));
             if self.create_fails {
                 return Err("build failed".into());
@@ -677,10 +544,14 @@ mod tests {
             user: &CardUser,
             zoom: f64,
             showing: bool,
+            on_top: bool,
         ) -> Result<(), String> {
             self.calls.borrow_mut().push(format!(
-                "reuse {label} {},{} {} x{zoom} {showing}",
-                at.x, at.y, user.username
+                "reuse {label} {},{} {} x{zoom} {showing}{}",
+                at.x,
+                at.y,
+                user.username,
+                if on_top { " on top" } else { "" }
             ));
             if self.gone.iter().any(|g| g == label) {
                 return Err("gone".into());
@@ -693,6 +564,21 @@ mod tests {
         fn calls(&self) -> Vec<String> {
             self.calls.borrow().clone()
         }
+    }
+
+    #[tokio::test]
+    async fn cards_open_on_top_when_the_main_window_is_pinned() {
+        let host = Fake {
+            on_top: true,
+            ..Fake::default()
+        };
+        let cards = UserCards::default();
+        open_on(&host, &cards, user("a"), 1.0).await.unwrap();
+        cards.lock().mark_ready("user-card-1");
+        open_on(&host, &cards, user("b"), 1.0).await.unwrap();
+        let calls = host.calls();
+        assert!(calls[0].starts_with("create ") && calls[0].ends_with(" on top"));
+        assert!(calls[1].starts_with("reuse ") && calls[1].ends_with(" on top"));
     }
 
     #[tokio::test]

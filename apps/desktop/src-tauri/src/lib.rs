@@ -165,11 +165,11 @@ pub fn run() {
             seventv_users::seventv_users,
             chat_history::chat_history,
             chat_history::chat_history_user,
-            user_card::user_card_open,
-            user_card::user_card_current,
-            user_card::user_card_ready,
-            user_card::user_card_set_pinned,
-            user_card::user_card_close,
+            user_card::commands::user_card_open,
+            user_card::commands::user_card_current,
+            user_card::commands::user_card_ready,
+            user_card::commands::user_card_set_pinned,
+            user_card::commands::user_card_close,
             storage_move::commands::storage_move_import,
             storage_move::commands::storage_move_imported,
             storage_move::commands::storage_move_export,
@@ -267,8 +267,12 @@ fn run_update_splash(mut context: tauri::Context, splash: update_splash::Splash)
 
 fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
     tray::on_window_event(window, event);
-    if window.label() == "main" && matches!(event, WindowEvent::Destroyed) {
-        user_card::close_all(window.app_handle());
+    if window.label() == "main" {
+        match event {
+            WindowEvent::Destroyed => user_card::close_all(window.app_handle()),
+            WindowEvent::Focused(true) => user_card::main_focused(window.app_handle()),
+            _ => {}
+        }
     }
 }
 
