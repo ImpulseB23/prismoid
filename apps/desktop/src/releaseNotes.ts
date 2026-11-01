@@ -13,6 +13,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.9.3",
+    headline: "Updates that always land",
+    features: [
+      {
+        title: "No more vanishing",
+        body: "If an update can't finish, the small update window says so and Prismoid opens again on its own, ready to try once more.",
+      },
+    ],
+    fixes: [],
+  },
+  {
     version: "0.9.2",
     headline: "Bans and timeouts, spelled out",
     features: [
