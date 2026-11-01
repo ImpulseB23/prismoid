@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.10.0](https://github.com/ImpulseB23/prismoid/compare/v0.9.3...v0.10.0) (2026-11-01)
+
+
+### Features
+
+* close chats after their stream ends ([#370](https://github.com/ImpulseB23/prismoid/issues/370)) ([1fe6bd8](https://github.com/ImpulseB23/prismoid/commit/1fe6bd831ef9e276488b330ad63824c6ba3a717d))
+* preview tabs for follow my browser ([#368](https://github.com/ImpulseB23/prismoid/issues/368)) ([9b8696c](https://github.com/ImpulseB23/prismoid/commit/9b8696ce83afc71ad25052fa01cc6079b23fce00))
+* what's new split into new, improved and fixed ([#366](https://github.com/ImpulseB23/prismoid/issues/366)) ([0bcef88](https://github.com/ImpulseB23/prismoid/commit/0bcef88480a19312090620cf0eb5d4fd4bb72f47))
+
 ## [0.9.3](https://github.com/ImpulseB23/prismoid/compare/v0.9.2...v0.9.3) (2026-11-01)
 
 
