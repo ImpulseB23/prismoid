@@ -61,7 +61,7 @@ const Thread: Component = () => {
           <div
             ref={(el) => (dialogRef = el)}
             tabIndex={-1}
-            class="palette palette--wide"
+            class="palette"
             role="dialog"
             aria-modal="true"
             aria-label="Reply thread"
