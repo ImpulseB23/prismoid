@@ -21,6 +21,7 @@ use tauri::State;
 use tokio::sync::watch;
 
 use crate::chat_history::History;
+use crate::ttl_cache::TtlCache;
 use crate::twitch_auth::{AuthError, AuthState, TWITCH_CLIENT_ID};
 use crate::twitch_channel_info::{fetch_channel_info, ChannelInfo};
 
@@ -39,7 +40,16 @@ pub struct ChannelState {
     helix_base: String,
     followers: FollowerCache,
     followed: FollowedCache,
+    profiles: TtlCache<String, UserInfo>,
+    follows: TtlCache<(String, String), Option<String>>,
 }
+
+/// Profiles change rarely and every chatter's is looked up for the feed's
+/// account flags, so they keep for a while and the cap is generous.
+const PROFILE_TTL: Duration = Duration::from_secs(10 * 60);
+const PROFILE_CAP: usize = 5000;
+const FOLLOW_TTL: Duration = Duration::from_secs(5 * 60);
+const FOLLOW_CAP: usize = 500;
 
 /// What the sidecar supervisor watches: every channel to keep joined, in
 /// tab order, and the one the window shows. An empty `joined` means the
@@ -74,6 +84,8 @@ impl ChannelState {
                 helix_base: helix_base.into(),
                 followers: FollowerCache::default(),
                 followed: FollowedCache::default(),
+                profiles: TtlCache::new(PROFILE_TTL, PROFILE_CAP),
+                follows: TtlCache::new(FOLLOW_TTL, FOLLOW_CAP),
             },
             rx,
         )
@@ -1183,6 +1195,41 @@ pub async fn fetch_follow_since(
     Ok(page.data.into_iter().next().map(|r| r.followed_at))
 }
 
+/// How many follow `user_id`'s channel, for the user card. Twitch gives
+/// the total to anyone; repeat lookups come from the same cache channel
+/// search fills.
+#[tauri::command]
+pub async fn twitch_follower_count(
+    auth: State<'_, AuthState>,
+    channels: State<'_, ChannelState>,
+    user_id: String,
+) -> Result<Option<u64>, ChannelError> {
+    if let Some(total) = channels
+        .followers
+        .lock()
+        .expect("follower cache poisoned")
+        .get(&user_id)
+    {
+        return Ok(Some(*total));
+    }
+    let tokens = auth.manager.load_or_refresh().await?;
+    let (_, total) = follower_total(
+        auth.manager.http_client().clone(),
+        channels.helix_base.clone(),
+        tokens.access_token.clone(),
+        user_id.clone(),
+    )
+    .await;
+    if let Some(total) = total {
+        channels
+            .followers
+            .lock()
+            .expect("follower cache poisoned")
+            .insert(user_id, total);
+    }
+    Ok(total)
+}
+
 #[tauri::command]
 pub async fn twitch_follow_since(
     auth: State<'_, AuthState>,
@@ -1190,16 +1237,22 @@ pub async fn twitch_follow_since(
     channel_id: String,
     user_id: String,
 ) -> Result<Option<String>, ChannelError> {
+    let key = (channel_id, user_id);
+    if let Some(since) = channels.follows.get(&key) {
+        return Ok(since);
+    }
     let tokens = auth.manager.load_or_refresh().await?;
-    fetch_follow_since(
+    let since = fetch_follow_since(
         auth.manager.http_client(),
         &channels.helix_base,
         &tokens.access_token,
         &tokens.user_id,
-        &channel_id,
-        &user_id,
+        &key.0,
+        &key.1,
     )
-    .await
+    .await?;
+    channels.follows.insert(key, since.clone());
+    Ok(since)
 }
 
 #[derive(Deserialize)]
@@ -1378,17 +1431,30 @@ pub async fn twitch_users_info(
     channels: State<'_, ChannelState>,
     ids: Vec<String>,
 ) -> Result<Vec<UserInfo>, ChannelError> {
-    if ids.is_empty() {
-        return Ok(Vec::new());
+    let mut out = Vec::with_capacity(ids.len());
+    let mut missing = Vec::new();
+    for id in ids {
+        match channels.profiles.get(&id) {
+            Some(info) => out.push(info),
+            None => missing.push(id),
+        }
+    }
+    if missing.is_empty() {
+        return Ok(out);
     }
     let tokens = auth.manager.load_or_refresh().await?;
-    fetch_users_info(
+    let fetched = fetch_users_info(
         auth.manager.http_client(),
         &channels.helix_base,
         &tokens.access_token,
-        &ids,
+        &missing,
     )
-    .await
+    .await?;
+    for info in &fetched {
+        channels.profiles.insert(info.id.clone(), info.clone());
+    }
+    out.extend(fetched);
+    Ok(out)
 }
 
 /// Resolves any Twitch login to its id and names, for slash commands that

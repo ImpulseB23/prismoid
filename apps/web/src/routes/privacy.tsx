@@ -11,7 +11,7 @@ export default function Privacy() {
       />
       <article class="prose">
         <h1>Privacy policy</h1>
-        <p>Last updated 28 October 2026.</p>
+        <p>Last updated 1 November 2026.</p>
         <p>
           prismoid is a chat client that runs on your own computer and talks
           directly to the platforms you connect it to. There is no prismoid
@@ -94,6 +94,13 @@ export default function Privacy() {
             hundred lines from this community service when you open one. It sees
             your IP address and the channel name. You can turn this off in
             Settings.
+          </li>
+          <li>
+            <strong>api.ivr.fi.</strong> Twitch only tells a channel's owner and
+            moderators who is subscribed, so when you open someone's user card
+            the app asks this community service, the one Chatterino uses,
+            whether they are subscribed to that channel and for how long. It
+            sees your IP address, their username and the channel name.
           </li>
           <li>
             <strong>GitHub.</strong> Every six hours the app fetches a small

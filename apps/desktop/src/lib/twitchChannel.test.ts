@@ -1,9 +1,59 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeSub,
   formatChannelError,
   isForChannel,
   normalizeLogin,
+  type SubAge,
 } from "./twitchChannel";
+
+describe("describeSub", () => {
+  const base: SubAge = {
+    hidden: false,
+    kind: "paid",
+    tier: "1",
+    months: 21,
+    streak: 12,
+    followed_at: null,
+  };
+
+  it("describes a current sub with its streak", () => {
+    expect(describeSub(base)).toEqual({
+      text: "Tier 1 - Subscribed for 21 months, 12-month streak",
+      current: true,
+    });
+  });
+
+  it("leaves out a streak that covers every month", () => {
+    expect(
+      describeSub({ ...base, kind: "prime", months: 1, streak: 1 })?.text,
+    ).toBe("Prime - Subscribed for 1 month");
+  });
+
+  it("marks gifts and plans without a month count", () => {
+    expect(describeSub({ ...base, kind: "gift", months: null })).toEqual({
+      text: "Tier 1 gift",
+      current: true,
+    });
+  });
+
+  it("describes an ended sub", () => {
+    expect(describeSub({ ...base, tier: null, months: 2 })).toEqual({
+      text: "Previously subscribed for 2 months",
+      current: false,
+    });
+  });
+
+  it("says nothing for someone who never subbed", () => {
+    expect(describeSub({ ...base, tier: null, months: null })).toBeNull();
+  });
+
+  it("keeps a hidden status hidden", () => {
+    expect(describeSub({ ...base, hidden: true })?.text).toBe(
+      "Sub status hidden",
+    );
+  });
+});
 
 describe("isForChannel", () => {
   it("filters twitch messages by broadcaster id", () => {
