@@ -499,6 +499,12 @@ option::checkmark {
     border-color 0.15s;
 }
 
+.tabs__strip .tabs__add {
+  position: sticky;
+  right: 0;
+  background: var(--bg);
+}
+
 .tabs__add:hover:not(:disabled) {
   color: var(--text);
   border-color: var(--border-strong);
