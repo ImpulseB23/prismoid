@@ -17,6 +17,7 @@ vi.mock("../stores/channelStore", () => ({
   channelTabs: () => tabs(),
   channelStatus: () => status(),
   focusChannel: (id: string) => focusChannel(id),
+  closeChannel: vi.fn(async () => {}),
 }));
 vi.mock("../lib/chatSession", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/chatSession")>()),
@@ -34,6 +35,7 @@ vi.mock("./ChatFeed", async () => {
   };
 });
 vi.mock("./CommandCenter", () => ({ default: () => null }));
+vi.mock("./OfflineBar", () => ({ default: () => null }));
 const openVideoWindow = vi.fn<(login: string, title: string) => Promise<void>>(
   async () => {},
 );

@@ -1017,6 +1017,47 @@ pub async fn fetch_stream_info(
     })
 }
 
+/// Which of `channel_ids` are live, from Helix `GET /streams`, a hundred
+/// channels a request.
+pub async fn fetch_live_channels(
+    http: &reqwest::Client,
+    helix_base: &str,
+    access_token: &str,
+    channel_ids: &[String],
+) -> Result<Vec<String>, ChannelError> {
+    let mut live = Vec::new();
+    for chunk in channel_ids.chunks(100) {
+        let mut query: Vec<(&str, &str)> =
+            chunk.iter().map(|id| ("user_id", id.as_str())).collect();
+        query.push(("first", "100"));
+        let streams = helix_get::<StreamsLiteResponse>(
+            http,
+            format!("{helix_base}/streams"),
+            &query,
+            access_token,
+        )
+        .await?;
+        live.extend(streams.data.into_iter().map(|s| s.user_id));
+    }
+    Ok(live)
+}
+
+#[tauri::command]
+pub async fn twitch_live_channels(
+    auth: State<'_, AuthState>,
+    channels: State<'_, ChannelState>,
+    channel_ids: Vec<String>,
+) -> Result<Vec<String>, ChannelError> {
+    let tokens = auth.manager.load_or_refresh().await?;
+    fetch_live_channels(
+        auth.manager.http_client(),
+        &channels.helix_base,
+        &tokens.access_token,
+        &channel_ids,
+    )
+    .await
+}
+
 #[tauri::command]
 pub async fn twitch_get_stream_info(
     auth: State<'_, AuthState>,
@@ -1500,6 +1541,42 @@ mod tests {
         assert_eq!(c.id, "71092938");
         assert_eq!(c.display_name, "xQc");
         assert_eq!(c.profile_image_url, "https://img/x.png");
+    }
+
+    #[tokio::test]
+    async fn live_channels_asks_a_hundred_at_a_time() {
+        let server = MockServer::start_async().await;
+        let first = server.mock(|when, then| {
+            when.method(GET)
+                .path("/streams")
+                .query_param("user_id", "0")
+                .query_param("user_id", "99")
+                .query_param("first", "100");
+            then.status(200).json_body(serde_json::json!({
+                "data": [{"user_id": "7", "viewer_count": 10}]
+            }));
+        });
+        let second = server.mock(|when, then| {
+            when.method(GET)
+                .path("/streams")
+                .query_param("user_id", "100")
+                .query_param("user_id", "149");
+            then.status(200).json_body(serde_json::json!({
+                "data": [{"user_id": "120", "viewer_count": 3}]
+            }));
+        });
+        let ids: Vec<String> = (0..150).map(|i| i.to_string()).collect();
+        let http = reqwest::Client::new();
+        let live = fetch_live_channels(&http, &server.base_url(), "tok", &ids)
+            .await
+            .unwrap();
+        first.assert();
+        second.assert();
+        assert_eq!(live, ["7", "120"]);
+        assert!(fetch_live_channels(&http, &server.base_url(), "tok", &[])
+            .await
+            .unwrap()
+            .is_empty());
     }
 
     #[tokio::test]

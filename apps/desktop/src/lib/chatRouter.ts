@@ -26,6 +26,7 @@ import {
   applyPredictionUpdate,
 } from "../stores/streamManagerStore";
 import { applyAdBreak } from "../stores/adStore";
+import { noteChannelRaid } from "../stores/offlineStore";
 import { syncPaints } from "../stores/paintStore";
 import { createMentionAlert, playChime } from "./mentionAlert";
 import { isForChannel } from "./twitchChannel";
@@ -103,6 +104,10 @@ function routeEvents(events: ChatEvent[]): void {
         continue;
       case "ad_break":
         applyAdBreak(e);
+        continue;
+      // Kept for when the raiding channel's stream ends.
+      case "raid":
+        noteChannelRaid(e);
         continue;
     }
     for (const s of sinks) {

@@ -1921,6 +1921,25 @@ option::checkmark {
 
 /* Flush with the window's bottom edge, so header and composer frame the
    chat as one surface. Focus lights the top edge instead of a box. */
+/* A chat whose stream ended, counting down to closing. */
+.offline-bar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+  font-size: 13px;
+}
+
+.offline-bar__text {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .composer {
   position: relative;
   flex-shrink: 0;

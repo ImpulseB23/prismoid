@@ -526,7 +526,8 @@ impl Store {
                 | ChatEvent::PollUpdate(_)
                 | ChatEvent::PredictionUpdate(_)
                 | ChatEvent::AdBreak(_)
-                | ChatEvent::ChatSettings { .. } => {}
+                | ChatEvent::ChatSettings { .. }
+                | ChatEvent::Raid { .. } => {}
             }
         }
         tx.commit()

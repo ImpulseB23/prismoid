@@ -306,6 +306,17 @@ func (s *Session) subscribeMissing(sessionID, broadcasterID string) (string, boo
 			}
 		}
 	}
+	if err == nil {
+		if _, ok := have["channel.raid"]; !ok {
+			// Refused once ten channels hold one; those channels just do not
+			// offer to follow a raid.
+			if raidID, raidErr := SubscribeRaid(s.ctx, s.helix(), sessionID, broadcasterID); raidErr != nil {
+				s.Log.Info().Err(raidErr).Str("broadcaster", broadcasterID).Msg("raid feed unavailable")
+			} else {
+				made["channel.raid"] = raidID
+			}
+		}
+	}
 	if err == nil && !off[FeedBroadcaster] {
 		// Polls, predictions and ad breaks only exist for the user's own
 		// channel. A refusal there means the grant predates the stream

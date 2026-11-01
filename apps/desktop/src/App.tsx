@@ -46,6 +46,7 @@ import {
 } from "./stores/mentionsStore";
 import { clearRoles, loadModeratedChannels } from "./stores/roleStore";
 import { trackActiveStream } from "./stores/streamStore";
+import { startOfflineWatch } from "./stores/offlineStore";
 import { loadOwnColor } from "./stores/ownIdentityStore";
 import { initWhatsNew } from "./stores/whatsNewStore";
 import { trackWindowChrome } from "./stores/windowStore";
@@ -223,6 +224,7 @@ const ChatShell: Component<{ login: string; onSignOut: () => void }> = (
   props,
 ) => {
   trackActiveStream();
+  onMount(() => onCleanup(startOfflineWatch()));
 
   // Mentions from before the app was open sit in each channel's stored
   // history (backlog included), and only the tab on screen loads its own.
