@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.11.0](https://github.com/ImpulseB23/prismoid/compare/v0.10.1...v0.11.0) (2026-11-01)
+
+
+### Features
+
+* months on the sub badge hover ([#382](https://github.com/ImpulseB23/prismoid/issues/382)) ([39eb6a0](https://github.com/ImpulseB23/prismoid/commit/39eb6a0e34351bce553e297173e03871050e2008))
+* plus button right after the last tab ([#378](https://github.com/ImpulseB23/prismoid/issues/378)) ([3e8b669](https://github.com/ImpulseB23/prismoid/commit/3e8b669546e3341f471144cdaa8752b6dba3ffb3))
+* popout design tokens ([#387](https://github.com/ImpulseB23/prismoid/issues/387)) ([600cab3](https://github.com/ImpulseB23/prismoid/commit/600cab3573e84296736240643d35794b6b4fb0dc))
+* preview tabs close when you move on ([#377](https://github.com/ImpulseB23/prismoid/issues/377)) ([bc5811a](https://github.com/ImpulseB23/prismoid/commit/bc5811acac90e4fe572ad07f97c41f36abee7b24))
+* startup window that updates before the app opens ([#376](https://github.com/ImpulseB23/prismoid/issues/376)) ([c09787a](https://github.com/ImpulseB23/prismoid/commit/c09787a25f69f30128e95096cb711735ea10fefd))
+* sub status, follower count and lookup caches ([#385](https://github.com/ImpulseB23/prismoid/issues/385)) ([56c5609](https://github.com/ImpulseB23/prismoid/commit/56c5609dd48ffd6cc3926cee66c6f187f72d5db2))
+* user card rework ([#389](https://github.com/ImpulseB23/prismoid/issues/389)) ([bb1a14c](https://github.com/ImpulseB23/prismoid/commit/bb1a14cfb07e575e2c04b6934dea94aaed4f4b83))
+
+
+### Bug Fixes
+
+* deleted messages wiped on restart ([#381](https://github.com/ImpulseB23/prismoid/issues/381)) ([b6cb579](https://github.com/ImpulseB23/prismoid/commit/b6cb57918d6b4ee6bab1826f52a0f9a5af6c1ae3))
+* no raw twitch errors on mod actions ([#383](https://github.com/ImpulseB23/prismoid/issues/383)) ([669be0f](https://github.com/ImpulseB23/prismoid/commit/669be0f0e1784c8febbe02fee7ed1bffc69e93e2))
+* offline channels hide the watch button and stream stats ([#386](https://github.com/ImpulseB23/prismoid/issues/386)) ([787bb64](https://github.com/ImpulseB23/prismoid/commit/787bb64a9a0b4c8af0317358ed392c6604233315))
+* selectable text in mentions, search and threads ([#384](https://github.com/ImpulseB23/prismoid/issues/384)) ([a1dda35](https://github.com/ImpulseB23/prismoid/commit/a1dda35dea464b74fda425f8d2e76d68c14c156e))
+* settings section for Windows itself ([#375](https://github.com/ImpulseB23/prismoid/issues/375)) ([605709b](https://github.com/ImpulseB23/prismoid/commit/605709bdcc3e2ebebab930c108f0897b5de1ab30))
+* tabs line up with the buttons beside them ([#388](https://github.com/ImpulseB23/prismoid/issues/388)) ([dcebcf4](https://github.com/ImpulseB23/prismoid/commit/dcebcf432a8ca4a9b95a6919d09847c215246c28))
+* user cards on top and alt-tab ([#380](https://github.com/ImpulseB23/prismoid/issues/380)) ([caea5c3](https://github.com/ImpulseB23/prismoid/commit/caea5c3de4e3879b82890d6a98beea089e36a6ba))
+
 ## [0.10.1](https://github.com/ImpulseB23/prismoid/compare/v0.10.0...v0.10.1) (2026-11-01)
 
 
