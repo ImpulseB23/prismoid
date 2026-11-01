@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "launch-update",
+  "description": "Startup window that checks for, downloads and installs updates before the app shows",
+  "windows": ["launch-update"],
+  "permissions": ["core:default", "updater:default", "log:default"]
+}

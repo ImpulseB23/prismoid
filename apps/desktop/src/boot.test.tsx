@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("./App", () => ({ default: () => <p>main app</p> }));
 vi.mock("./UserCardWindow", () => ({ default: () => <p>user card</p> }));
 vi.mock("./VideoWindow", () => ({ default: () => <p>video</p> }));
+vi.mock("./LaunchUpdate", () => ({ default: () => <p>startup</p> }));
 const move = {
   exportOldStorage: vi.fn(async () => {}),
   importOldStorage: vi.fn(async () => {}),
@@ -51,6 +52,11 @@ describe("boot", () => {
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     expect(document.body.textContent).toContain("Update did not finish");
     history.replaceState(null, "", "/");
+  });
+
+  it("renders the startup window without the app", async () => {
+    expect(await mount("launch-update")).toBe("startup");
+    expect(move.importOldStorage).not.toHaveBeenCalled();
   });
 
   it("renders the app for every other window", async () => {

@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CHECK_EVERY_MS,
   FOCUS_RECHECK_MS,
-  LAUNCH_WINDOW_MS,
   createUpdateStore,
   type DownloadEvent,
 } from "./updateStore";
@@ -249,29 +248,47 @@ describe("updateStore", () => {
     await installing;
   });
 
-  it("installs on its own when the launch check finds an update", async () => {
-    const restarted = vi.fn(async () => {});
-    const store = createUpdateStore(async () => update("0.3.0"), restarted);
-    const stop = store.schedule();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(store.state()).toEqual({ kind: "ready", version: "0.3.0" });
-    expect(restarted).toHaveBeenCalledOnce();
-    stop();
-  });
-
-  it("only downloads quietly when the launch check answers late", async () => {
+  it("leaves the launch check to the startup window when it ran", async () => {
+    const lookup = vi.fn(async () => update("0.3.0"));
+    let focus!: () => void;
     const store = createUpdateStore(
-      () =>
-        new Promise((resolve) =>
-          setTimeout(() => resolve(update("0.3.0")), LAUNCH_WINDOW_MS + 1),
-        ),
+      lookup,
+      async () => {},
+      Date.now,
+      (cb) => {
+        focus = cb;
+        return () => {};
+      },
+      async () => {},
+      async () => true,
     );
     const stop = store.schedule();
-    await vi.advanceTimersByTimeAsync(LAUNCH_WINDOW_MS + 1);
+    await vi.advanceTimersByTimeAsync(0);
+    focus();
+    expect(lookup).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(CHECK_EVERY_MS);
     expect(store.state()).toMatchObject({
       kind: "downloaded",
       version: "0.3.0",
     });
+    stop();
+  });
+
+  it("checks at launch itself when the host cannot say", async () => {
+    const lookup = vi.fn(async () => null);
+    const store = createUpdateStore(
+      lookup,
+      async () => {},
+      Date.now,
+      () => () => {},
+      async () => {},
+      async () => {
+        throw new Error("no host");
+      },
+    );
+    const stop = store.schedule();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(lookup).toHaveBeenCalledOnce();
     stop();
   });
 
