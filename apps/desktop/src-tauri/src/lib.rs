@@ -28,6 +28,7 @@ pub mod twitch_irc;
 pub mod twitch_polls;
 pub mod twitch_quick_actions;
 mod uninstall;
+mod update_splash;
 mod user_card;
 mod video_window;
 pub mod youtube_auth;
@@ -60,6 +61,13 @@ fn get_platform() -> &'static str {
 }
 
 pub fn run() {
+    let context = tauri::generate_context!();
+    #[cfg(windows)]
+    if let Some(palette) = update_splash::palette(std::env::args()) {
+        update_splash::run(context, palette);
+        return;
+    }
+
     // Phase 0 dev convenience: in debug builds only, load `.env.local` from
     // cwd or any parent before anything reads PRISMOID_TWITCH_*. Release
     // builds skip this entirely so a stray file in the install dir cannot
@@ -105,6 +113,7 @@ pub fn run() {
             reset::reset_settings,
             reset::reset_all_data,
             uninstall::uninstall_app,
+            update_splash::update_splash_start,
             twitch_auth::commands::twitch_auth_status,
             twitch_auth::commands::twitch_start_login,
             twitch_auth::commands::twitch_complete_login,
@@ -195,7 +204,7 @@ pub fn run() {
             twitch_ads::twitch_start_commercial,
         ])
         .setup(setup)
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("failed to run prismoid");
 }
 
@@ -236,6 +245,8 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
     if !tray::launched_minimized(std::env::args()) {
         tray::show_main(app.handle());
     }
+    #[cfg(windows)]
+    update_splash::release();
     use tokio::sync::Notify;
     use twitch_auth::{AuthManager, AuthState, KeychainStore, ScopeGroups, TWITCH_CLIENT_ID};
     use twitch_oauth2::Scope;

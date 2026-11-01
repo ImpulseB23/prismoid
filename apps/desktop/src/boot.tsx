@@ -1,5 +1,6 @@
-// Picks the root for this window by its label: user cards and pop-out
-// players get their own small trees, every other window the app. Loaded
+// Picks the root for this window by its label: user cards, pop-out
+// players and the update splash get their own small trees, every other
+// window the app. Loaded
 // lazily so those windows never mount the main window's tree or start its
 // feed, and so the main window's stores read localStorage only after an old
 // origin's copy is in.
@@ -14,10 +15,15 @@ import {
   STORAGE_MOVE_LABEL,
 } from "./lib/storageMove";
 
+/** Matches the host's update splash window. */
+export const UPDATE_SPLASH_LABEL = "update-splash";
+
 export async function boot(label: string, root: HTMLElement): Promise<void> {
   if (label === STORAGE_MOVE_LABEL) return exportOldStorage(localStorage);
   let Root: Component;
-  if (isCardWindow(label)) {
+  if (label === UPDATE_SPLASH_LABEL) {
+    Root = (await import("./UpdateSplash")).default;
+  } else if (isCardWindow(label)) {
     Root = (await import("./UserCardWindow")).default;
   } else if (isVideoWindow(label)) {
     Root = (await import("./VideoWindow")).default;

@@ -9,6 +9,8 @@ import {
 
 vi.mock("@tauri-apps/plugin-updater", () => ({ check: vi.fn() }));
 vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: vi.fn() }));
+const invoke = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
 type OnEvent = (e: DownloadEvent) => void;
 
@@ -67,6 +69,47 @@ describe("updateStore", () => {
     expect(u.install).toHaveBeenCalledOnce();
     expect(store.state()).toEqual({ kind: "ready", version: "0.2.0" });
     expect(restarted).toHaveBeenCalledOnce();
+  });
+
+  it("starts the splash right before the installer, which runs even if it fails", async () => {
+    const order: string[] = [];
+    const u = update("0.2.0");
+    u.install.mockImplementation(async () => {
+      order.push("install");
+    });
+    const cover = vi.fn(async () => {
+      order.push("splash");
+    });
+    const run = async () => {
+      const store = createUpdateStore(
+        async () => u,
+        async () => {},
+        Date.now,
+        () => () => {},
+        cover,
+      );
+      await store.check(false);
+      await store.install();
+    };
+    await run();
+    expect(order).toEqual(["splash", "install"]);
+
+    cover.mockRejectedValueOnce(new Error("copy failed"));
+    await run();
+    expect(u.install).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks the host for the splash in the current palette", async () => {
+    const u = update("0.2.0");
+    const store = createUpdateStore(
+      async () => u,
+      async () => {},
+    );
+    await store.check(false);
+    await store.install();
+    expect(invoke).toHaveBeenCalledWith("update_splash_start", {
+      palette: expect.stringMatching(/^(light|dark)$/),
+    });
   });
 
   it("waits on the quiet download when installed early, with progress", async () => {

@@ -1,5 +1,6 @@
-// Full-window update screen: the download, the install and the restart
-// happen behind it, so the installer never shows a window of its own.
+// Full-window update screen: the download happens behind it, and the
+// update splash window takes over with the same look once the app quits
+// for the installer.
 
 import { Component, Show } from "solid-js";
 import { logo } from "../stores/themeStore";
@@ -53,44 +54,58 @@ export interface UpdateScreenProps {
   onDismiss: () => void;
 }
 
+export const UpdateView: Component<{
+  view: ScreenView;
+  logo: string;
+  onRetry?: () => void;
+  onDismiss?: () => void;
+}> = (props) => (
+  <div
+    class="update-screen"
+    classList={{ "update-screen--error": props.view.failed }}
+    role={props.view.failed ? "alert" : "status"}
+  >
+    <img src={props.logo} alt="" />
+    <h1>{props.view.title}</h1>
+    <p>{props.view.detail}</p>
+    <Show when={!props.view.failed}>
+      <div
+        class="update-screen__bar"
+        classList={{ "update-screen__bar--busy": props.view.progress === null }}
+      >
+        <div style={{ width: `${props.view.progress ?? 30}%` }} />
+      </div>
+    </Show>
+    <Show when={props.view.failed}>
+      <div class="update-screen__actions">
+        <button
+          type="button"
+          class="btn btn--primary"
+          onClick={() => props.onRetry?.()}
+        >
+          Try again
+        </button>
+        <button
+          type="button"
+          class="btn btn--outline"
+          onClick={() => props.onDismiss?.()}
+        >
+          Not now
+        </button>
+      </div>
+    </Show>
+  </div>
+);
+
 const UpdateScreen: Component<UpdateScreenProps> = (props) => (
   <Show when={screenFor(props.state())}>
     {(view) => (
-      <div
-        class="update-screen"
-        classList={{ "update-screen--error": view().failed }}
-        role={view().failed ? "alert" : "status"}
-      >
-        <img src={logo()} alt="" />
-        <h1>{view().title}</h1>
-        <p>{view().detail}</p>
-        <Show when={!view().failed}>
-          <div
-            class="update-screen__bar"
-            classList={{ "update-screen__bar--busy": view().progress === null }}
-          >
-            <div style={{ width: `${view().progress ?? 30}%` }} />
-          </div>
-        </Show>
-        <Show when={view().failed}>
-          <div class="update-screen__actions">
-            <button
-              type="button"
-              class="btn btn--primary"
-              onClick={() => props.onRetry()}
-            >
-              Try again
-            </button>
-            <button
-              type="button"
-              class="btn btn--outline"
-              onClick={() => props.onDismiss()}
-            >
-              Not now
-            </button>
-          </div>
-        </Show>
-      </div>
+      <UpdateView
+        view={view()}
+        logo={logo()}
+        onRetry={props.onRetry}
+        onDismiss={props.onDismiss}
+      />
     )}
   </Show>
 );

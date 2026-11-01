@@ -38,6 +38,16 @@ describe("boot", () => {
     expect(move.importOldStorage).not.toHaveBeenCalled();
   });
 
+  it("renders only the update screen in the update splash", async () => {
+    history.replaceState(null, "", "/?palette=light");
+    const text = await mount("update-splash");
+    expect(text).toContain("Updating prismoid");
+    expect(text).toContain("Installing");
+    expect(document.documentElement.dataset.theme).toBe("light");
+    expect(move.importOldStorage).not.toHaveBeenCalled();
+    history.replaceState(null, "", "/");
+  });
+
   it("renders the app for every other window", async () => {
     expect(await mount("main")).toBe("main app");
     expect(move.importOldStorage).toHaveBeenCalledOnce();
