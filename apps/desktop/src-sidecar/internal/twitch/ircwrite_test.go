@@ -19,14 +19,41 @@ type fakeTMI struct {
 	t      *testing.T
 	answer func(channel, text string) []string
 	refuse bool
+	// noJoin leaves JOINs unanswered; hangUp closes the socket on PRIVMSG;
+	// ping sends a PING before each answer.
+	noJoin bool
+	hangUp bool
+	ping   bool
 
 	mu    sync.Mutex
 	dials int
 	got   []string
 }
 
-func (f *fakeTMI) dial(_ context.Context, _ string) (net.Conn, error) {
-	client, server := net.Pipe()
+// dial connects over loopback TCP: unlike net.Pipe it buffers, as a real
+// socket does, so both ends can write at once.
+func (f *fakeTMI) dial(ctx context.Context, _ string) (net.Conn, error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = ln.Close() }()
+	accepted := make(chan net.Conn, 1)
+	go func() {
+		if c, err := ln.Accept(); err == nil {
+			accepted <- c
+		}
+		close(accepted)
+	}()
+	client, err := (&net.Dialer{}).DialContext(ctx, "tcp", ln.Addr().String())
+	if err != nil {
+		return nil, err
+	}
+	server, ok := <-accepted
+	if !ok {
+		_ = client.Close()
+		return nil, errors.New("fake tmi: accept failed")
+	}
 	f.mu.Lock()
 	f.dials++
 	f.mu.Unlock()
@@ -61,12 +88,24 @@ func (f *fakeTMI) serve(conn net.Conn) {
 			}
 			send(":tmi.twitch.tv 001 viewer :Welcome, GLHF!")
 		case strings.HasPrefix(line, "JOIN #"):
+			if f.noJoin {
+				continue
+			}
 			ch := strings.TrimPrefix(line, "JOIN #")
 			send(
 				":viewer!viewer@viewer.tmi.twitch.tv JOIN #"+ch,
 				"@badge-info=;color=#FF0000 :tmi.twitch.tv USERSTATE #"+ch,
 			)
 		case strings.Contains(line, "PRIVMSG #"):
+			f.mu.Lock()
+			hangUp, ping := f.hangUp, f.ping
+			f.mu.Unlock()
+			if hangUp {
+				return
+			}
+			if ping {
+				send("PING :tmi.twitch.tv")
+			}
 			_, rest, _ := strings.Cut(line, "PRIVMSG #")
 			ch, text, _ := strings.Cut(rest, " :")
 			send(f.answer(ch, text)...)
@@ -179,5 +218,87 @@ func TestChatWriterReusesTheConnectionUntilTheTokenChanges(t *testing.T) {
 	}
 	if joins != 2 {
 		t.Fatalf("joins = %d", joins)
+	}
+}
+
+func ok(ch, _ string) []string {
+	return []string{"@id=m :tmi.twitch.tv USERSTATE #" + ch}
+}
+
+func TestChatWriterRedialsAfterTheConnectionDrops(t *testing.T) {
+	f := &fakeTMI{t: t, answer: ok, hangUp: true}
+	w := newWriter(f)
+	defer w.Close()
+
+	if _, err := w.Send(context.Background(), "viewer", "tok", "caedrel", "hi", ""); err == nil {
+		t.Fatal("a dropped connection reported success")
+	}
+	f.mu.Lock()
+	f.hangUp = false
+	f.mu.Unlock()
+	if _, err := w.Send(context.Background(), "viewer", "tok", "caedrel", "hi", ""); err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.dials != 2 {
+		t.Fatalf("dials = %d", f.dials)
+	}
+}
+
+func TestChatWriterAnswersPingsWhileWaiting(t *testing.T) {
+	f := &fakeTMI{t: t, answer: ok, ping: true}
+	w := newWriter(f)
+	defer w.Close()
+
+	if _, err := w.Send(context.Background(), "viewer", "tok", "caedrel", "hi", ""); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		for _, l := range f.lines() {
+			if l == "PONG :tmi.twitch.tv" {
+				return
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("no PONG")
+}
+
+func TestChatWriterStopsWhenTheCallerGivesUp(t *testing.T) {
+	f := &fakeTMI{t: t, answer: func(string, string) []string { return nil }}
+	w := newWriter(f)
+	defer w.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	if _, err := w.Send(ctx, "viewer", "tok", "caedrel", "hi", ""); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestChatWriterReportsAJoinTwitchNeverAnswered(t *testing.T) {
+	prev := ircJoinTimeout
+	ircJoinTimeout = 30 * time.Millisecond
+	defer func() { ircJoinTimeout = prev }()
+
+	f := &fakeTMI{t: t, answer: ok, noJoin: true}
+	w := newWriter(f)
+	defer w.Close()
+
+	_, err := w.Send(context.Background(), "viewer", "tok", "caedrel", "hi", "")
+	if err == nil || !strings.Contains(err.Error(), "join caedrel") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestChatWriterReportsAFailedDial(t *testing.T) {
+	w := &ChatWriter{
+		Dial: func(context.Context, string) (net.Conn, error) { return nil, errors.New("offline") },
+		Log:  zerolog.Nop(),
+	}
+	if _, err := w.Send(context.Background(), "viewer", "tok", "caedrel", "hi", ""); err == nil || !strings.Contains(err.Error(), "offline") {
+		t.Fatalf("err = %v", err)
 	}
 }
