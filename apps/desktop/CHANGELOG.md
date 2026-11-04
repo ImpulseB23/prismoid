@@ -5,7 +5,9 @@
 
 ### Features
 
+* previews follow your browser tabs ([#403](https://github.com/ImpulseB23/prismoid/issues/403)) ([df45ed7](https://github.com/ImpulseB23/prismoid/commit/df45ed72efb1dcafab4b7cce98a5e4c6b7409514))
 * styled [@mentions](https://github.com/mentions) ([#394](https://github.com/ImpulseB23/prismoid/issues/394)) ([a407faa](https://github.com/ImpulseB23/prismoid/commit/a407faa7e7f63ca618e9b3f2e0a5dbde4fc68330))
+* what's new can link to a settings section ([#402](https://github.com/ImpulseB23/prismoid/issues/402)) ([f31baa8](https://github.com/ImpulseB23/prismoid/commit/f31baa8ea86f32a1e215bfbde92bebfbcf7c8d41))
 
 
 ### Bug Fixes
@@ -13,6 +15,12 @@
 * @ completion knows the streamer and history ([#393](https://github.com/ImpulseB23/prismoid/issues/393)) ([6ddd66c](https://github.com/ImpulseB23/prismoid/commit/6ddd66c3d46b4d270940e0ead428c2020b697284))
 * input status line no longer sticks ([#399](https://github.com/ImpulseB23/prismoid/issues/399)) ([ba59662](https://github.com/ImpulseB23/prismoid/commit/ba59662070afeeafb06ca1b56833bd8cb3431645))
 * sends and mod actions run off the sidecar's command loop ([#398](https://github.com/ImpulseB23/prismoid/issues/398)) ([001b440](https://github.com/ImpulseB23/prismoid/commit/001b440be254a58d7bab255cec3bb1abfb7f6a0c))
+* sent messages don't look unsent ([#400](https://github.com/ImpulseB23/prismoid/issues/400)) ([ae39662](https://github.com/ImpulseB23/prismoid/commit/ae39662b9db0e55a3b18cbaddf26d649994baad2))
+
+
+### Performance
+
+* send chat over irc like twitch and chatterino ([#401](https://github.com/ImpulseB23/prismoid/issues/401)) ([e3537f9](https://github.com/ImpulseB23/prismoid/commit/e3537f912e965ad31b23c4d8afd50051cedb72f1))
 
 ## [0.11.0](https://github.com/ImpulseB23/prismoid/compare/v0.10.1...v0.11.0) (2026-11-01)
 
