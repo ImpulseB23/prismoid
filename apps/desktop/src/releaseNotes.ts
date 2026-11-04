@@ -17,7 +17,7 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    version: "0.11.1",
+    version: "0.12.0",
     headline: "Mention anyone",
     features: [],
     improvements: [
