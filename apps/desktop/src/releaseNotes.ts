@@ -17,6 +17,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.11.1",
+    headline: "Mention anyone",
+    features: [],
+    improvements: [
+      "@mentions in chat show in the person's name color, underlined. Click one to open their card.",
+    ],
+    fixes: [
+      "Typing @ now offers the streamer and everyone from earlier in the chat, not only people who spoke since you opened it.",
+    ],
+  },
+  {
     version: "0.11.0",
     headline: "Know who you're looking at",
     features: [
