@@ -227,6 +227,22 @@ func RunCommandLoop(ctx context.Context, scanner *bufio.Scanner, encoder *json.E
 	// skewed. Resets to 0 on respawn, which is the correct signal.
 	var heartbeatCounter uint64
 
+	// Helix and YouTube requests can take seconds (slow answers, retry
+	// backoff). They run in order on their own goroutine: inline they would
+	// stall the heartbeat, the host would kill the sidecar as hung, and
+	// every pending command would fail with it.
+	requests := make(chan control.Command, cmdChanCapacity)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case cmd := <-requests:
+				DispatchRequest(ctx, cmd, notify, logger)
+			}
+		}
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -246,6 +262,14 @@ func RunCommandLoop(ctx context.Context, scanner *bufio.Scanner, encoder *json.E
 				return err
 			}
 		case cmd := <-cmdCh:
+			if requestCommands[cmd.Cmd] {
+				select {
+				case requests <- cmd:
+				case <-ctx.Done():
+					return nil
+				}
+				continue
+			}
 			DispatchCommand(ctx, cmd, clients, session, firsts, cosmetics, bundles, out, notify, logger)
 		}
 	}
@@ -306,6 +330,31 @@ func DispatchCommand(ctx context.Context, cmd control.Command, clients map[strin
 		HandleKickConnect(ctx, cmd, clients, out, logger)
 	case "kick_disconnect":
 		HandleKickDisconnect(cmd, clients, logger)
+	default:
+		if !DispatchRequest(ctx, cmd, notify, logger) {
+			logger.Info().Str("cmd", cmd.Cmd).Str("channel", cmd.Channel).Msg("received command")
+		}
+	}
+}
+
+// requestCommands are answered by a network request to Twitch or YouTube
+// and touch no state the command loop owns, so they can run off it.
+var requestCommands = map[string]bool{
+	"ban_user":             true,
+	"unban_user":           true,
+	"timeout_user":         true,
+	"warn_user":            true,
+	"delete_message":       true,
+	"clear_chat":           true,
+	"manage_held_message":  true,
+	"send_chat_message":    true,
+	"youtube_send_message": true,
+}
+
+// DispatchRequest runs one of the [requestCommands] and reports whether
+// cmd was one.
+func DispatchRequest(ctx context.Context, cmd control.Command, notify twitch.Notify, logger zerolog.Logger) bool {
+	switch cmd.Cmd {
 	case "ban_user":
 		HandleBanUser(ctx, cmd, notify, logger)
 	case "unban_user":
@@ -325,8 +374,9 @@ func DispatchCommand(ctx context.Context, cmd control.Command, clients map[strin
 	case "youtube_send_message":
 		HandleYouTubeSendMessage(ctx, cmd, notify, logger)
 	default:
-		logger.Info().Str("cmd", cmd.Cmd).Str("channel", cmd.Channel).Msg("received command")
+		return false
 	}
+	return true
 }
 
 // twitchHelixBase overrides the Helix base URL used by Twitch command
@@ -646,7 +696,9 @@ func HandleSendChatMessage(ctx context.Context, cmd control.Command, notify twit
 		AccessToken: cmd.Token,
 		BaseURL:     twitchHelixBase,
 	}
+	start := time.Now()
 	resp, err := sendWithRetry(ctx, client, cmd, logger)
+	logger.Debug().Dur("took", time.Since(start)).Bool("ok", err == nil).Msg("send_chat_message answered")
 	if err != nil {
 		logger.Warn().Err(err).Str("broadcaster", cmd.BroadcasterID).Msg("send_chat_message failed")
 		reply(SendChatResultPayload{ErrorMessage: err.Error(), HTTPStatus: helixStatus(err)})
