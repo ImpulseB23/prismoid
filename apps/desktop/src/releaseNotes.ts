@@ -25,6 +25,8 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     ],
     fixes: [
       "Typing @ now offers the streamer and everyone from earlier in the chat, not only people who spoke since you opened it.",
+      "Messages no longer fail with ‘Chat is still connecting’ when Twitch is slow to answer.",
+      "The note under the chat box goes away when you start typing or after a few seconds.",
     ],
   },
   {
