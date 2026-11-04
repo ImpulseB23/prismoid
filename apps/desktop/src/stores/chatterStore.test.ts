@@ -32,4 +32,27 @@ describe("chatterStore", () => {
     expect(s.recent().map((c) => c.login)).toEqual(["c", "b"]);
     expect(s.stats("1")).toBeUndefined();
   });
+
+  it("ranks people from history below anyone heard live", () => {
+    const s = createChatterStore();
+    s.record("1", "live", "Live", 10);
+    s.recordPast([
+      { id: "2", login: "old", display_name: "Old" },
+      { id: "1", login: "live", display_name: "Live" },
+      { id: "3", login: "older", display_name: "Older" },
+      { id: "2", login: "old", display_name: "Old" },
+    ]);
+    expect(s.recent().map((c) => c.login)).toEqual(["live", "old", "older"]);
+    expect(s.byLogin("older")?.id).toBe("3");
+  });
+
+  it("keeps the newest when history overflows the cap", () => {
+    const s = createChatterStore(2);
+    s.record("1", "live", "Live", 10);
+    s.recordPast([
+      { id: "2", login: "a", display_name: "A" },
+      { id: "3", login: "b", display_name: "B" },
+    ]);
+    expect(s.recent().map((c) => c.login)).toEqual(["live", "b"]);
+  });
 });

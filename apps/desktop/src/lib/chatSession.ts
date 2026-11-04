@@ -90,6 +90,17 @@ function openSession(channel: Channel): {
   };
   const add = (batch: ChatMessage[]) => {
     chat.addMessages(batch);
+    // Whoever spoke before the channel opened can be mentioned too.
+    const ignored = settings().ignoredLogins;
+    chatters.recordPast(
+      batch
+        .filter((m) => !ignored.includes(m.username))
+        .map((m) => ({
+          id: m.platform_user_id,
+          login: m.username,
+          display_name: m.display_name,
+        })),
+    );
     // Stored history can hold the user's newest message in a channel when
     // the live feed does not.
     const me = currentUserId();

@@ -1,6 +1,7 @@
 // Who has spoken in a channel, most recent first, for @mention
 // completion. Backed by a Map whose insertion order is recency: a chatter
 // who speaks again is deleted and re-inserted so they move to the end.
+// People from stored history are known too, ranked below anyone heard live.
 
 import type { Chatter } from "../lib/completion";
 
@@ -13,6 +14,8 @@ export interface ChatterStats {
 
 export interface ChatterStore {
   record: (id: string, login: string, displayName: string, at: number) => void;
+  /** Chatters from stored history, oldest first. */
+  recordPast: (past: Chatter[]) => void;
   byLogin: (login: string) => Chatter | undefined;
   /** Most recent speaker first. */
   recent: () => Chatter[];
@@ -48,8 +51,22 @@ export function createChatterStore(max = MAX_CHATTERS): ChatterStore {
     }
   }
 
+  function recordPast(past: Chatter[]): void {
+    const older = new Map<string, Chatter>();
+    for (const c of past) {
+      if (!c.login || !c.id || byLogin.has(c.login)) continue;
+      older.delete(c.login);
+      older.set(c.login, c);
+    }
+    if (older.size === 0) return;
+    const merged = [...older, ...byLogin].slice(-max);
+    byLogin.clear();
+    for (const [login, c] of merged) byLogin.set(login, c);
+  }
+
   return {
     record,
+    recordPast,
     recent: () => [...byLogin.values()].reverse(),
     byLogin: (login) => byLogin.get(login),
     stats: (id) => statsById.get(id),

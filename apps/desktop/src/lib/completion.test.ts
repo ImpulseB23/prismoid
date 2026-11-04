@@ -4,6 +4,7 @@ import {
   MAX_CANDIDATES,
   applyCompletion,
   complete,
+  withBroadcaster,
   wordAtCaret,
 } from "./completion";
 
@@ -109,5 +110,24 @@ describe("applyCompletion", () => {
       text: "Kappa ",
       caret: 6,
     });
+  });
+});
+
+describe("withBroadcaster", () => {
+  const streamer = { id: "9", login: "caedrel", display_name: "Caedrel" };
+  const viewer = { id: "1", login: "viewer", display_name: "Viewer" };
+
+  it("puts the streamer first, once", () => {
+    expect(withBroadcaster([viewer], streamer)).toEqual([streamer, viewer]);
+    expect(withBroadcaster([viewer, streamer], streamer)).toEqual([
+      streamer,
+      viewer,
+    ]);
+    expect(withBroadcaster([viewer], null)).toEqual([viewer]);
+  });
+
+  it("lets you @ a streamer who has not spoken", () => {
+    const got = complete("@cae", [], withBroadcaster([viewer], streamer));
+    expect(got[0]).toMatchObject({ kind: "user", insert: "@Caedrel" });
   });
 });
