@@ -478,6 +478,20 @@ describe("preview tabs", () => {
     expect(store.tabs().map((c) => c.login)).toEqual(["kept", "b"]);
   });
 
+  it("restores no previews from an unreadable save", async () => {
+    for (const saved of ["[broken", "{}"]) {
+      const store = createChannelStore(
+        fakeCommands(),
+        memStorage({
+          "prismoid.channels.tabs": JSON.stringify(["a"]),
+          "prismoid.channels.preview": saved,
+        }),
+      );
+      await store.restore("fallback");
+      expect(store.isPreview("id-a")).toBe(false);
+    }
+  });
+
   it("restores a preview saved by an older version", async () => {
     const storage = memStorage({
       "prismoid.channels.tabs": JSON.stringify(["kept", "a"]),
