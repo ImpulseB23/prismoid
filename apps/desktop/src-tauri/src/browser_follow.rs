@@ -3,6 +3,10 @@
 //! readers and time trackers use, so every browser works without an
 //! extension. Only the front window's visible tab can be seen, and only
 //! while the browser itself is not fullscreen.
+//!
+//! Background tabs only expose their titles, so which Twitch channels are
+//! still open in a tab somewhere is read from the tab strips' titles
+//! ("Caedrel - Twitch"), letting a preview stay while its tab does.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -17,6 +21,37 @@ use crate::twitch_channel::normalize_login;
 pub struct BrowserStream {
     pub platform: &'static str,
     pub login: String,
+}
+
+/// Event sent when the set of Twitch channels open in browser tabs changes.
+/// `names` are lowercased title names (display names or logins);
+/// `complete` is false when some browser window could not be read (it is
+/// minimized), so a missing name proves nothing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct BrowserTabs {
+    pub names: Vec<String>,
+    pub complete: bool,
+}
+
+/// The channel name in a Twitch tab's title, lowercased: "Caedrel - Twitch",
+/// with any "(3) " unread count in front or "- Audio playing" after.
+pub fn twitch_tab_name(title: &str) -> Option<String> {
+    let mut rest = title.trim_start();
+    if let Some(after) = rest.strip_prefix('(') {
+        if let Some((count, tail)) = after.split_once(") ") {
+            if !count.is_empty() && count.chars().all(|c| c.is_ascii_digit()) {
+                rest = tail;
+            }
+        }
+    }
+    let (name, tail) = rest.split_once(" - Twitch")?;
+    // Browsers append their own notes (" – Audio playing"); anything else
+    // after "Twitch" is some other site's title.
+    if !(tail.is_empty() || [" -", " –", " —"].iter().any(|s| tail.starts_with(s))) {
+        return None;
+    }
+    let name = name.trim();
+    (!name.is_empty()).then(|| name.to_lowercase())
 }
 
 /// On/off switch shared with the poller thread. Lives in Tauri state so the
@@ -123,7 +158,9 @@ mod win {
     use std::time::Duration;
 
     use tauri::{AppHandle, Emitter, Runtime};
+    use windows::core::BOOL;
     use windows::core::BSTR;
+    use windows::Win32::Foundation::LPARAM;
     use windows::Win32::Foundation::{CloseHandle, HWND};
     use windows::Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
@@ -134,14 +171,22 @@ mod win {
     };
     use windows::Win32::System::Variant::VARIANT;
     use windows::Win32::UI::Accessibility::{
-        CUIAutomation, IUIAutomation, IUIAutomationElement, IUIAutomationTreeWalker,
-        UIA_DocumentControlTypeId, UIA_EditControlTypeId, UIA_ValueValuePropertyId,
+        CUIAutomation, IUIAutomation, IUIAutomationCondition, IUIAutomationElement,
+        IUIAutomationTreeWalker, TreeScope_Descendants, UIA_ControlTypePropertyId,
+        UIA_DocumentControlTypeId, UIA_EditControlTypeId, UIA_TabItemControlTypeId,
+        UIA_ValueValuePropertyId,
     };
-    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetForegroundWindow, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
+    };
 
-    use super::{twitch_login_from_url, BrowserFollow, BrowserStream};
+    use super::{
+        twitch_login_from_url, twitch_tab_name, BrowserFollow, BrowserStream, BrowserTabs,
+    };
 
     const POLL: Duration = Duration::from_secs(1);
+    /// Polls between reads of every browser's tab strip.
+    const TABS_EVERY: u32 = 2;
     /// Nodes of browser chrome visited at most while looking for the
     /// address bar; web content (Document subtrees) is never entered.
     const SEARCH_LIMIT: usize = 400;
@@ -186,13 +231,45 @@ mod win {
             }
         };
 
+        // SAFETY: plain property condition on the control type.
+        let tab_items = match unsafe {
+            uia.CreatePropertyCondition(
+                UIA_ControlTypePropertyId,
+                &VARIANT::from(UIA_TabItemControlTypeId.0),
+            )
+        } {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!(error = %e, "browser follow: tab condition unavailable");
+                return;
+            }
+        };
+
         let mut address_bars: HashMap<isize, IUIAutomationElement> = HashMap::new();
         let mut last: Option<String> = None;
+        let mut tick = 0u32;
+        // A tab set is reported once two reads in a row agree, so a page
+        // reload (its title briefly just "Twitch") never reads as a close.
+        let mut seen: Option<BrowserTabs> = None;
+        let mut sent: Option<BrowserTabs> = None;
         loop {
             std::thread::sleep(POLL);
             if !follow.is_enabled() {
                 last = None;
+                seen = None;
+                sent = None;
                 continue;
+            }
+            tick = tick.wrapping_add(1);
+            if tick.is_multiple_of(TABS_EVERY) {
+                let tabs = open_twitch_tabs(&uia, &tab_items);
+                if seen.as_ref() == Some(&tabs) && sent.as_ref() != Some(&tabs) {
+                    if let Err(e) = app.emit("browser_tabs", &tabs) {
+                        tracing::warn!(error = %e, "failed to emit browser_tabs");
+                    }
+                    sent = Some(tabs.clone());
+                }
+                seen = Some(tabs);
             }
             let Some(login) = front_browser_url(&uia, &walker, &mut address_bars)
                 .as_deref()
@@ -249,6 +326,67 @@ mod win {
         let value = value_of(&bar)?;
         cache.insert(key, bar);
         Some(value)
+    }
+
+    /// Twitch channel names in the tab strips of every visible browser
+    /// window. A minimized window's tabs cannot be read, which makes the
+    /// set incomplete.
+    fn open_twitch_tabs(uia: &IUIAutomation, tab_items: &IUIAutomationCondition) -> BrowserTabs {
+        let mut windows: Vec<HWND> = Vec::new();
+        // SAFETY: the callback only pushes into the Vec passed as lparam,
+        // which outlives the synchronous EnumWindows call.
+        let _ = unsafe {
+            EnumWindows(
+                Some(collect_window),
+                LPARAM(&mut windows as *mut Vec<HWND> as isize),
+            )
+        };
+        let mut names = Vec::new();
+        let mut complete = true;
+        for hwnd in windows {
+            // SAFETY: hwnd came from EnumWindows; both calls tolerate a
+            // window that has closed since.
+            if !unsafe { IsWindowVisible(hwnd) }.as_bool() || !is_browser(hwnd) {
+                continue;
+            }
+            // SAFETY: as above.
+            if unsafe { IsIconic(hwnd) }.as_bool() {
+                complete = false;
+                continue;
+            }
+            // SAFETY: as above; UIA returns an error for a vanished window.
+            let Ok(root) = (unsafe { uia.ElementFromHandle(hwnd) }) else {
+                continue;
+            };
+            // SAFETY: read-only search of the browser's own UI.
+            let Ok(found) = (unsafe { root.FindAll(TreeScope_Descendants, tab_items) }) else {
+                continue;
+            };
+            // SAFETY: reads on the array UIA just returned.
+            let count = unsafe { found.Length() }.unwrap_or(0);
+            for i in 0..count {
+                // SAFETY: i is within the array's length.
+                let Ok(tab) = (unsafe { found.GetElement(i) }) else {
+                    continue;
+                };
+                // SAFETY: property read on a live element.
+                if let Ok(title) = unsafe { tab.CurrentName() } {
+                    if let Some(name) = twitch_tab_name(&title.to_string()) {
+                        names.push(name);
+                    }
+                }
+            }
+        }
+        names.sort();
+        names.dedup();
+        BrowserTabs { names, complete }
+    }
+
+    unsafe extern "system" fn collect_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        // SAFETY: lparam is the &mut Vec<HWND> open_twitch_tabs passed in.
+        let windows = unsafe { &mut *(lparam.0 as *mut Vec<HWND>) };
+        windows.push(hwnd);
+        true.into()
     }
 
     fn is_browser(hwnd: HWND) -> bool {
@@ -362,6 +500,27 @@ mod tests {
             twitch_login_from_url("twitch.tv/xqc/clip/SomeClip"),
             Some("xqc".into())
         );
+    }
+
+    #[test]
+    fn twitch_tab_titles_give_the_channel_name() {
+        assert_eq!(
+            twitch_tab_name("lolyoung - Twitch – Audio playing - High memory usage - 921 MB"),
+            Some("lolyoung".into())
+        );
+        assert_eq!(
+            twitch_tab_name("(3) Caedrel - Twitch"),
+            Some("caedrel".into())
+        );
+        assert_eq!(twitch_tab_name("가나다 - Twitch"), Some("가나다".into()));
+        for title in [
+            "Twitch",
+            "Just Chatting - Twitch Tracker",
+            " - Twitch",
+            "YouTube",
+        ] {
+            assert_eq!(twitch_tab_name(title), None, "{title}");
+        }
     }
 
     #[test]

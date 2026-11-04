@@ -26,7 +26,7 @@ vi.mock("../stores/channelStore", () => ({
   closeChannel: (id: string) => closeChannel(id),
   focusChannel: (id: string) => focusChannel(id),
   unreadCount: () => 0,
-  previewChannelId: () => previewId(),
+  isPreviewChannel: (id: string) => previewId() === id,
   keepChannel: (id: string) => keepChannel(id),
   moveChannelTab: (id: string, index: number) => {
     const list = tabs().filter((c) => c.id !== id);

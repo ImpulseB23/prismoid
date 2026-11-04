@@ -21,7 +21,7 @@ import {
   focusChannel,
   keepChannel,
   moveChannelTab,
-  previewChannelId,
+  isPreviewChannel,
   unreadCount,
 } from "../stores/channelStore";
 import { openPicker, pickerLoading, prefetchLive } from "../stores/pickerStore";
@@ -136,7 +136,7 @@ const ChannelTabs: Component = () => {
             const active = () => activeChannel()?.id === channel.id;
             const inOtherPane = () => !active() && onScreen(channel.id);
             const unread = () => unreadCount(channel.id);
-            const preview = () => previewChannelId() === channel.id;
+            const preview = () => isPreviewChannel(channel.id);
             return (
               <div
                 ref={(el) => {
