@@ -185,8 +185,6 @@ mod win {
     };
 
     const POLL: Duration = Duration::from_secs(1);
-    /// Polls between reads of every browser's tab strip.
-    const TABS_EVERY: u32 = 2;
     /// Nodes of browser chrome visited at most while looking for the
     /// address bar; web content (Document subtrees) is never entered.
     const SEARCH_LIMIT: usize = 400;
@@ -247,7 +245,6 @@ mod win {
 
         let mut address_bars: HashMap<isize, IUIAutomationElement> = HashMap::new();
         let mut last: Option<String> = None;
-        let mut tick = 0u32;
         // A tab set is reported once two reads in a row agree, so a page
         // reload (its title briefly just "Twitch") never reads as a close.
         let mut seen: Option<BrowserTabs> = None;
@@ -260,17 +257,14 @@ mod win {
                 sent = None;
                 continue;
             }
-            tick = tick.wrapping_add(1);
-            if tick.is_multiple_of(TABS_EVERY) {
-                let tabs = open_twitch_tabs(&uia, &tab_items);
-                if seen.as_ref() == Some(&tabs) && sent.as_ref() != Some(&tabs) {
-                    if let Err(e) = app.emit("browser_tabs", &tabs) {
-                        tracing::warn!(error = %e, "failed to emit browser_tabs");
-                    }
-                    sent = Some(tabs.clone());
+            let tabs = open_twitch_tabs(&uia, &tab_items);
+            if seen.as_ref() == Some(&tabs) && sent.as_ref() != Some(&tabs) {
+                if let Err(e) = app.emit("browser_tabs", &tabs) {
+                    tracing::warn!(error = %e, "failed to emit browser_tabs");
                 }
-                seen = Some(tabs);
+                sent = Some(tabs.clone());
             }
+            seen = Some(tabs);
             let Some(login) = front_browser_url(&uia, &walker, &mut address_bars)
                 .as_deref()
                 .and_then(twitch_login_from_url)
