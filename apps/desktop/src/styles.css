@@ -1969,8 +1969,17 @@ option::checkmark {
   background: var(--hover);
 }
 
+/* Your message shows at full strength the moment you send it, as on
+   Twitch. Only one Twitch has not confirmed after a second dims, so a slow
+   send is visible without normal sends flickering. */
 .msg--pending {
-  opacity: 0.5;
+  animation: pending-slow 0.2s ease 1s forwards;
+}
+
+@keyframes pending-slow {
+  to {
+    opacity: 0.6;
+  }
 }
 
 .msg--failed {
