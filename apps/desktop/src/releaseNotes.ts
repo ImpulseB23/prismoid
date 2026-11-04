@@ -26,8 +26,18 @@ export interface ReleaseNote {
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: "0.12.0",
-    headline: "Mention anyone",
-    features: [],
+    headline: "Chat as fast as Twitch",
+    features: [
+      {
+        title: "Messages send like on Twitch",
+        body: "Your messages now go out over Twitch's own chat connection, the way twitch.tv and Chatterino send them, and show up the moment you hit Enter. Sign in to Twitch again once to switch it on.",
+        action: { label: "Open Twitch settings", section: "account" },
+      },
+      {
+        title: "Preview tabs follow your browser",
+        body: "With Follow my browser on, a stream's preview tab stays while its browser tab is open, even when you switch to another stream, and closes once you close that browser tab.",
+      },
+    ],
     improvements: [
       "@mentions in chat show in the person's name color, underlined. Click one to open their card.",
     ],
