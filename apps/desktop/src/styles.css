@@ -4437,6 +4437,11 @@ option::checkmark {
   padding: 0 18px;
 }
 
+.notes__action {
+  align-self: flex-start;
+  margin-top: var(--space-1);
+}
+
 .notes__feature {
   display: flex;
   flex-direction: column;

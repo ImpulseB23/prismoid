@@ -52,6 +52,31 @@ describe("PatchNotes", () => {
     expect(headings()).toEqual(["Fixed"]);
   });
 
+  it("takes you to the settings a new feature needs", async () => {
+    const { settingsOpen, settingsSection } =
+      await import("../stores/settingsPanelStore");
+    render(() => <PatchNotes />);
+    showPatchNotes({
+      version: "9.9.11",
+      headline: "Test",
+      features: [
+        {
+          title: "Faster sending",
+          body: "Sign in again once.",
+          action: { label: "Open Twitch settings", section: "account" },
+        },
+      ],
+      improvements: [],
+      fixes: [],
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Twitch settings" }),
+    );
+    expect(patchNotes()).toBeNull();
+    expect(settingsOpen()).toBe(true);
+    expect(settingsSection()).toBe("account");
+  });
+
   it("closes on Escape", () => {
     render(() => <PatchNotes />);
     showPatchNotes(RELEASE_NOTES[0]!);

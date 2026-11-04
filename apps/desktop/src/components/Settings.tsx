@@ -356,7 +356,7 @@ const Settings: Component<SettingsProps> = (props) => {
               <TwitchReconnect
                 marked={rowMarked("reconnect")}
                 title="Twitch needs new permissions"
-                hint="Features added since you signed in (moderation, your follow list) need extra access. Reconnect once to grant it."
+                hint="Features added since you signed in, like faster message sending, moderation and your follow list, need extra access. Reconnect once to grant it."
               />
             </Show>
             <For each={UPCOMING_PLATFORMS}>
