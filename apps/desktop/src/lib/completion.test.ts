@@ -31,9 +31,9 @@ const emotes = [
   "OMEGALUL",
 ].map(emote);
 const chatters = [
-  { id: "1", login: "forsen", display_name: "forsen" },
-  { id: "2", login: "xqc", display_name: "xQc" },
-  { id: "3", login: "nymn", display_name: "NymN" },
+  { id: "1", login: "forsen", display_name: "forsen", color: null },
+  { id: "2", login: "xqc", display_name: "xQc", color: null },
+  { id: "3", login: "nymn", display_name: "NymN", color: null },
 ];
 
 describe("wordAtCaret", () => {
@@ -67,7 +67,7 @@ describe("complete", () => {
     expect(got).toEqual([
       {
         kind: "user",
-        chatter: { id: "3", login: "nymn", display_name: "NymN" },
+        chatter: { id: "3", login: "nymn", display_name: "NymN", color: null },
         insert: "@NymN",
       },
     ]);
@@ -114,8 +114,18 @@ describe("applyCompletion", () => {
 });
 
 describe("withBroadcaster", () => {
-  const streamer = { id: "9", login: "caedrel", display_name: "Caedrel" };
-  const viewer = { id: "1", login: "viewer", display_name: "Viewer" };
+  const streamer = {
+    id: "9",
+    login: "caedrel",
+    display_name: "Caedrel",
+    color: null,
+  };
+  const viewer = {
+    id: "1",
+    login: "viewer",
+    display_name: "Viewer",
+    color: null,
+  };
 
   it("puts the streamer first, once", () => {
     expect(withBroadcaster([viewer], streamer)).toEqual([streamer, viewer]);

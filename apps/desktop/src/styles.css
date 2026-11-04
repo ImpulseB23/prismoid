@@ -2979,6 +2979,18 @@ option::checkmark {
   text-decoration-color: currentColor;
 }
 
+/* Underline and color only, so the feed's measured line widths still
+   hold. */
+.msg__mention {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.msg__mention[role="button"] {
+  cursor: pointer;
+}
+
 /* Emote picker */
 
 .composer__emotes,

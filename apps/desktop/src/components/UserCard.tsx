@@ -61,7 +61,7 @@ import {
   userInfoRevision,
 } from "../stores/userInfoStore";
 import MessagePieces from "./MessagePieces";
-import { splitMessage } from "../lib/emoteSpans";
+import { chatPieces } from "../lib/mentions";
 import { item, openContextMenu, separator } from "../stores/contextMenuStore";
 
 export interface CardUser {
@@ -849,7 +849,7 @@ const UserCard: Component<UserCardProps> = (props) => {
                           )}
                         </Show>
                         <MessagePieces
-                          pieces={splitMessage(m.message_text, m.emote_spans, {
+                          pieces={chatPieces(m.message_text, m.emote_spans, {
                             maxHeight: CARD_LINE_HEIGHT,
                           })}
                         />

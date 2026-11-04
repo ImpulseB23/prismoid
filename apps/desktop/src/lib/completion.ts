@@ -8,6 +8,8 @@ export interface Chatter {
   id: string;
   login: string;
   display_name: string;
+  /** Their chat name color, null when they never set one. */
+  color: string | null;
 }
 
 export interface WordAtCaret {

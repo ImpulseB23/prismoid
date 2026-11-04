@@ -82,4 +82,42 @@ describe("MessagePieces", () => {
     // Outside any pane, as in a user card window.
     expect(inspectEmote).toHaveBeenCalledWith(cat, undefined);
   });
+
+  it("colors a known mention and opens it on click", () => {
+    const pane = {
+      session: () => ({
+        chatters: {
+          byLogin: (login: string) =>
+            login === "caedrel"
+              ? { id: "9", login, display_name: "Caedrel", color: "#FF0000" }
+              : undefined,
+        },
+      }),
+    } as unknown as Pane;
+    const onMention = vi.fn();
+    render(() => (
+      <PaneProvider value={pane}>
+        <MessagePieces
+          pieces={[
+            { kind: "mention", text: "@Caedrel", login: "caedrel" },
+            { kind: "mention", text: "@nobody", login: "nobody" },
+          ]}
+          onMention={onMention}
+        />
+      </PaneProvider>
+    ));
+    const known = screen.getByText("@Caedrel");
+    const unknown = screen.getByText("@nobody");
+    expect(known.style.color).not.toBe(unknown.style.color);
+    fireEvent.click(known);
+    fireEvent.keyDown(unknown, { key: "Enter" });
+    expect(onMention.mock.calls).toEqual([["caedrel"], ["nobody"]]);
+  });
+
+  it("only styles mentions where nothing opens them", () => {
+    render(() => (
+      <MessagePieces pieces={[{ kind: "mention", text: "@a", login: "a" }]} />
+    ));
+    expect(screen.getByText("@a").getAttribute("role")).toBeNull();
+  });
 });
