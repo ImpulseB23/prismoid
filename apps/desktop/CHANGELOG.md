@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.12.0](https://github.com/ImpulseB23/prismoid/compare/v0.11.0...v0.12.0) (2026-11-04)
+
+
+### Features
+
+* styled [@mentions](https://github.com/mentions) ([#394](https://github.com/ImpulseB23/prismoid/issues/394)) ([a407faa](https://github.com/ImpulseB23/prismoid/commit/a407faa7e7f63ca618e9b3f2e0a5dbde4fc68330))
+
+
+### Bug Fixes
+
+* @ completion knows the streamer and history ([#393](https://github.com/ImpulseB23/prismoid/issues/393)) ([6ddd66c](https://github.com/ImpulseB23/prismoid/commit/6ddd66c3d46b4d270940e0ead428c2020b697284))
+* input status line no longer sticks ([#399](https://github.com/ImpulseB23/prismoid/issues/399)) ([ba59662](https://github.com/ImpulseB23/prismoid/commit/ba59662070afeeafb06ca1b56833bd8cb3431645))
+* sends and mod actions run off the sidecar's command loop ([#398](https://github.com/ImpulseB23/prismoid/issues/398)) ([001b440](https://github.com/ImpulseB23/prismoid/commit/001b440be254a58d7bab255cec3bb1abfb7f6a0c))
+
 ## [0.11.0](https://github.com/ImpulseB23/prismoid/compare/v0.10.1...v0.11.0) (2026-11-01)
 
 
