@@ -318,10 +318,14 @@ pub fn build_kick_connect_line(chatroom_id: i64) -> serde_json::Result<Vec<u8>> 
 /// borrowed so the caller doesn't have to clone its credentials just to
 /// build a control line.
 pub struct SendChatMessageArgs<'a> {
+    /// Over the signed-in IRC connection rather than Helix.
+    pub via_irc: bool,
     pub client_id: &'a str,
     pub access_token: &'a str,
     pub broadcaster_id: &'a str,
+    pub channel_login: &'a str,
     pub user_id: &'a str,
+    pub user_login: &'a str,
     pub message: &'a str,
     /// Message this one answers, if any.
     pub reply_parent_message_id: Option<&'a str>,
@@ -341,18 +345,26 @@ pub fn build_send_chat_message_line(args: SendChatMessageArgs<'_>) -> serde_json
         client_id: &'a str,
         token: &'a str,
         broadcaster_id: &'a str,
+        channel: &'a str,
         user_id: &'a str,
+        user_login: &'a str,
         message: &'a str,
         #[serde(skip_serializing_if = "Option::is_none")]
         reply_parent_message_id: Option<&'a str>,
         request_id: u64,
     }
     let cmd = SendCmd {
-        cmd: "send_chat_message",
+        cmd: if args.via_irc {
+            "send_chat_irc"
+        } else {
+            "send_chat_message"
+        },
         client_id: args.client_id,
         token: args.access_token,
         broadcaster_id: args.broadcaster_id,
+        channel: args.channel_login,
         user_id: args.user_id,
+        user_login: args.user_login,
         message: args.message,
         reply_parent_message_id: args.reply_parent_message_id,
         request_id: args.request_id,
@@ -1492,16 +1504,24 @@ mod tests {
 
     #[test]
     fn build_send_chat_message_line_includes_request_id() {
-        let line = build_send_chat_message_line(SendChatMessageArgs {
+        let args = |via_irc| SendChatMessageArgs {
+            via_irc,
             client_id: "cid",
             access_token: "tok",
             broadcaster_id: "b",
+            channel_login: "caedrel",
             user_id: "u",
+            user_login: "viewer",
             message: "hi",
             reply_parent_message_id: None,
             request_id: 99,
-        })
-        .unwrap();
+        };
+        let irc: serde_json::Value =
+            serde_json::from_slice(&build_send_chat_message_line(args(true)).unwrap()).unwrap();
+        assert_eq!(irc["cmd"], "send_chat_irc");
+        assert_eq!(irc["channel"], "caedrel");
+        assert_eq!(irc["user_login"], "viewer");
+        let line = build_send_chat_message_line(args(false)).unwrap();
         assert_eq!(line.last(), Some(&b'\n'));
         let body = &line[..line.len() - 1];
         let parsed: serde_json::Value = serde_json::from_slice(body).unwrap();

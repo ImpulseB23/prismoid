@@ -49,6 +49,8 @@ type Command struct {
 	// moderator's ID for mod actions. Twitch Helix's moderation endpoints
 	// require the moderator_id to match the token's authenticated user.
 	UserID string `json:"user_id,omitempty"`
+	// UserLogin is the signed-in user's login, the nick for send_chat_irc.
+	UserLogin string `json:"user_login,omitempty"`
 
 	// ChatroomID is the Kick chatroom numeric ID. Used by kick_connect to
 	// subscribe to the Pusher channel for this chatroom.

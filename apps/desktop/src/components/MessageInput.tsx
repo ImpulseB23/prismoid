@@ -378,7 +378,7 @@ const MessageInput: Component<Props> = (props) => {
     const localId = optimistic.local_id!;
     const submitSeq = ++lastSubmitSeq;
 
-    sendMessage(channel.id, payload, reply?.message_id).then(
+    sendMessage(channel.id, channel.login, payload, reply?.message_id).then(
       (ok) => {
         store.confirmPendingId(localId, ok.message_id);
       },

@@ -31,16 +31,18 @@ afterEach(() => {
 describe("sendMessage", () => {
   it("invokes twitch_send_message with the text payload", async () => {
     invokeMock.mockResolvedValueOnce(undefined);
-    await sendMessage("c1", "hello world");
+    await sendMessage("c1", "caedrel", "hello world");
     expect(invokeMock).toHaveBeenCalledWith("twitch_send_message", {
       channelId: "c1",
+      channelLogin: "caedrel",
       text: "hello world",
       replyTo: null,
     });
     invokeMock.mockResolvedValueOnce(undefined);
-    await sendMessage("c1", "yes", "parent-1");
+    await sendMessage("c1", "caedrel", "yes", "parent-1");
     expect(invokeMock).toHaveBeenLastCalledWith("twitch_send_message", {
       channelId: "c1",
+      channelLogin: "caedrel",
       text: "yes",
       replyTo: "parent-1",
     });
@@ -49,7 +51,7 @@ describe("sendMessage", () => {
   it("propagates the structured error from the backend", async () => {
     const err = { kind: "helix", code: "msg_duplicate", message: "dup" };
     invokeMock.mockRejectedValueOnce(err);
-    await expect(sendMessage("c1", "x")).rejects.toEqual(err);
+    await expect(sendMessage("c1", "caedrel", "x")).rejects.toEqual(err);
   });
 
   it("exposes the byte cap matching the Rust constant", () => {

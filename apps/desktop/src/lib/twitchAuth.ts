@@ -124,11 +124,13 @@ export interface SendMessageOk {
 
 export function sendMessage(
   channelId: string,
+  channelLogin: string,
   text: string,
   replyTo?: string,
 ): Promise<SendMessageOk> {
   return invoke("twitch_send_message", {
     channelId,
+    channelLogin,
     text,
     replyTo: replyTo ?? null,
   });
