@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.13.0](https://github.com/ImpulseB23/prismoid/compare/v0.12.0...v0.13.0) (2026-11-04)
+
+
+### Features
+
+* previews follow your browser tabs ([#403](https://github.com/ImpulseB23/prismoid/issues/403)) ([df45ed7](https://github.com/ImpulseB23/prismoid/commit/df45ed72efb1dcafab4b7cce98a5e4c6b7409514))
+* what's new can link to a settings section ([#402](https://github.com/ImpulseB23/prismoid/issues/402)) ([f31baa8](https://github.com/ImpulseB23/prismoid/commit/f31baa8ea86f32a1e215bfbde92bebfbcf7c8d41))
+
+
+### Bug Fixes
+
+* sent messages don't look unsent ([#400](https://github.com/ImpulseB23/prismoid/issues/400)) ([ae39662](https://github.com/ImpulseB23/prismoid/commit/ae39662b9db0e55a3b18cbaddf26d649994baad2))
+
+
+### Performance
+
+* send chat over irc like twitch and chatterino ([#401](https://github.com/ImpulseB23/prismoid/issues/401)) ([e3537f9](https://github.com/ImpulseB23/prismoid/commit/e3537f912e965ad31b23c4d8afd50051cedb72f1))
+
 ## [0.12.0](https://github.com/ImpulseB23/prismoid/compare/v0.11.0...v0.12.0) (2026-11-04)
 
 
