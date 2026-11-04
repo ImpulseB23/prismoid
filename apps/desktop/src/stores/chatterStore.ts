@@ -13,7 +13,13 @@ export interface ChatterStats {
 }
 
 export interface ChatterStore {
-  record: (id: string, login: string, displayName: string, at: number) => void;
+  record: (
+    id: string,
+    login: string,
+    displayName: string,
+    color: string | null,
+    at: number,
+  ) => void;
   /** Chatters from stored history, oldest first. */
   recordPast: (past: Chatter[]) => void;
   byLogin: (login: string) => Chatter | undefined;
@@ -33,11 +39,12 @@ export function createChatterStore(max = MAX_CHATTERS): ChatterStore {
     id: string,
     login: string,
     displayName: string,
+    color: string | null,
     at: number,
   ): void {
     if (!login || !id) return;
     byLogin.delete(login);
-    byLogin.set(login, { id, login, display_name: displayName });
+    byLogin.set(login, { id, login, display_name: displayName, color });
     const s = statsById.get(id);
     if (s) s.messages++;
     else statsById.set(id, { messages: 1, firstSeen: at });

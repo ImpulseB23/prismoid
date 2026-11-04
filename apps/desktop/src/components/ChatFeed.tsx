@@ -76,6 +76,8 @@ import { shownPaint } from "../stores/paintStore";
 import { logo, nameContrast } from "../stores/themeStore";
 import MessagePieces from "./MessagePieces";
 import { openUserCard } from "../lib/userCardWindow";
+import { mentionedUser } from "../lib/mentions";
+import { lookupUser } from "../lib/twitchChannel";
 
 const OVERSCAN = 6;
 const STICK_THRESHOLD = 40;
@@ -580,6 +582,28 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
       },
       settings().zoom,
     ).catch((err: unknown) => console.error("open user card", err));
+  };
+
+  const openMention = (login: string) => {
+    const s = session();
+    const channel = s.channel;
+    if (!channel) return;
+    void mentionedUser(login, s.chatters, channel, lookupUser)
+      .then((c) => {
+        keepChannel(channel.id);
+        return openUserCard(
+          {
+            channel_id: channel.id,
+            platform_user_id: c.id,
+            username: c.login,
+            display_name: c.display_name,
+            color: c.color,
+            badges: [],
+          },
+          settings().zoom,
+        );
+      })
+      .catch((err: unknown) => console.error("open mention", err));
   };
 
   // Right-click on a row: viewer actions for everyone, moderation for mods.
@@ -1209,7 +1233,10 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                           {row().msg.display_name}
                         </span>
                         <span class="msg__sep">: </span>
-                        <MessagePieces pieces={row().prepared.pieces} />
+                        <MessagePieces
+                          pieces={row().prepared.pieces}
+                          onMention={openMention}
+                        />
                       </>
                     }
                   >
@@ -1218,7 +1245,10 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
                         <span class="msg__notice">{n().system_message}</span>
                         <Show when={row().prepared.pieces.length > 0}>
                           {" "}
-                          <MessagePieces pieces={row().prepared.pieces} />
+                          <MessagePieces
+                            pieces={row().prepared.pieces}
+                            onMention={openMention}
+                          />
                         </Show>
                       </>
                     )}

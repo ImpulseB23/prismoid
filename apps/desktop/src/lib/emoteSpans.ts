@@ -15,6 +15,8 @@ export interface EmoteRenderInfo {
 export type MessagePiece =
   | { kind: "text"; text: string }
   | { kind: "link"; text: string; href: string }
+  /** `text` as written, "@Caedrel"; `login` lowercased, "caedrel". */
+  | { kind: "mention"; text: string; login: string }
   | {
       kind: "emote";
       primary: EmoteRenderInfo;

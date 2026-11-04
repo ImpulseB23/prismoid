@@ -1,11 +1,13 @@
-// Renders the text, link and emote pieces of one message. Shared by the
-// chat feed and the user card so emotes look identical in both.
+// Renders the text, link, mention and emote pieces of one message. Shared
+// by the chat feed and the user card so emotes look identical in both.
 
 import { Component, For } from "solid-js";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { MessagePiece } from "../lib/emoteSpans";
 import { emoteImages } from "../lib/emoteImage";
 import { usePane } from "../lib/pane";
+import { nameStyle } from "../lib/paint";
+import { nameContrast } from "../stores/themeStore";
 import {
   endEmoteHover,
   hoverEmote,
@@ -13,11 +15,40 @@ import {
   inspectLoading,
 } from "../stores/emoteCardStore";
 
-const Piece: Component<{ piece: MessagePiece }> = (props) => {
+const Piece: Component<{
+  piece: MessagePiece;
+  onMention?: (login: string) => void;
+}> = (props) => {
   const pane = usePane();
   const p = props.piece;
   if (p.kind === "text") {
     return <span>{p.text}</span>;
+  }
+  if (p.kind === "mention") {
+    // In their chat color once they have spoken in the channel.
+    const color = () => pane?.session().chatters.byLogin(p.login)?.color;
+    const open = props.onMention;
+    return (
+      <span
+        class="msg__mention"
+        style={nameStyle(color(), undefined, nameContrast()).style}
+        role={open ? "button" : undefined}
+        tabIndex={open ? 0 : undefined}
+        onClick={(e) => {
+          if (!open) return;
+          e.stopPropagation();
+          open(p.login);
+        }}
+        onKeyDown={(e) => {
+          if (!open || (e.key !== "Enter" && e.key !== " ")) return;
+          e.preventDefault();
+          e.stopPropagation();
+          open(p.login);
+        }}
+      >
+        {p.text}
+      </span>
+    );
   }
   if (p.kind === "link") {
     return (
@@ -106,8 +137,14 @@ const Piece: Component<{ piece: MessagePiece }> = (props) => {
   );
 };
 
-const MessagePieces: Component<{ pieces: MessagePiece[] }> = (props) => (
-  <For each={props.pieces}>{(piece) => <Piece piece={piece} />}</For>
+const MessagePieces: Component<{
+  pieces: MessagePiece[];
+  /** Clicking an @mention; without it mentions are only styled. */
+  onMention?: (login: string) => void;
+}> = (props) => (
+  <For each={props.pieces}>
+    {(piece) => <Piece piece={piece} onMention={props.onMention} />}
+  </For>
 );
 
 export default MessagePieces;

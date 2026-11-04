@@ -11,8 +11,8 @@ import {
 import { measureNaturalWidth, prepareWithSegments } from "@chenglou/pretext";
 import type { ChatMessage } from "../stores/chatStore";
 import type { ResolvedBadge } from "../stores/badgeStore";
-import { splitMessage, type MessagePiece } from "./emoteSpans";
-import { linkify } from "./links";
+import type { MessagePiece } from "./emoteSpans";
+import { chatPieces } from "./mentions";
 import { formatTimestamp } from "./messageStyle";
 
 // Named families only. `system-ui` is unsafe for pretext accuracy on macOS.
@@ -159,11 +159,9 @@ export function prepareMessage(
   opts: PrepareOptions = { timestamps: true },
 ): PreparedMessage {
   const m = opts.metrics ?? defaults;
-  const pieces = linkify(
-    splitMessage(msg.message_text, msg.emote_spans, {
-      maxHeight: m.lineHeight,
-    }),
-  );
+  const pieces = chatPieces(msg.message_text, msg.emote_spans, {
+    maxHeight: m.lineHeight,
+  });
 
   const badges: BadgeRender[] = [];
   for (const b of msg.badges) {
@@ -216,7 +214,7 @@ export function prepareMessage(
   }
 
   for (const piece of pieces) {
-    if (piece.kind === "text" || piece.kind === "link") {
+    if (piece.kind !== "emote") {
       items.push({ text: piece.text, font: m.textFont });
     } else {
       items.push({

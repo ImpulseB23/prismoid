@@ -166,6 +166,7 @@ const MessageInput: Component<Props> = (props) => {
         id: owner.id,
         login: owner.login,
         display_name: owner.display_name,
+        color: null,
       },
     );
     return complete(word().word, emotes.all(), people);

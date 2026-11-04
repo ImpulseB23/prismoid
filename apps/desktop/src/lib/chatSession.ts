@@ -99,6 +99,7 @@ function openSession(channel: Channel): {
           id: m.platform_user_id,
           login: m.username,
           display_name: m.display_name,
+          color: m.color,
         })),
     );
     // Stored history can hold the user's newest message in a channel when
@@ -125,6 +126,7 @@ function openSession(channel: Channel): {
           m.platform_user_id,
           m.username,
           m.display_name,
+          m.color,
           m.arrival_time,
         );
         // Our own message wearing the moderator badge is proof of the

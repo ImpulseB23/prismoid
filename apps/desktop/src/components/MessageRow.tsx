@@ -9,7 +9,7 @@ import { Component, JSX, Show } from "solid-js";
 import type { ChatMessage } from "../stores/chatStore";
 import { nameContrast } from "../stores/themeStore";
 import { formatTimestamp, normalizeUserColor } from "../lib/messageStyle";
-import { splitMessage } from "../lib/emoteSpans";
+import { chatPieces } from "../lib/mentions";
 import { MESSAGE_LINE_HEIGHT } from "../lib/messageLayout";
 import MessagePieces from "./MessagePieces";
 
@@ -105,13 +105,9 @@ const MessageRow: Component<MessageRowProps> = (props) => (
             )}
           </Show>
           <MessagePieces
-            pieces={splitMessage(
-              props.msg.message_text,
-              props.msg.emote_spans,
-              {
-                maxHeight: MESSAGE_LINE_HEIGHT,
-              },
-            )}
+            pieces={chatPieces(props.msg.message_text, props.msg.emote_spans, {
+              maxHeight: MESSAGE_LINE_HEIGHT,
+            })}
           />
         </span>
       </span>
