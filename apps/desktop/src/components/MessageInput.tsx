@@ -78,6 +78,9 @@ const PROVIDER_LABEL: Record<EmoteMeta["provider"], string> = {
 
 const HISTORY_LIMIT = 50;
 
+/** How long a status line under the input stays up. */
+export const STATUS_MS = 6000;
+
 const MessageInput: Component<Props> = (props) => {
   const pane = requirePane();
   const session = pane.session;
@@ -93,6 +96,13 @@ const MessageInput: Component<Props> = (props) => {
   const [text, setText] = createSignal("");
   const [caret, setCaret] = createSignal(0);
   const [status, setStatus] = createSignal<string | null>(null);
+  // A notice, not a state: it goes once you type again or after a few
+  // seconds. A message that failed keeps its own mark in the feed.
+  createEffect(() => {
+    if (status() === null) return;
+    const timer = setTimeout(() => setStatus(null), STATUS_MS);
+    onCleanup(() => clearTimeout(timer));
+  });
   // Index into candidates(); -1 means nothing picked yet, so Enter sends.
   const [highlight, setHighlight] = createSignal(-1);
   // Escape hides suggestions for the word being typed; any edit re-arms.
@@ -556,6 +566,7 @@ const MessageInput: Component<Props> = (props) => {
               keepChannel(c.id);
               noteChatActivity(c.id);
             }
+            setStatus(null);
             setDraft(
               e.currentTarget.value,
               e.currentTarget.selectionStart ?? e.currentTarget.value.length,
