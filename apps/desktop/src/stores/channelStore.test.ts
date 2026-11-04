@@ -367,7 +367,7 @@ describe("preview tabs", () => {
     await store.preview("a");
     await store.preview("b");
     expect(store.tabs().map((c) => c.login)).toEqual(["kept", "b"]);
-    expect(store.previewId()).toBe("id-b");
+    expect(store.isPreview("id-b")).toBe(true);
     expect(store.active()?.id).toBe("id-b");
     expect(commands.log).toContain("leave id-a");
     expect(store.recents().map((r) => r.login)).toEqual(["kept"]);
@@ -380,7 +380,7 @@ describe("preview tabs", () => {
     await store.preview("a");
     await store.preview("kept");
     expect(store.tabs().map((c) => c.login)).toEqual(["kept"]);
-    expect(store.previewId()).toBeNull();
+    expect(store.tabs().some((c) => store.isPreview(c.id))).toBe(false);
     expect(store.active()?.id).toBe("id-kept");
     expect(commands.log).toContain("leave id-a");
   });
@@ -402,21 +402,21 @@ describe("preview tabs", () => {
     const store = createChannelStore(fakeCommands(), memStorage());
     await store.preview("a");
     store.keep("id-a");
-    expect(store.previewId()).toBeNull();
+    expect(store.tabs().some((c) => store.isPreview(c.id))).toBe(false);
     expect(store.recents().map((r) => r.login)).toEqual(["a"]);
     await store.preview("b");
     expect(store.tabs().map((c) => c.login)).toEqual(["a", "b"]);
 
     // Picking it, dragging it or staying on it keeps it too.
     await store.select("b", { remember: true });
-    expect(store.previewId()).toBeNull();
+    expect(store.tabs().some((c) => store.isPreview(c.id))).toBe(false);
     await store.preview("c");
     store.move("id-c", 0);
-    expect(store.previewId()).toBeNull();
+    expect(store.tabs().some((c) => store.isPreview(c.id))).toBe(false);
     vi.useFakeTimers();
     await store.preview("d");
     vi.advanceTimersByTime(RECENT_DWELL_MS);
-    expect(store.previewId()).toBeNull();
+    expect(store.tabs().some((c) => store.isPreview(c.id))).toBe(false);
     expect(store.tabs().map((c) => c.login)).toEqual(["c", "a", "b", "d"]);
   });
 
@@ -424,7 +424,7 @@ describe("preview tabs", () => {
     const store = createChannelStore(fakeCommands(), memStorage());
     await store.preview("a");
     await store.close("id-a");
-    expect(store.previewId()).toBeNull();
+    expect(store.tabs().some((c) => store.isPreview(c.id))).toBe(false);
     await store.preview("b");
     expect(store.tabs().map((c) => c.login)).toEqual(["b"]);
   });
@@ -437,7 +437,70 @@ describe("preview tabs", () => {
     const again = createChannelStore(fakeCommands(), storage);
     await again.restore("fallback");
     expect(again.tabs().map((c) => c.login)).toEqual(["kept", "a"]);
-    expect(again.previewId()).toBe("id-a");
+    expect(again.isPreview("id-a")).toBe(true);
+  });
+
+  it("keeps a preview while its stream is open in a browser tab", async () => {
+    const store = createChannelStore(fakeCommands(), memStorage());
+    await store.select("kept", { remember: true });
+    await store.preview("a");
+    store.setBrowserTabs(["a"], true);
+    // The browser moved to b while a's tab stays open: both are previews.
+    await store.preview("b");
+    expect(store.tabs().map((c) => c.login)).toEqual(["kept", "a", "b"]);
+    // Back to a in the browser: b's tab is open too, so b stays.
+    store.setBrowserTabs(["a", "b"], true);
+    await store.focus("id-a");
+    expect(store.tabs().map((c) => c.login)).toEqual(["kept", "a", "b"]);
+    // b's tab closes: its preview goes, a (on screen) stays.
+    store.setBrowserTabs(["a"], true);
+    expect(store.tabs().map((c) => c.login)).toEqual(["kept", "a"]);
+  });
+
+  it("matches browser tabs by display name too", async () => {
+    const store = createChannelStore(
+      fakeCommands(async (l) => ({ ...chan(l), display_name: "가나다" })),
+      memStorage(),
+    );
+    await store.select("kept", { remember: true });
+    await store.preview("a");
+    store.setBrowserTabs(["가나다"], true);
+    await store.focus("id-kept");
+    expect(store.tabs().map((c) => c.login)).toEqual(["kept", "a"]);
+  });
+
+  it("closes nothing on a read that missed some windows", async () => {
+    const store = createChannelStore(fakeCommands(), memStorage());
+    await store.select("kept", { remember: true });
+    await store.preview("a");
+    await store.preview("b");
+    store.setBrowserTabs([], false);
+    expect(store.tabs().map((c) => c.login)).toEqual(["kept", "b"]);
+  });
+
+  it("restores no previews from an unreadable save", async () => {
+    for (const saved of ["[broken", "{}"]) {
+      const store = createChannelStore(
+        fakeCommands(),
+        memStorage({
+          "prismoid.channels.tabs": JSON.stringify(["a"]),
+          "prismoid.channels.preview": saved,
+        }),
+      );
+      await store.restore("fallback");
+      expect(store.isPreview("id-a")).toBe(false);
+    }
+  });
+
+  it("restores a preview saved by an older version", async () => {
+    const storage = memStorage({
+      "prismoid.channels.tabs": JSON.stringify(["kept", "a"]),
+      "prismoid.channels.preview": "a",
+    });
+    const store = createChannelStore(fakeCommands(), storage);
+    await store.restore("fallback");
+    expect(store.isPreview("id-a")).toBe(true);
+    expect(store.isPreview("id-kept")).toBe(false);
   });
 
   it("records a failed preview without touching the tabs", async () => {

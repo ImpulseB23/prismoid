@@ -33,6 +33,7 @@ import {
   channelTabs,
   restoreChannels,
   previewChannel,
+  setBrowserTabs,
 } from "./stores/channelStore";
 import { clearHeldMessages } from "./stores/automodStore";
 import { clearStreamManager } from "./stores/streamManagerStore";
@@ -266,6 +267,15 @@ const ChatShell: Component<{ login: string; onSignOut: () => void }> = (
       .catch((err) =>
         console.error("failed to listen for browser streams:", err),
       );
+    let unlistenTabs: (() => void) | undefined;
+    listen<{ names: string[]; complete: boolean }>("browser_tabs", (evt) =>
+      setBrowserTabs(evt.payload.names, evt.payload.complete),
+    )
+      .then((fn) => {
+        if (disposed) fn();
+        else unlistenTabs = fn;
+      })
+      .catch((err) => console.error("failed to listen for browser tabs:", err));
     // Chat events for the whole window; each feed attaches for its channel.
     let stopRouter: (() => void) | undefined;
     void startChatRouter(() => props.login).then((fn) => {
@@ -275,6 +285,7 @@ const ChatShell: Component<{ login: string; onSignOut: () => void }> = (
     onCleanup(() => {
       disposed = true;
       unlisten?.();
+      unlistenTabs?.();
       stopRouter?.();
     });
   });
