@@ -9,6 +9,7 @@ import {
   patchNotes,
   releaseNotesUrl,
 } from "../stores/whatsNewStore";
+import { openSettings } from "../stores/settingsPanelStore";
 
 const PatchNotes: Component = () => {
   let dialogRef: HTMLDivElement | undefined;
@@ -47,6 +48,20 @@ const PatchNotes: Component = () => {
                     <li class="notes__feature">
                       <span class="notes__title">{f.title}</span>
                       <span class="notes__body">{f.body}</span>
+                      <Show when={f.action}>
+                        {(a) => (
+                          <button
+                            type="button"
+                            class="btn btn--small btn--outline notes__action"
+                            onClick={() => {
+                              closePatchNotes();
+                              openSettings(a().section);
+                            }}
+                          >
+                            {a().label}
+                          </button>
+                        )}
+                      </Show>
                     </li>
                   )}
                 </For>

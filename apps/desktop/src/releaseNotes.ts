@@ -3,12 +3,20 @@
 // GitHub changelog keeps the commit-level list.
 
 import { compareVersions } from "./lib/version";
+import type { SettingsSection } from "./stores/settingsPanelStore";
 
 export interface ReleaseNote {
   version: string;
   headline: string;
-  /** New, as a title and a sentence or two each. */
-  features: { title: string; body: string }[];
+  /**
+   * New, as a title and a sentence or two each. An action opens the
+   * Settings section where the user finishes setting it up.
+   */
+  features: {
+    title: string;
+    body: string;
+    action?: { label: string; section: SettingsSection };
+  }[];
   /** Improved, one line each. */
   improvements: string[];
   /** Fixed, one line each. */
