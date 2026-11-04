@@ -354,6 +354,10 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
         AuthManager::builder(TWITCH_CLIENT_ID)
             .scope(Scope::UserReadChat)
             .scope(Scope::UserWriteChat)
+            // Messages go out over a signed-in IRC connection, as on
+            // twitch.tv; Helix is the fallback for tokens without these.
+            .scope(Scope::ChatRead)
+            .scope(Scope::ChatEdit)
             .scope(Scope::UserReadModeratedChannels)
             .scope(Scope::UserReadFollows)
             .scope(Scope::ModeratorManageBannedUsers)

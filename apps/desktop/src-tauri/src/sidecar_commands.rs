@@ -495,6 +495,14 @@ async fn with_twitch_tokens(
     round_trip(sender, &tokens, &mut build).await
 }
 
+/// Twitch's IRC needs both chat scopes to sign in and send; a token from
+/// before they were requested keeps sending over Helix.
+fn can_send_over_irc(scopes: &[String]) -> bool {
+    ["chat:read", "chat:edit"]
+        .iter()
+        .all(|s| scopes.iter().any(|g| g == s))
+}
+
 /// Runs one moderation command in `channel_id`. The frontend names the
 /// channel the message or user belongs to, so a tab switch mid-flight can
 /// never redirect the action.
@@ -532,17 +540,22 @@ pub async fn twitch_send_message(
     auth: State<'_, AuthState>,
     sender: State<'_, SidecarCommandSender>,
     channel_id: String,
+    channel_login: String,
     text: String,
     reply_to: Option<String>,
 ) -> Result<SendChatOk, SendCommandError> {
     let channel_id = validate_required_id(&channel_id, "channel_id")?.to_owned();
+    let channel_login = validate_required_id(&channel_login, "channel_login")?.to_owned();
     let trimmed = validate_message(&text)?;
     let result = with_twitch_tokens(&auth, &sender, |tokens, request_id| {
         build_send_chat_message_line(SendChatMessageArgs {
+            via_irc: can_send_over_irc(&tokens.scopes),
             client_id: TWITCH_CLIENT_ID,
             access_token: &tokens.access_token,
             broadcaster_id: &channel_id,
+            channel_login: &channel_login,
             user_id: &tokens.user_id,
+            user_login: &tokens.login,
             message: trimmed,
             reply_parent_message_id: reply_to.as_deref(),
             request_id,
@@ -965,6 +978,21 @@ mod tests {
         let mut r = make_result(true, "", "", "");
         r.message_id.clear();
         assert!(SendCommandError::from_mod_result(r).is_ok());
+    }
+
+    #[test]
+    fn irc_sending_needs_both_chat_scopes() {
+        let scopes = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert!(can_send_over_irc(&scopes(&[
+            "user:write:chat",
+            "chat:read",
+            "chat:edit"
+        ])));
+        assert!(!can_send_over_irc(&scopes(&[
+            "user:write:chat",
+            "chat:edit"
+        ])));
+        assert!(!can_send_over_irc(&scopes(&[])));
     }
 
     #[test]

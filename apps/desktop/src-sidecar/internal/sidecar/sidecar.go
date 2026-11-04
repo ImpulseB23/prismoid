@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -232,12 +233,18 @@ func RunCommandLoop(ctx context.Context, scanner *bufio.Scanner, encoder *json.E
 	// stall the heartbeat, the host would kill the sidecar as hung, and
 	// every pending command would fail with it.
 	requests := make(chan control.Command, cmdChanCapacity)
+	writer := &twitch.ChatWriter{Log: logger.With().Str("component", "irc-writer").Logger()}
 	go func() {
+		defer writer.Close()
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case cmd := <-requests:
+				if cmd.Cmd == "send_chat_irc" {
+					HandleSendChatIRC(ctx, cmd, writer, notify, logger)
+					continue
+				}
 				DispatchRequest(ctx, cmd, notify, logger)
 			}
 		}
@@ -348,6 +355,7 @@ var requestCommands = map[string]bool{
 	"clear_chat":           true,
 	"manage_held_message":  true,
 	"send_chat_message":    true,
+	"send_chat_irc":        true,
 	"youtube_send_message": true,
 }
 
@@ -658,6 +666,48 @@ func sendWithRetry(ctx context.Context, client *twitch.HelixClient, cmd control.
 		case <-timer.C:
 		}
 		backoff *= 2
+	}
+}
+
+// HandleSendChatIRC posts the user's message over the signed-in IRC
+// connection and answers with the same send_chat_result as the Helix path.
+func HandleSendChatIRC(ctx context.Context, cmd control.Command, writer *twitch.ChatWriter, notify twitch.Notify, logger zerolog.Logger) {
+	reply := func(p SendChatResultPayload) {
+		p.RequestID = cmd.RequestID
+		notify("send_chat_result", p)
+	}
+	if cmd.Channel == "" || cmd.UserLogin == "" || cmd.Token == "" {
+		reply(SendChatResultPayload{ErrorMessage: "missing channel, user login or token"})
+		return
+	}
+	if cmd.Message == "" {
+		reply(SendChatResultPayload{ErrorMessage: "empty message"})
+		return
+	}
+	if len(cmd.Message) > twitch.MaxChatMessageBytes {
+		reply(SendChatResultPayload{
+			ErrorMessage: fmt.Sprintf("message exceeds %d bytes", twitch.MaxChatMessageBytes),
+		})
+		return
+	}
+	start := time.Now()
+	res, err := writer.Send(ctx, cmd.UserLogin, cmd.Token, cmd.Channel, cmd.Message, cmd.ReplyParentMessageID)
+	logger.Debug().Dur("took", time.Since(start)).Bool("ok", err == nil && res.MessageID != "").Msg("send_chat_irc answered")
+	switch {
+	case err != nil:
+		logger.Warn().Err(err).Str("channel", cmd.Channel).Msg("send_chat_irc failed")
+		p := SendChatResultPayload{ErrorMessage: err.Error()}
+		// A refused login is a stale token; the host refreshes it and
+		// sends again, as it does for a Helix 401.
+		if errors.Is(err, twitch.ErrLoginRefused) {
+			p.HTTPStatus = http.StatusUnauthorized
+		}
+		reply(p)
+	case res.MessageID == "":
+		logger.Warn().Str("channel", cmd.Channel).Str("code", res.DropCode).Str("reason", res.DropMessage).Msg("twitch refused the chat message")
+		reply(SendChatResultPayload{DropCode: res.DropCode, DropMessage: res.DropMessage})
+	default:
+		reply(SendChatResultPayload{Ok: true, MessageID: res.MessageID})
 	}
 }
 

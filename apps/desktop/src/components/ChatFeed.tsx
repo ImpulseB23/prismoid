@@ -788,11 +788,13 @@ const ChatFeed: Component<ChatFeedProps> = (props) => {
               );
               const onRetry = () => {
                 const localId = row().msg.local_id;
-                if (!localId) return;
+                const channel = session().channel;
+                if (!localId || !channel) return;
                 const text = chat().retryPending(localId);
                 if (!text) return;
                 sendMessage(
                   row().msg.channel_id,
+                  channel.login,
                   text,
                   row().msg.reply_to ?? undefined,
                 ).then(
