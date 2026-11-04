@@ -22,6 +22,21 @@ export type Candidate =
 
 export const MAX_CANDIDATES = 8;
 
+/**
+ * The channel's broadcaster first, then everyone else: on Twitch you can
+ * @ the streamer before they say a word.
+ */
+export function withBroadcaster(
+  chatters: Chatter[],
+  broadcaster: Chatter | null,
+): Chatter[] {
+  if (!broadcaster) return chatters;
+  return [
+    broadcaster,
+    ...chatters.filter((c) => c.login !== broadcaster.login),
+  ];
+}
+
 /** Whitespace-delimited token containing the caret. */
 export function wordAtCaret(text: string, caret: number): WordAtCaret {
   let start = caret;

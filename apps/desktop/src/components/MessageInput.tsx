@@ -26,9 +26,10 @@ import {
 } from "../lib/messageInput";
 import {
   applyCompletion,
-  complete,
-  wordAtCaret,
   type Candidate,
+  complete,
+  withBroadcaster,
+  wordAtCaret,
 } from "../lib/completion";
 import { buildOptimisticMessage, type EmoteMeta } from "../stores/chatStore";
 import { requirePane } from "../lib/pane";
@@ -158,7 +159,16 @@ const MessageInput: Component<Props> = (props) => {
     const emotes = session().emotes;
     emotes.revision();
     if (dismissed()) return [];
-    return complete(word().word, emotes.all(), session().chatters.recent());
+    const owner = session().channel;
+    const people = withBroadcaster(
+      session().chatters.recent(),
+      owner && {
+        id: owner.id,
+        login: owner.login,
+        display_name: owner.display_name,
+      },
+    );
+    return complete(word().word, emotes.all(), people);
   });
   const open = () => candidates().length > 0;
 
